@@ -44,7 +44,7 @@ Aru AI is **100% free and open-source**. There are no ads, subscriptions, paywal
     <img src="https://img.shields.io/badge/Crypto_Donation-Trybit-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Crypto">
   </a>
 </p>
----
+
 ## 🌟 Key Features & Philosophy
 
 - **100% Free & Open Source**: No ads, no subscriptions, no paywalls, and no commercial restrictions (**GNU GPLv3** license).
