@@ -1,0 +1,39 @@
+{
+    "name": "Aru AI",
+    "short_name": "Aru AI",
+    "description": "Local-first personal AI assistant with memory, tasks, artifacts and device transfer",
+    "developer": {
+        "name": "Aru-Lab",
+        "url": "https://chat.aru-lab.space"
+    },
+    "icons": [
+        {
+            "src": "media/int/favicon-96x96.png",
+            "sizes": "96x96",
+            "type": "image/png"
+        },
+        {
+            "src": "media/int/web-app-manifest-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "media/int/web-app-manifest-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "media/int/apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        }
+    ],
+    "start_url": "/",
+    "display": "fullscreen",
+    "background_color": "#fffaf5",
+    "theme_color": "#f97316",
+    "orientation": "portrait-primary",
+    "scope": "/"
+}

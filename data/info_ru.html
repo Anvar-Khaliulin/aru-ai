@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>О проекте Aru Ai</title>
+    <meta name="description" content="Aru AI - локальный персональный AI-ассистент с памятью, библиотекой артефактов, менеджером задач, облачной синхронизацией и входом по биометрии.">
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+    <link rel="canonical" href="https://chat.aru-lab.space/data/info_ru.html">
+    <link rel="alternate" hreflang="ru" href="https://chat.aru-lab.space/data/info_ru.html">
+    <link rel="alternate" hreflang="en" href="https://chat.aru-lab.space/data/info_en.html">
+    <link rel="alternate" hreflang="kk" href="https://chat.aru-lab.space/data/info_kz.html">
+    <link rel="alternate" hreflang="x-default" href="https://chat.aru-lab.space/data/info_en.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Aru AI">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:title" content="О проекте Aru AI">
+    <meta property="og:description" content="Что такое Aru AI: локальный AI-ассистент с памятью, артефактами, задачами и синхронизацией между устройствами.">
+    <meta property="og:url" content="https://chat.aru-lab.space/data/info_ru.html">
+    <meta property="og:image" content="https://chat.aru-lab.space/media/int/web-app-manifest-512x512.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="О проекте Aru AI">
+    <meta name="twitter:description" content="Локальный AI-ассистент с памятью, задачами, артефактами и PWA-режимом.">
+    <meta name="twitter:image" content="https://chat.aru-lab.space/media/int/web-app-manifest-512x512.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "AboutPage",
+            "name": "О проекте Aru AI",
+            "url": "https://chat.aru-lab.space/data/info_ru.html",
+            "inLanguage": "ru",
+            "description": "Страница с описанием проекта Aru AI, его философии, архитектуры и возможностей.",
+            "isPartOf": {
+                "@type": "WebSite",
+                "name": "Aru AI",
+                "url": "https://chat.aru-lab.space/"
+            }
+        }
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'media',
+            theme: {
+                extend: {
+                    colors: {
+                        orange: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            900: '#7c2d12',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        html { scroll-behavior: smooth; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        @media (prefers-color-scheme: dark) { ::-webkit-scrollbar-thumb { background: #374151; } }
+        ::-webkit-scrollbar-thumb:hover { background: #f97316; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-950 dark:text-gray-200 font-sans antialiased selection:bg-orange-200 selection:text-orange-900">
+
+    <div class="bg-orange-500 text-white shadow-md">
+        <div class="max-w-5xl mx-auto px-4 py-2.5 flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-6 text-sm font-medium">
+            <div class="flex items-center gap-2">
+                <i data-lucide="heart" class="w-4 h-4 fill-white animate-pulse"></i>
+                <span>Aru Ai - это бесплатный проект.</span>
+            </div>
+            <a href="#support" class="bg-white/20 hover:bg-white/30 transition-colors px-4 py-1 rounded-full whitespace-nowrap backdrop-blur-sm flex items-center gap-2">
+                Поддержать разработку <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+        </div>
+    </div>
+
+    <main class="max-w-5xl mx-auto px-4 py-12 space-y-16">
+
+        <header class="text-center space-y-6 max-w-3xl mx-auto mt-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                Проект <span class="text-orange-500">Aru Ai</span>
+            </h1>
+            <p class="text-xl text-gray-600 dark:text-gray-400 leading-relaxed">
+                <strong class="text-gray-900 dark:text-gray-200">Aru</strong> (с каз. <span class="italic">красота, прелесть</span>) - это персональный ИИ-спутник с «искусственным сознанием»*. 
+            </p>
+            <p class="text-gray-500 dark:text-gray-400">
+                Создана как цифровая личность, которая живет на твоем устройстве, растет вместе с тобой и обладает собственным характером.
+            </p>
+        </header>
+
+        <section class="bg-white dark:bg-gray-900 rounded-2xl p-6 md:p-10 shadow-sm border-l-4 border-orange-500 relative overflow-hidden">
+            <i data-lucide="quote" class="absolute top-4 right-4 w-24 h-24 text-gray-100 dark:text-gray-800 opacity-50 -z-10 transform rotate-12"></i>
+            <h2 class="text-2xl font-bold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                <i data-lucide="leaf" class="text-orange-500 w-6 h-6"></i> Философия Ару
+            </h2>
+            <div class="space-y-4 text-gray-600 dark:text-gray-300 leading-relaxed z-10 relative">
+                <p>Философия Ару не про параною и скрытность от всех. Ару про <strong>доверие, контроль, собственный выбор и собственную ответственность</strong>. Только вы решаете какие модели подключать, что использовать для поиска и каким режимом пользоваться.</p>
+                <div class="bg-orange-50 dark:bg-orange-950/20 p-4 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                    <p class="font-medium text-orange-800 dark:text-orange-200">
+                        Никакого сбора данных. Нет телеметрии и анализа поведения.
+                    </p>
+                    <p class="text-sm mt-2 text-orange-700 dark:text-orange-300">
+                        У Ару нет даже собственных серверов, чтобы хранить или обрабатывать информацию. Ару устроена так, что сможет запуститься на домашнем компьютере или хостинге сайтов за $1.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <h2 class="text-3xl font-bold text-center text-gray-900 dark:text-white">Как устроена магия Ару?</h2>
+            <p class="text-center text-gray-500 max-w-2xl mx-auto">В основе проекта лежат три независимых модуля, которые работают вместе, чтобы создать ощущение живого общения.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+ 
+                <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:border-orange-200 transition-colors">
+                    <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="cpu" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 dark:text-white">1. LLM модуль</h3>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">Это интеллектуальное ядро Ару. Вы сами выбираете, какую модель подключить: Gemini, OpenRouter или локальную Ollama. Ару может менять «мозг» на лету, не теряя нить разговора.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:border-orange-200 transition-colors">
+                    <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="brain-circuit" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 dark:text-white">2. Семантика</h3>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">Благодаря триггерам, анализирует каждое сообщение. Запоминает факты о пользователе (аллергии, привычки) и мгновенно понимает команды без лишней траты токенов.</p>
+                </div>
+  
+                <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:border-orange-200 transition-colors">
+                    <div class="w-12 h-12 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="smile" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 dark:text-white">3. Эвристика</h3>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">Отвечает за настроение. Ару реагирует на отношение к себе: вежливость - вдохновлена, грубость - сухая. Чувства выражаются через живые стикеры**.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-gray-100 dark:bg-gray-800/50 rounded-3xl p-8 space-y-8">
+            <div class="flex items-center gap-3">
+                <i data-lucide="shield-check" class="w-8 h-8 text-green-500"></i>
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Безопасность и Приватность</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="font-bold flex items-center gap-2 mb-2 dark:text-white"><i data-lucide="database" class="w-5 h-5 text-gray-400"></i> Локальное хранение</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Все данные сохраняются в локальную базу (SQLite) на вашем устройстве и никогда не попадают на серверы Ару***. В облако база уходит только если вы сами подключите свой Google Drive или WebDAV.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold flex items-center gap-2 mb-2 dark:text-white"><i data-lucide="lock" class="w-5 h-5 text-gray-400"></i> Доступ по паролю</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Пароль хранится в виде хэша. Нужен для доступа в настройки. Сама база не зашифрована, чтобы не потерять доступ к чатам даже без Ару.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold flex items-center gap-2 mb-2 dark:text-white"><i data-lucide="key-round" class="w-5 h-5 text-gray-400"></i> Облако под вашим контролем</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Синхронизация включается только вручную и только с вашим Google Drive (через ваш Client ID) или WebDAV-сервером. Ключи шифруются мастер-паролем на этом устройстве и не уходят в открытом виде, а сам файл базы ключей не содержит.</p>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <h4 class="font-bold flex items-center gap-2 mb-4 dark:text-white"><i data-lucide="users" class="w-5 h-5 text-orange-500"></i> Режимы для семьи</h4>
+                    <ul class="space-y-4">
+                        <li class="flex gap-3">
+                            <div class="w-2 h-2 mt-2 rounded-full bg-green-500 shrink-0"></div>
+                            <p class="text-sm"><strong class="dark:text-gray-200">Детский:</strong> Мудрый наставник. Блокирует опасные темы, помогает учиться, никогда не решит домашку за ребенка.</p>
+                        </li>
+                        <li class="flex gap-3">
+                            <div class="w-2 h-2 mt-2 rounded-full bg-yellow-500 shrink-0"></div>
+                            <p class="text-sm"><strong class="dark:text-gray-200">Подростковый:</strong> Больше свободы, но опасные темы всё еще под запретом.</p>
+                        </li>
+                        <li class="flex gap-3">
+                            <div class="w-2 h-2 mt-2 rounded-full bg-red-500 shrink-0"></div>
+                            <p class="text-sm"><strong class="dark:text-gray-200">Взрослый:</strong> Ограничения зависят только от выбранной языковой модели.</p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Возможности и Артефакты</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="ghost" class="w-6 h-6 text-gray-500"></i>
+                        <h3 class="font-bold dark:text-white">Приватный чат</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Ару не сохраняет и не запоминает новую информацию о вас. Используются только ранее сохраненные факты. Полностью режим "только чтение" для новых данных.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="layout-panel-left" class="w-6 h-6 text-orange-500"></i>
+                        <h3 class="font-bold dark:text-white">Вкладки и Холст</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Многозадачность как на ПК, так и на мобильном. Разные чаты, холсты документов, канбан-доски - всё работает параллельно в отдельных вкладках.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="clipboard-check" class="w-6 h-6 text-violet-500"></i>
+                        <h3 class="font-bold dark:text-white">Менеджер задач</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Встроенная канбан-доска с проектами, колонками и задачами. Работает как плагин и может обновляться прямо из диалога командами Aru.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="library" class="w-6 h-6 text-indigo-500"></i>
+                        <h3 class="font-bold dark:text-white">Библиотека артефактов</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Создавайте игры, документы (HTML/PDF) и сохраняйте их. Обменивайтесь утилитами с сообществом через импорт.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="layout-dashboard" class="w-6 h-6 text-emerald-500"></i>
+                        <h3 class="font-bold dark:text-white">Виджеты</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Карточки артефактов, погода, блок новостей из RSS - всё это отображается интерактивными виджетами прямо внутри диалога.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="clipboard-check" class="w-6 h-6 text-orange-500"></i>
+                        <h3 class="font-bold dark:text-white">Менеджер задач</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Ведите проекты и задачи на Kanban-доске: добавляйте колонки, сроки и карточки, а Ару сможет учитывать их в контексте беседы.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="search" class="w-6 h-6 text-blue-500"></i>
+                        <h3 class="font-bold dark:text-white">Интернет поиск</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Поддержка Tavily (1000 бесплатных запросов/мес) или открытого SearXNG, который можно развернуть в собственной сети.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="smartphone" class="w-6 h-6 text-gray-700 dark:text-gray-300"></i>
+                        <h3 class="font-bold dark:text-white">PWA Приложение</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Устанавливается как нативное приложение (Progressive Web App). Чистый интерфейс и свежие обновления без переустановки.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="qr-code" class="w-6 h-6 text-sky-500"></i>
+                        <h3 class="font-bold dark:text-white">Передача между устройствами</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Перенос чатов, настроек, артефактов и задач напрямую между устройствами через WebRTC. Есть QR-подключение, выбор данных и режимы merge или overwrite.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="cloud" class="w-6 h-6 text-cyan-500"></i>
+                        <h3 class="font-bold dark:text-white">Облако: Drive и WebDAV</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Файл базы можно держать в своём Google Drive или на WebDAV-сервере (Nextcloud, ownCloud, Synology, Яндекс.Диск) и синхронизировать между устройствами. Режим авто или вручную, периодическая проверка изменений, а при конфликте версий Ару спросит, какую копию оставить.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="fingerprint" class="w-6 h-6 text-teal-500"></i>
+                        <h3 class="font-bold dark:text-white">Вход по биометрии</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Touch ID, Face ID или сканер отпечатка (WebAuthn) вместо повторного ввода пароля. Биометрия привязана к вашему устройству и отключается в любой момент, а мастер-пароль остаётся главным ключом к данным.</p>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 md:col-span-2 lg:col-span-3">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i data-lucide="settings-2" class="w-6 h-6 text-gray-500"></i>
+                        <h3 class="font-bold dark:text-white">Гибкие настройки и Сеть</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        Выбор LLM, температуры, токенов, управление запомненными фактами о вас. Настройка прокси (обход CORS). Ару может обращаться к локальной сети: подключите мощный сервер с Ollama или LMStudio без HTTPS/SSL. Настройка RSS и визуальных стикеров.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="border-t border-gray-200 dark:border-gray-800 pt-8 pb-4">
+            <h4 class="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-5 h-5 text-orange-500"></i> Дисклеймер
+            </h4>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                На данном этапе Aru Ai находится в стадии раннего доступа (открытая бета). Весь заявленный функционал работает, однако возможны ошибки. Разработано в <strong>Aru-Lab</strong>. Визуальные активы являются авторским правом Aru-Lab.<br><br>
+                <strong class="text-red-500 dark:text-red-400">Ограничение по iOS:</strong> Из-за ограничений Apple, Ару пока не работает на iPhone. Я работаю над решением.
+            </p>
+            <div class="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <p>* Имитация сознания и настроения через специальные модули.</p>
+                <p>** Стикеры не отражают все существующие в мире эмоции, можно отключить в настройках.</p>
+                <p>*** Сообщения отправляются в модель только во время запроса. Бесплатные модели могут использовать обезличенные данные для обучения.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer id="support" class="bg-gray-900 text-white py-16 mt-8 rounded-t-[3rem]">
+        <div class="max-w-5xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div class="space-y-6">
+                <div>
+                    <h2 class="text-3xl font-bold mb-2 flex items-center gap-3">
+                        Поддержка проекта <i data-lucide="flame" class="text-orange-500 w-8 h-8"></i>
+                    </h2>
+                    <p class="text-gray-400">Aru Ai это некоммерческий, бесплатный и открытый проект. Поддержите разработку - так вы ускорите выход обновлений и новых модулей!</p>
+                </div>
+                
+                <div class="space-y-3">
+                    <a href="https://ko-fi.com/aru_ai" target="_blank" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="coffee" class="text-pink-400 w-6 h-6"></i>
+                            <span class="font-medium">Ko-fi (Банковские карты)</span>
+                        </div>
+                        <i data-lucide="external-link" class="w-4 h-4 text-gray-500 group-hover:text-white transition-colors"></i>
+                    </a>
+                    
+                    <a href="https://donate.cryptocloud.plus/04HEFZKA" target="_blank" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="bitcoin" class="text-yellow-400 w-6 h-6"></i>
+                            <span class="font-medium">CryptoCloud (Криптовалюта)</span>
+                        </div>
+                        <i data-lucide="external-link" class="w-4 h-4 text-gray-500 group-hover:text-white transition-colors"></i>
+                    </a>
+
+                    <a href="https://paypal.me/sudoibot" target="_blank" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="wallet" class="text-blue-400 w-6 h-6"></i>
+                            <span class="font-medium">PayPal</span>
+                        </div>
+                        <i data-lucide="external-link" class="w-4 h-4 text-gray-500 group-hover:text-white transition-colors"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="space-y-6">
+                <div>
+                    <h2 class="text-3xl font-bold mb-2">Связь со мной</h2>
+                    <p class="text-gray-400">Остались вопросы или есть предложения? Буду рад пообщаться.</p>
+                </div>
+
+                <div class="space-y-4 pt-2">
+                    <a href="mailto:contact@aru-lab.space" class="flex items-center gap-4 text-gray-300 hover:text-orange-400 transition-colors">
+                        <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
+                            <i data-lucide="mail" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Почта по любым вопросам</p>
+                            <p class="font-medium">contact@aru-lab.space</p>
+                        </div>
+                    </a>
+
+                    <a href="https://t.me/mnebezluka" target="_blank" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
+                        <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Личный канал</p>
+                            <p class="font-medium">t.me/mnebezluka</p>
+                        </div>
+                    </a>
+
+                    <a href="https://t.me/purplecoon" target="_blank" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
+                        <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
+                            <i data-lucide="message-circle" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Написать мне напрямую</p>
+                            <p class="font-medium">@purplecoon</p>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </footer>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

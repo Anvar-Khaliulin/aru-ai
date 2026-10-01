@@ -1,0 +1,782 @@
+/*
+---ARU-LAB.SPACE---ALMATY---2026---
+Clean application UI: neutral surfaces, one orange accent, and shared dialogs.
+*/
+
+:root {
+    color-scheme: light;
+    --aru-bg: #f5f5f4;
+    --aru-surface: #ffffff;
+    --aru-surface-muted: #f5f5f4;
+    --aru-surface-hover: #ececea;
+    --aru-border: #dededb;
+    --aru-border-subtle: #ececea;
+    --aru-card-bg: #fafaf9;
+    --aru-text: #1c1917;
+    --aru-text-muted: #6b6865;
+    --aru-text-faint: #a09c97;
+    --aru-accent: #f97316;
+    --aru-accent-strong: #ea580c;
+    --aru-accent-soft: #fff7ed;
+    --aru-overlay: rgba(28, 25, 23, 0.55);
+    --aru-radius-sm: 10px;
+    --aru-radius: 14px;
+    --aru-radius-lg: 18px;
+    --aru-control-height: 44px;
+    --aru-shadow-xs: none;
+    --aru-shadow-sm: none;
+    --aru-shadow-lg: none;
+}
+
+.dark {
+    color-scheme: dark;
+    --aru-bg: #0f0f10;
+    --aru-surface: #171719;
+    --aru-surface-muted: #202023;
+    --aru-surface-hover: #29292d;
+    --aru-border: #303034;
+    --aru-border-subtle: #252528;
+    --aru-card-bg: #19191b;
+    --aru-text: #f4f4f5;
+    --aru-text-muted: #a1a1aa;
+    --aru-text-faint: #71717a;
+    --aru-accent-soft: #2c1b12;
+    --aru-overlay: rgba(0, 0, 0, 0.68);
+    --aru-shadow-xs: none;
+    --aru-shadow-sm: none;
+    --aru-shadow-lg: none;
+}
+
+* {
+    box-sizing: border-box;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+
+*::before,
+*::after {
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+
+html,
+body,
+#app {
+    background: var(--aru-bg) !important;
+    color: var(--aru-text);
+}
+
+body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+::selection {
+    background: #fed7aa;
+    color: #431407;
+}
+
+.dark ::selection {
+    background: #7c2d12;
+    color: #fff7ed;
+}
+
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c7c7cc;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: #45454b;
+    border-color: transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1aa;
+    background-clip: padding-box;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar,
+.no_scrollbar,
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+a {
+    transition: background-color 160ms ease, color 160ms ease,
+        transform 160ms ease, opacity 160ms ease;
+}
+
+button:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    background: var(--aru-surface-hover) !important;
+}
+
+button:focus-visible,
+a:focus-visible {
+    background: var(--aru-surface-hover) !important;
+    color: var(--aru-accent-strong) !important;
+}
+
+#send-btn:focus-visible,
+.settings-primary-button:focus-visible {
+    background: var(--aru-accent-strong) !important;
+    color: #ffffff !important;
+}
+
+/* Shared motion utilities retained for dynamic interface fragments. */
+@keyframes bounce-slow {
+    0%, 100% { transform: translateY(-4%); }
+    50% { transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.82; transform: scale(1.04); }
+}
+
+@keyframes shake-gentle {
+    0%, 100% { transform: rotate(0); }
+    25% { transform: rotate(-1deg); }
+    75% { transform: rotate(1deg); }
+}
+
+@keyframes aru-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes aru-dialog-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-bounce-slow { animation: bounce-slow 3s infinite ease-in-out; }
+.aru-happy { animation: bounce-slow 2s infinite ease-in-out; }
+.aru-thinking { animation: pulse-soft 2s infinite ease-in-out; }
+.aru-sad { animation: shake-gentle 4s infinite ease-in-out; }
+.animate-fade-in-up { animation: aru-fade-up 180ms ease-out both; }
+.fade-in { animation: aru-fade-up 180ms ease-out both; }
+
+/* Header and lightweight menus */
+.app-header {
+    background: var(--aru-surface) !important;
+}
+
+#chat-title {
+    color: var(--aru-text-muted) !important;
+}
+
+.app-header button:hover,
+#config-menu button:hover,
+#tools-menu button:hover,
+#download-dropdown button:hover {
+    background: var(--aru-surface-hover) !important;
+}
+
+#btn-config-trigger {
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-accent);
+}
+
+#btn-config-trigger:hover {
+    background: var(--aru-surface-muted) !important;
+}
+
+.app-popover,
+#tools-menu,
+#download-dropdown {
+    background: var(--aru-surface) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Auth */
+.auth-stage {
+    background: var(--aru-bg) !important;
+}
+
+.auth-stage::before,
+.auth-stage::after {
+    display: none;
+}
+
+.auth-card {
+    background: var(--aru-surface) !important;
+    border: 0 !important;
+    box-shadow: var(--aru-shadow-lg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.auth-card > .space-y-3 > button:first-child,
+#screen-auth button[onclick*="openModal('create')"] {
+    background: var(--aru-accent) !important;
+    box-shadow: none !important;
+}
+
+.auth-card > .space-y-3 > button:first-child:hover,
+#screen-auth button[onclick*="openModal('create')"]:hover {
+    background: var(--aru-accent-strong) !important;
+}
+
+#screen-auth button[onclick*="openModal('login')"] {
+    background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: var(--aru-text) !important;
+}
+
+/* Application workspace: separated, flat panels instead of touching surfaces. */
+#screen-chat:not(.hidden) {
+    display: flex;
+    gap: 12px;
+    padding: 72px 12px 12px;
+    background: var(--aru-bg) !important;
+}
+
+.app-sidebar,
+.chat-workspace,
+.canvas-workspace {
+    background: var(--aru-surface) !important;
+}
+
+.app-sidebar,
+.chat-workspace,
+.canvas-workspace {
+    border-radius: var(--aru-radius) !important;
+}
+
+.app-sidebar > div:first-child {
+    padding-top: 8px !important;
+}
+
+#chat-search {
+    height: 36px;
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-text) !important;
+}
+
+#chat-search:focus {
+    background: var(--aru-surface-hover) !important;
+}
+
+.chat-item {
+    border: 0 !important;
+    border-radius: var(--aru-radius-sm) !important;
+    color: var(--aru-text) !important;
+    margin-bottom: 3px;
+}
+
+.chat-item:hover {
+    background: var(--aru-surface-muted) !important;
+    transform: none;
+}
+
+.chat-item.bg-aru-50,
+.dark .chat-item.dark\:bg-aru-900\/30 {
+    background: var(--aru-accent-soft) !important;
+    color: var(--aru-accent-strong) !important;
+}
+
+/* Tabs: compact browser-like navigation, with controls only when needed. */
+#tabs-navigation:not(.hidden) {
+    min-width: 0;
+    padding: 8px 10px 10px;
+    background: var(--aru-surface) !important;
+}
+
+.tab-strip {
+    gap: 4px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    scrollbar-width: none;
+}
+
+.tab-item {
+    min-height: 34px;
+    border: 0 !important;
+    border-radius: var(--aru-radius-sm) !important;
+    background: transparent !important;
+    color: var(--aru-text-muted) !important;
+    box-shadow: none !important;
+}
+
+.tab-item:hover {
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-text) !important;
+}
+
+.tab-item.active {
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-accent-strong) !important;
+    box-shadow: none !important;
+}
+
+.tab-item.active::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    bottom: -5px;
+    left: 12px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--aru-accent);
+}
+
+.tab-scroll-button {
+    display: none;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: var(--aru-surface-muted);
+    color: var(--aru-text-muted);
+}
+
+#tabs-navigation.has-overflow .tab-scroll-button {
+    display: inline-flex;
+}
+
+.tab-scroll-button:hover:not(:disabled) {
+    background: var(--aru-surface-hover);
+    color: var(--aru-text);
+}
+
+.tab-scroll-button:disabled {
+    cursor: default;
+    opacity: 0.32;
+}
+
+/* Chat and composer */
+.chat-stream {
+    padding-top: 20px !important;
+    background: var(--aru-surface) !important;
+}
+
+.chat-empty-state > div:first-child {
+    background: var(--aru-surface-muted) !important;
+    box-shadow: none !important;
+}
+
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) {
+    background: var(--aru-accent) !important;
+    box-shadow: none !important;
+}
+
+#messages-container > .flex.flex-col .bg-white,
+#typing-indicator > div:last-child {
+    background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: var(--aru-text) !important;
+}
+
+.dark #messages-container > .flex.flex-col .dark\:bg-gray-800,
+.dark #typing-indicator > div:last-child {
+    background: var(--aru-surface-muted) !important;
+}
+
+#messages-container .prose a {
+    color: var(--aru-accent-strong);
+}
+
+#messages-container .prose pre,
+#messages-container .prose code {
+    border: 0 !important;
+}
+
+.composer-area {
+    background: var(--aru-surface) !important;
+}
+
+.composer-shell {
+    background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.composer-shell:focus-within {
+    background: var(--aru-surface-hover) !important;
+    transform: none;
+}
+
+#send-btn,
+#modal-container button.bg-aru-500,
+#modal-container button[class*="bg-orange-500"] {
+    background: var(--aru-accent) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+#send-btn:hover,
+#modal-container button.bg-aru-500:hover,
+#modal-container button[class*="bg-orange-500"]:hover {
+    background: var(--aru-accent-strong) !important;
+    box-shadow: none !important;
+    transform: none;
+}
+
+#attachments-preview > div {
+    background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Canvas */
+#canvas-panel > div:first-child,
+#canvas-content {
+    background: var(--aru-surface) !important;
+    border: 0 !important;
+}
+
+#canvas-tabs,
+#canvas-tabs button,
+#download-dropdown {
+    border: 0 !important;
+}
+
+#canvas-tabs {
+    background: var(--aru-surface-muted) !important;
+}
+
+#canvas-tabs button.bg-white,
+.dark #canvas-tabs button.dark\:bg-gray-700 {
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-xs) !important;
+}
+
+/* Dialogs and overlays */
+#modal-container > [class*="fixed"],
+#model-loading-overlay,
+#lib-add-overlay,
+#transfer-sub-modal {
+    background: var(--aru-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#modal-container > [class*="fixed"] > .absolute {
+    background: transparent !important;
+}
+
+#modal-container > [class*="fixed"] > div:not(.absolute),
+#lib-add-overlay > div,
+#transfer-sub-modal > div {
+    background: var(--aru-surface) !important;
+    border-radius: var(--aru-radius-lg) !important;
+    animation: aru-dialog-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#modal-container input:not([type="checkbox"]):not([type="range"]),
+#modal-container textarea,
+#modal-container select,
+#lib-add-overlay input:not([type="checkbox"]):not([type="range"]),
+#lib-add-overlay textarea,
+#lib-add-overlay select,
+#transfer-sub-modal input:not([type="checkbox"]) {
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-text) !important;
+    border-radius: var(--aru-radius-sm) !important;
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+#modal-container input:not([type="checkbox"]):not([type="range"]):focus,
+#modal-container textarea:focus,
+#modal-container select:focus,
+#lib-add-overlay input:not([type="checkbox"]):not([type="range"]):focus,
+#lib-add-overlay textarea:focus,
+#lib-add-overlay select:focus,
+#transfer-sub-modal input:not([type="checkbox"]):focus {
+    background: var(--aru-surface-hover) !important;
+}
+
+/* Settings */
+#settings-dialog {
+    color: var(--aru-text);
+}
+
+#settings-dialog .settings-shell {
+    background: var(--aru-surface) !important;
+}
+
+#settings-dialog .settings-header {
+    padding: 20px;
+    background: var(--aru-surface) !important;
+}
+
+#settings-dialog .settings-tabs {
+    gap: 6px;
+    padding: 0 16px 12px;
+    background: var(--aru-surface) !important;
+}
+
+#settings-dialog .settings-tab {
+    padding: 10px 14px;
+    border-radius: var(--aru-radius-sm);
+    color: var(--aru-text-muted) !important;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    transition: background-color 160ms ease, color 160ms ease;
+}
+
+#settings-dialog .settings-tab:hover {
+    background: var(--aru-surface-muted) !important;
+    color: var(--aru-text) !important;
+}
+
+#settings-dialog .settings-tab.is-active {
+    background: var(--aru-accent-soft) !important;
+    color: var(--aru-accent-strong) !important;
+}
+
+#settings-dialog .settings-body {
+    padding: 20px !important;
+    background: var(--aru-surface) !important;
+}
+
+#settings-dialog .settings-section,
+#settings-dialog .settings-panel {
+    padding: 20px !important;
+    border-radius: var(--aru-radius) !important;
+    background: var(--aru-surface-muted) !important;
+}
+
+#settings-dialog .settings-panel {
+    background: var(--aru-card-bg) !important;
+}
+
+#settings-dialog input:not([type="checkbox"]):not([type="range"]),
+#settings-dialog select {
+    width: 100%;
+    height: var(--aru-control-height);
+    padding: 0 14px !important;
+    background: var(--aru-surface) !important;
+    color: var(--aru-text) !important;
+    border-radius: var(--aru-radius-sm) !important;
+    font-size: 0.8125rem !important;
+}
+
+#settings-dialog textarea {
+    width: 100%;
+    min-height: 140px;
+    padding: 12px 14px !important;
+    background: var(--aru-surface) !important;
+    color: var(--aru-text) !important;
+    border-radius: var(--aru-radius-sm) !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+#settings-dialog input:not([type="checkbox"]):not([type="range"]):focus,
+#settings-dialog select:focus,
+#settings-dialog textarea:focus {
+    background: var(--aru-surface-hover) !important;
+}
+
+#settings-dialog input[type="checkbox"],
+#settings-dialog input[type="range"] {
+    accent-color: var(--aru-accent);
+}
+
+#settings-dialog .settings-note {
+    padding: 12px !important;
+    border-radius: var(--aru-radius-sm) !important;
+    background: var(--aru-accent-soft) !important;
+    color: var(--aru-accent-strong) !important;
+}
+
+#settings-dialog .h-px {
+    display: none;
+}
+
+#settings-dialog .settings-footer {
+    padding: 16px 20px;
+    background: var(--aru-surface) !important;
+}
+
+#settings-dialog .settings-primary-button {
+    min-height: var(--aru-control-height);
+    padding: 0 22px !important;
+    border-radius: var(--aru-radius-sm) !important;
+    background: var(--aru-accent) !important;
+    color: #ffffff !important;
+}
+
+#settings-dialog .settings-primary-button:hover {
+    background: var(--aru-accent-strong) !important;
+}
+
+/* Informational documents */
+#help-root .glass {
+    border: 1px solid var(--aru-border) !important;
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-xs) !important;
+}
+
+/* Mobile tab overview */
+#tab-switcher {
+    background: var(--aru-surface) !important;
+}
+
+#tab-switcher > div:first-child,
+#tab-switcher > div:last-child {
+    border-color: var(--aru-border) !important;
+    background: var(--aru-surface) !important;
+}
+
+#tab-switcher .tab-card {
+    border: 1px solid var(--aru-border) !important;
+    border-radius: var(--aru-radius);
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-xs) !important;
+}
+
+#tab-switcher button[onclick*="newChat"] {
+    background: var(--aru-accent) !important;
+    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35) !important;
+}
+
+#drag-drop-overlay {
+    background: var(--aru-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#drag-drop-overlay > div {
+    border: 0 !important;
+    background: var(--aru-surface) !important;
+}
+
+/* Task plugin owns its markup, but follows the same neutral controls. */
+#task-detail-modal {
+    background: var(--aru-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#canvas-panel.canvas-fullscreen {
+    position: fixed !important;
+    z-index: 1000 !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+}
+
+#canvas-panel.canvas-fullscreen + footer {
+    display: none !important;
+}
+
+/* Mobile surfaces remain edge-to-edge to reserve message space. */
+@media (max-width: 767px) {
+    #tabs-navigation {
+        display: none !important;
+    }
+
+    #screen-chat:not(.hidden) {
+        gap: 0;
+        padding: 60px 0 0;
+    }
+
+    .app-sidebar {
+        border-radius: 0 !important;
+        box-shadow: var(--aru-shadow-lg);
+    }
+
+    aside#sidebar:not(.-translate-x-full) {
+        transform: translateX(0) !important;
+    }
+
+    .chat-workspace,
+    .canvas-workspace {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .app-header {
+        padding: 10px 12px !important;
+    }
+
+    .composer-area {
+        padding: 10px !important;
+    }
+
+    .composer-shell {
+        border-radius: var(--aru-radius) !important;
+    }
+
+    #modal-container > [class*="fixed"] {
+        padding: 10px !important;
+    }
+
+    #modal-container > [class*="fixed"] > div:not(.absolute),
+    #lib-add-overlay > div,
+    #transfer-sub-modal > div {
+        max-height: calc(100dvh - 20px) !important;
+        border-radius: var(--aru-radius) !important;
+    }
+}
+
+@media (min-width: 768px) {
+    #screen-chat:not(.hidden) {
+        padding-top: 84px;
+    }
+
+    #tabs-navigation:not(.hidden) {
+        display: flex !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

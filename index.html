@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<!--
+---ARU-LAB.SPACE---ALMATY---2026---
+Main entry point and UI structure for the Aru AI Progressive Web App.
+---chat.aru-lab.space---PWA---
+-->
+<html lang="ru" class="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aru AI - Local-first Personal AI Assistant with Memory and PWA</title>
+    <meta name="description" content="Aru AI is a local-first personal AI assistant and PWA with semantic memory, artifact library, task manager and WebRTC device transfer.">
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+    <link rel="canonical" href="https://chat.aru-lab.space/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Aru AI">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:title" content="Aru AI - Local-first Personal AI Assistant">
+    <meta property="og:description" content="Personal AI assistant with local-first architecture, semantic memory, artifacts, task manager and PWA support.">
+    <meta property="og:url" content="https://chat.aru-lab.space/">
+    <meta property="og:image" content="https://chat.aru-lab.space/media/int/web-app-manifest-512x512.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Aru AI - Local-first Personal AI Assistant">
+    <meta name="twitter:description" content="A local-first AI assistant and PWA with memory, artifacts, tasks and device transfer.">
+    <meta name="twitter:image" content="https://chat.aru-lab.space/media/int/web-app-manifest-512x512.png">
+
+    <!-- PWA & Mobile Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Aru AI">
+    <meta name="apple-mobile-web-app-title" content="Aru AI">
+    <meta name="theme-color" content="#f97316">
+    <meta name="msapplication-navbutton-color" content="#f97316">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="msapplication-starturl" content="/">
+    <link rel="apple-touch-icon" href="media/int/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="media/int/favicon-96x96.png">
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        aru: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316', // Primary Fox Color
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'bounce-slow': 'bounce-slow 3s infinite ease-in-out',
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        'bounce-slow': {
+                            '0%, 100%': { transform: 'translateY(-5%)' },
+                            '50%': { transform: 'translateY(0)' },
+                        },
+                        fadeIn: {
+                            'from': { opacity: '0', transform: 'translateY(10px)' },
+                            'to': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- File Parsers -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <!-- Database (WASM + IndexedDB) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+
+    <!-- WebRTC & QR (Data Transfer) -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+    <!-- Google Identity Services (Google Drive OAuth) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <!-- Config PDF.js Worker -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <!-- Markdown Parser (Marked.js) & Highlight.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css">
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "Aru AI",
+            "applicationCategory": "ProductivityApplication",
+            "operatingSystem": "Web Browser, PWA",
+            "url": "https://chat.aru-lab.space/",
+            "description": "Local-first personal AI assistant with semantic memory, artifact library, task manager and WebRTC device transfer.",
+            "image": "https://chat.aru-lab.space/media/int/web-app-manifest-512x512.png",
+            "creator": {
+                "@type": "Organization",
+                "name": "Aru-Lab",
+                "url": "https://chat.aru-lab.space/"
+            },
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+            }
+        }
+    </script>
+    <style>
+        .lang-node {
+            display: none;
+        }
+
+        .lang-active {
+            display: block;
+        }
+
+        .search-pulse {
+            animation: search-pulse 2s infinite;
+        }
+
+        @keyframes search-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+
+        #tools-menu {
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transform: translateY(10px) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #tools-menu.active {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300 font-sans overflow-hidden h-screen w-screen selection:bg-aru-200 dark:selection:bg-aru-900">
+
+    <!-- App Container -->
+    <div id="app" class="relative w-full h-full flex flex-col">
+
+        <!-- HEADER (Common) -->
+        <header id="main-header"
+            class="app-header hidden absolute top-0 w-full z-50 p-3 md:p-4 flex justify-between items-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-all duration-300">
+            <div class="flex items-center gap-3">
+                <!-- Sidebar Toggles -->
+                <button onclick="app.toggleSidebar()"
+                    class="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+                    data-i18n-title="toggle_sidebar">
+                    <i data-lucide="menu"></i>
+                </button>
+
+                <div
+                    class="w-8 h-8 rounded-full bg-aru-100 dark:bg-aru-900 flex items-center justify-center text-aru-600 font-bold select-none">
+                    🦊
+                </div>
+                <h1 class="text-lg md:text-xl font-bold tracking-tight select-none">Aru <span
+                        class="text-aru-500">Ai</span></h1>
+                <span id="chat-title"
+                    class="text-sm text-gray-500 dark:text-gray-400 ml-4 hidden lg:block border-l pl-4 border-gray-300 dark:border-gray-700 truncate max-w-[200px]">
+                    <!-- Chat Title Dynamic -->
+                </span>
+            </div>
+            <div class="flex items-center gap-1 md:gap-2">
+                <!-- Library -->
+                <button onclick="app.openLibrary()"
+                    class="p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition text-aru-600 group relative"
+                    title="Библиотека" data-i18n-title="sidebar_library">
+                    <i data-lucide="library" class="w-5 h-5"></i>
+                </button>
+                <!-- Configuration Menu (Consolidation) -->
+                <div class="relative">
+                    <button onclick="app.toggleConfigMenu()" id="btn-config-trigger"
+                        class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-aru-600 hover:bg-aru-50 dark:hover:bg-aru-900/20 transition-all shadow-sm">
+                        <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+                    </button>
+
+                    <!-- Config Menu Popup -->
+                    <div id="config-menu"
+                        class="app-popover absolute top-full right-0 mt-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-3 z-[60] min-w-[220px] hidden animate-fade-in">
+
+                        <!-- Segmented Language Switcher -->
+                        <div class="flex p-1 bg-gray-50 dark:bg-gray-800 rounded-xl mb-3">
+                            <button onclick="app.setLang('kk')" data-lang-btn="kk"
+                                class="flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all">KZ</button>
+                            <button onclick="app.setLang('en')" data-lang-btn="en"
+                                class="flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all">EN</button>
+                            <button onclick="app.setLang('ru')" data-lang-btn="ru"
+                                class="flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all">RU</button>
+                        </div>
+
+                        <!-- Theme Toggle Button -->
+                        <button id="theme-toggle"
+                            class="w-full flex items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                <i data-lucide="sun" class="w-4 h-4 block dark:hidden"></i>
+                                <i data-lucide="moon" class="w-4 h-4 hidden dark:block"></i>
+                            </div>
+                            <span data-i18n="label_theme">Theme</span>
+                        </button>
+
+                        <button onclick="app.openSettings(); app.toggleConfigMenu()"
+                            class="w-full flex items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-500 flex items-center justify-center">
+                                <i data-lucide="settings" class="w-4 h-4"></i>
+                            </div>
+                            <span data-i18n="settings_title">Settings</span>
+                        </button>
+
+                        <!-- Moved from sidebar: Information & Forum -->
+                        <button onclick="app.openInfo(); app.toggleConfigMenu()"
+                            class="w-full flex items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">
+                                <i data-lucide="info" class="w-4 h-4"></i>
+                            </div>
+                            <span data-i18n="sidebar_info">Information</span>
+                        </button>
+
+                        <button onclick="window.open('https://forum.aru-lab.space','_blank'); app.toggleConfigMenu()"
+                            class="w-full flex items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 flex items-center justify-center">
+                                <i data-lucide="message-circle" class="w-4 h-4"></i>
+                            </div>
+                            <span data-i18n="sidebar_forum">Forum</span>
+                        </button>
+
+                        <button onclick="app.logout(); app.toggleConfigMenu()"
+                            class="w-full flex items-center gap-3 p-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 flex items-center justify-center">
+                                <i data-lucide="log-out" class="w-4 h-4"></i>
+                            </div>
+                            <span data-i18n="logout">Logout</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- SCREENS -->
+
+        <!-- 1. AUTH SCREEN (Login/Create) -->
+        <section id="screen-auth" data-nosnippet class="auth-stage flex-1 flex items-center justify-center p-4 z-50 bg-gray-50 dark:bg-gray-900">
+            <div
+                class="auth-card max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-700 relative overflow-hidden animate-fade-in">
+                <!-- Mascot Greeting -->
+                <div class="flex flex-col items-center mb-8 relative z-10">
+                    <div class="w-32 h-32 mb-4 relative drop-shadow-xl">
+                        <!-- Updated Mascot Path -->
+                        <img src="media/emotions/cool.png" alt="Aru" class="w-full h-full object-contain animate-bounce-slow">
+                    </div>
+                    <h2 class="text-3xl font-bold text-center mb-2 tracking-tight" data-i18n="welcome_title"></h2>
+                    <p class="text-gray-500 dark:text-gray-400 text-center text-sm px-4" data-i18n="welcome_desc"></p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="space-y-3 relative z-10">
+                    <button onclick="app.openModal('create')"
+                        class="group w-full py-3.5 px-4 bg-aru-500 hover:bg-aru-600 text-white rounded-xl font-semibold transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-aru-500/30">
+                        <i data-lucide="plus-circle" class="w-5 h-5 group-hover:rotate-90 transition-transform"></i>
+                        <span data-i18n="btn_create_db"></span>
+                    </button>
+                    <button onclick="app.openModal('login')"
+                        class="group w-full py-3.5 px-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-xl font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                        <i data-lucide="key-round"
+                            class="w-5 h-5 text-gray-400 group-hover:text-aru-500 transition-colors"></i>
+                        <span data-i18n="btn_open_db"></span>
+                    </button>
+                    <button type="button" onclick="app.openModal('remote')"
+                        class="group w-full py-3.5 px-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                        <i data-lucide="hard-drive"
+                            class="w-5 h-5 text-blue-500 dark:text-blue-400 group-hover:scale-110 transition-transform"></i>
+                        <span data-i18n="btn_remote_db">Google Drive / WebDAV</span>
+                    </button>
+                </div>
+
+                <!-- Footer Info -->
+                <div class="mt-8 text-center relative z-10">
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="flex items-center justify-center gap-2">
+                            <select id="auth-lang-select"
+                                class="text-sm bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-aru-500 cursor-pointer">
+                                <option value="kk">Қазақша</option>
+                                <option value="ru" selected>Русский</option>
+                                <option value="en">English</option>
+                            </select>
+
+                            <div class="flex gap-1">
+                                <button onclick="app.openInfo()" class="p-2 text-gray-400 hover:text-aru-500 transition"
+                                    data-i18n-title="sidebar_info">
+                                    <i data-lucide="info" class="w-5 h-5"></i>
+                                </button>
+                                <a href="https://forum.aru-lab.space" target="_blank"
+                                    class="p-2 text-gray-400 hover:text-aru-500 transition"
+                                    data-i18n-title="sidebar_forum">
+                                    <i data-lucide="message-circle" class="w-5 h-5"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-semibold"
+                        data-i18n="footer_copyright">Aru
+                        Ai v{{APP_VERSION}} • Secure & Private</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. MAIN CHAT INTERFACE (Hidden by default) -->
+        <section id="screen-chat" class="hidden h-full min-h-0 pt-[60px] md:pt-[72px]">
+
+            <!-- Sidebar Backdrop (Mobile) -->
+            <div id="sidebar-backdrop" onclick="app.toggleSidebar()"
+                class="fixed inset-0 bg-black/50 z-40 hidden md:hidden transition-opacity duration-300 backdrop-blur-sm">
+            </div>
+
+            <!-- Sidebar (Desktop Collapsible / Mobile Slide-over) -->
+            <aside id="sidebar"
+                class="app-sidebar fixed md:relative inset-y-0 left-0 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col z-[60] transform -translate-x-full md:translate-x-0 transition-all duration-300 overflow-hidden">
+                <div class="px-5 pt-1 pb-4 space-y-3">
+                    <!-- Chat Search -->
+                    <div class="relative group">
+                        <i data-lucide="search"
+                            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-aru-500 transition-colors"></i>
+                        <input type="text" id="chat-search"
+                            class="w-full pl-9 pr-3 h-[36px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-400 transition-all"
+                            oninput="app.searchChats(this.value)">
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="app.newChat()"
+                            class="flex-1 py-2.5 px-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:border-aru-400 hover:shadow-md transition-all flex items-center justify-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <i data-lucide="plus" class="w-4 h-4 text-aru-500"></i>
+                            <span data-i18n="sidebar_new_chat"></span>
+                        </button>
+                        <button onclick="app.newChat(true)"
+                            class="w-12 h-10.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl shadow-sm hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all flex items-center justify-center text-blue-600 dark:text-blue-400"
+                            data-i18n-title="sidebar_private_chat">
+                            <i data-lucide="shield-check" class="w-5 h-5"></i>
+                        </button>
+                        <button onclick="app.openPlugins()"
+                            class="w-12 h-10.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-xl shadow-sm hover:border-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all flex items-center justify-center text-purple-600 dark:text-purple-400"
+                            data-i18n-title="sidebar_plugins">
+                            <i data-lucide="app-window" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar" id="chat-list">
+                    <!-- Chat List Items will be injected here via JS -->
+                </div>
+
+                <!-- Sidebar Footer -->
+                <div class="p-4 flex flex-col gap-3">
+
+                    <!-- Mobile Tabs Toggle (Moved up) -->
+                    <button onclick="app.openTabSwitcher()"
+                        class="md:hidden w-full py-2.5 bg-aru-50 dark:bg-aru-900/20 text-aru-600 rounded-xl border border-aru-100 dark:border-aru-800 flex items-center justify-center gap-2 text-sm font-bold relative mb-3">
+                        <i data-lucide="layers" class="w-4 h-4"></i>
+                        <span data-i18n="tabs_button">Вкладки</span>
+                        <span id="mobile-tabs-count"
+                            class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-aru-500 text-white text-[10px] rounded-full flex items-center justify-center shadow-sm border border-white dark:border-gray-950 hidden">0</span>
+                    </button>
+
+                    <!-- Sidebar action buttons removed — moved to Config Menu -->
+
+                    <!-- Real-time Sync Status & Transfer -->
+                    <div class="flex items-center gap-2">
+                        <div id="sync-status"
+                            class="hidden flex-1 flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800">
+                            <div id="sync-dot" class="w-2 h-2 rounded-full bg-green-500 transition-colors duration-500">
+                            </div>
+                            <span id="sync-text" class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
+                                data-i18n="sync_status_synced"></span>
+                        </div>
+                        <button onclick="app.openTransferModal()"
+                            class="p-2 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-lg text-gray-400 hover:text-aru-500 transition shadow-sm"
+                            data-i18n-title="btn_transfer_data">
+                            <i data-lucide="qr-code" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-workspace flex-1 min-h-0 min-w-0 flex flex-col relative bg-white dark:bg-gray-900 overflow-hidden">
+                <!-- Tabs Bar (Desktop) -->
+                <div id="tabs-navigation" class="tab-navigation hidden md:flex items-center">
+                    <button type="button" id="tabs-scroll-left" class="tab-scroll-button" onclick="app.scrollTabs(-1)"
+                        aria-label="Previous tabs" title="Previous tabs">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <div id="tabs-bar" class="tab-strip flex min-w-0 flex-1 items-center overflow-x-auto no-scrollbar"
+                        role="tablist">
+                        <!-- Tabs will be injected here -->
+                    </div>
+                    <button type="button" id="tabs-scroll-right" class="tab-scroll-button" onclick="app.scrollTabs(1)"
+                        aria-label="Next tabs" title="Next tabs">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- Messages List -->
+                <div id="messages-container" class="chat-stream flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth z-10 relative">
+                    <!-- Messages will be injected here -->
+                </div>
+
+                <!-- Welcome Placeholder (Overlay) -->
+                <div id="chat-placeholder" class="chat-empty-state h-full flex flex-col items-center justify-center text-center p-8">
+                    <div
+                        class="w-20 h-20 bg-aru-50 dark:bg-aru-900/20 rounded-full flex items-center justify-center mb-6">
+                        <i data-lucide="message-square-plus" class="w-10 h-10 text-aru-500"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2" data-i18n="sidebar_new_chat">
+                    </h2>
+                    <p class="text-gray-500 dark:text-gray-400 max-w-xs mx-auto text-sm leading-relaxed" id="chat-hint"
+                        data-i18n="no_chat_selected_hint">
+                    </p>
+                </div>
+
+                <!-- Input Area -->
+                <div id="chat-input-area" class="composer-area p-4 bg-white dark:bg-gray-900 z-20">
+                    <div id="prompt-input-container" class="max-w-4xl mx-auto relative">
+                        <!-- Attachments Preview -->
+                        <div id="attachments-preview"
+                            class="hidden flex gap-3 mb-3 overflow-x-auto pb-2 scrollbar-hide">
+                        </div>
+
+
+
+                        <form onsubmit="app.sendMessage(event)"
+                            class="composer-shell flex items-end gap-2 bg-gray-50 dark:bg-gray-800 p-2 rounded-3xl border border-gray-200 dark:border-gray-700 focus-within:border-aru-400 focus-within:ring-2 focus-within:ring-aru-100 dark:focus-within:ring-aru-900/30 transition-all shadow-sm relative">
+
+                            <!-- Unified Tools Menu -->
+                            <div class="relative flex items-center">
+                                <button type="button" onclick="app.toggleToolsMenu()" id="btn-tools-trigger"
+                                    class="p-3 text-gray-400 hover:text-aru-500 transition rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    data-i18n-title="btn_tools">
+                                    <i data-lucide="wrench" class="w-5 h-5"></i>
+                                </button>
+
+                                <!-- Vertical Tools Popup -->
+                                <div id="tools-menu"
+                                    class="absolute bottom-full left-0 mb-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-xl p-1.5 flex flex-col gap-1 z-50 min-w-[50px]">
+                                    <button type="button" id="search-toggle-btn"
+                                        onclick="app.toggleSearchMode(); app.toggleToolsMenu()"
+                                        class="p-3 text-gray-400 hover:text-blue-500 transition rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        data-i18n-title="label_search_mode">
+                                        <i data-lucide="search" class="w-5 h-5"></i>
+                                    </button>
+
+                                    <button type="button"
+                                        onclick="document.getElementById('file-upload').click(); app.toggleToolsMenu()"
+                                        class="p-3 text-gray-400 hover:text-aru-500 transition rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        data-i18n-title="label_attach_files">
+                                        <i data-lucide="paperclip" class="w-5 h-5"></i>
+                                    </button>
+
+                                    <button type="button" onclick="app.toggleCanvas(); app.toggleToolsMenu()"
+                                        class="p-3 text-gray-400 hover:text-aru-500 transition rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 group relative"
+                                        data-i18n-title="toggle_canvas">
+                                        <i data-lucide="panel-right-open" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <input type="file" id="file-upload" class="hidden" multiple
+                                onchange="app.handleFileUpload(this)">
+
+                            <textarea id="prompt-input" rows="1"
+                                class="flex-1 bg-transparent border-none focus:ring-0 outline-none text-gray-800 dark:text-gray-100 placeholder-gray-400 resize-none py-3 max-h-48 text-base"
+                                data-i18n-placeholder="prompt_input_placeholder"
+                                oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+
+                            <button type="submit" id="send-btn"
+                                class="p-3 bg-aru-500 text-white rounded-2xl hover:bg-aru-600 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i data-lucide="send" class="w-5 h-5"></i>
+                            </button>
+                        </form>
+                        <p class="text-[10px] text-center text-gray-400 mt-2 select-none"
+                            data-i18n="feedback_disclaimer">
+                        </p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- CANVAS (Right Panel) -->
+            <aside id="canvas-panel"
+                class="canvas-workspace hidden absolute md:relative right-0 top-0 h-full w-full md:w-[450px] lg:w-[600px] bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col shadow-2xl z-40 transform transition-transform duration-300 translate-x-0">
+                <div
+                    class="p-3 border-b border-gray-200 dark:border-gray-800 flex flex-col gap-3 bg-white dark:bg-gray-900">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200">
+                            <i data-lucide="palette" class="w-4 h-4 text-aru-500"></i>
+                            <span id="canvas-title-text" data-i18n="canvas_title"></span>
+                        </span>
+                        <div class="flex gap-1">
+                            <button onclick="CanvasManager.clearCanvas(event)"
+                                class="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition"
+                                data-i18n-title="clean_canvas_tooltip">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                            <div class="relative">
+                                <button onclick="CanvasManager.toggleDownloadDropdown(event)"
+                                    class="p-1.5 text-gray-400 hover:text-aru-500 rounded-lg transition"
+                                    data-i18n-title="download_options_tooltip">
+                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                </button>
+                                <div id="download-dropdown"
+                                    class="absolute right-0 top-full mt-1 hidden bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl z-[110] min-w-[120px] overflow-hidden animate-fade-in">
+                                    <button onclick="CanvasManager.downloadAsHTML(event)"
+                                        class="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition"
+                                        data-i18n-title="download_html_tooltip">
+                                        <i data-lucide="file-code" class="w-3.5 h-3.5 text-orange-500"></i>
+                                        <span>HTML</span>
+                                    </button>
+                                    <button onclick="CanvasManager.downloadAsPDF(event)"
+                                        class="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition"
+                                        data-i18n-title="download_pdf_tooltip">
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-red-500"></i>
+                                        <span>PDF</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <button onclick="CanvasManager.saveCurrentArtifact()"
+                                class="p-1.5 text-aru-600 hover:bg-aru-50 dark:hover:bg-aru-900/30 rounded-lg transition"
+                                data-i18n-title="canvas_save_btn">
+                                <i data-lucide="save" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="CanvasManager.toggleFullscreen(event)"
+                                class="p-1.5 text-gray-400 hover:text-aru-500 rounded-lg transition"
+                                data-i18n-title="canvas_expand_tooltip">
+                                <i data-lucide="maximize-2" id="canvas-maximize-icon" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="app.toggleCanvas()" class="text-gray-400 hover:text-gray-600 p-1">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Tabs -->
+                    <div id="canvas-tabs" class="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl hidden">
+                        <button onclick="CanvasManager.switchTab('preview')" id="btn-canvas-preview"
+                            class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition-all"
+                            data-i18n="canvas_preview_tab"></button>
+                        <button onclick="CanvasManager.switchTab('code')" id="btn-canvas-code"
+                            class="flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all"
+                            data-i18n="canvas_code_tab"></button>
+                    </div>
+                </div>
+
+                <div id="canvas-content" class="flex-1 p-0 overflow-hidden relative bg-white dark:bg-gray-900">
+                    <!-- Dynamic Content (Apps/Docs/Code) -->
+                    <div id="canvas-empty-state"
+                        class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
+                        <i data-lucide="layout" class="w-8 h-8 opacity-50"></i>
+                        <span class="text-center px-4" data-i18n="canvas_empty_desc"></span>
+                    </div>
+                    <div id="canvas-render-area" class="w-full h-full hidden"></div>
+                    <div id="canvas-code-area" class="w-full h-full hidden p-4 overflow-auto custom-scrollbar">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
+                                data-i18n="source_code_label"></span>
+                            <button onclick="CanvasManager.copyCode()"
+                                class="p-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-aru-100 dark:hover:bg-aru-900/30 rounded-lg transition relative group">
+                                <i data-lucide="copy" class="w-4 h-4 text-aru-500"></i>
+                                <span
+                                    class="absolute right-full mr-2 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                    data-i18n="copy_code_tooltip"></span>
+                            </button>
+                        </div>
+                        <pre
+                            class="m-0 p-0 text-sm font-mono"><code id="code-display" class="language-html"></code></pre>
+                    </div>
+                </div>
+            </aside>
+
+        </section>
+
+    </div>
+
+    <!-- Modals Container (Inject dynamically via JS) -->
+    <div id="modal-container" class="relative z-[100]"></div>
+
+    <!-- Drag & Drop Overlay -->
+    <div id="drag-drop-overlay"
+        class="fixed inset-0 z-[200] bg-aru-500/20 backdrop-blur-sm p-8 hidden items-center justify-center animate-fade-in pointer-events-none">
+        <div
+            class="w-full h-full border-4 border-dashed border-aru-500 rounded-3xl flex flex-col items-center justify-center bg-white/50">
+            <div
+                class="w-24 h-24 bg-aru-100 dark:bg-aru-900/50 rounded-full flex items-center justify-center text-aru-500 mb-6 shadow-xl animate-bounce">
+                <i data-lucide="upload-cloud" class="w-12 h-12"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-aru-800 dark:text-aru-100 mb-2 truncate max-w-lg"
+                data-i18n="drop_files_title">Отпустите файлы для загрузки</h2>
+            <p class="text-aru-600 dark:text-aru-400 font-medium" data-i18n="drop_files_desc">Aru проанализирует их
+                содержимое</p>
+        </div>
+    </div>
+
+    <!-- CORE PLUGINS (Logic Preload) -->
+    <script src="plugins/task/task.js"></script>
+
+    <!-- MAIN SCRIPT -->
+    <script type="module" src="js/app.js"></script>
+
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            let swRefreshPending = false;
+            let swShouldReloadOnControllerChange = false;
+
+            const bindWorkerLifecycle = (worker) => {
+                if (!worker) return;
+                worker.addEventListener('statechange', () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                        swShouldReloadOnControllerChange = true;
+                    }
+                });
+            };
+
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => {
+                        console.log('SW: Registered', reg);
+
+                        bindWorkerLifecycle(reg.installing);
+                        reg.addEventListener('updatefound', () => bindWorkerLifecycle(reg.installing));
+
+                        if (reg.waiting && navigator.serviceWorker.controller) {
+                            swShouldReloadOnControllerChange = true;
+                        }
+
+                        const requestUpdateCheck = () => reg.update().catch(err => console.log('SW: Update check failed', err));
+
+                        requestUpdateCheck();
+                        window.addEventListener('focus', requestUpdateCheck);
+                        document.addEventListener('visibilitychange', () => {
+                            if (document.visibilityState === 'visible') requestUpdateCheck();
+                        });
+                        window.setInterval(requestUpdateCheck, 15 * 60 * 1000);
+                    })
+                    .catch(err => console.log('SW: Registration failed', err));
+            });
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (swRefreshPending || !swShouldReloadOnControllerChange) return;
+                swRefreshPending = true;
+                window.location.reload();
+            });
+        }
+    </script>
+    <!-- Mobile Tab Switcher Overlay -->
+    <div id="tab-switcher" class="fixed inset-0 z-[100] hidden bg-gray-50 dark:bg-gray-950 flex-col animate-fade-in">
+        <div class="p-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-800">
+            <h2 class="text-xl font-bold" data-i18n="tabs_title">Вкладки</h2>
+            <button onclick="app.closeTabSwitcher()"
+                class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+        <div id="tab-cards-container" class="flex-1 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Tab Cards will be injected here -->
+        </div>
+        <div class="p-6 border-t border-gray-200 dark:border-gray-800">
+            <button onclick="app.newChat(); app.closeTabSwitcher();"
+                class="w-full py-4 bg-aru-500 text-white rounded-2xl font-bold shadow-lg shadow-aru-500/30 flex items-center justify-center gap-2">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+                <span data-i18n="sidebar_new_chat">Новый чат</span>
+            </button>
+        </div>
+    </div>
+</body>
+
+</html>

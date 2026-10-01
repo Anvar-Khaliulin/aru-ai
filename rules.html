@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<!--
+---ARU-LAB.SPACE---ALMATY---2026---
+End User License Agreement (EULA) and usage rules for the application.
+---chat.aru-lab.space---PWA---
+-->
+<html lang="ru" class="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EULA - Aru Ai</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass {
+            background: #ffffff;
+            border: 0;
+        }
+
+        .dark .glass {
+            background: #1c1c1f;
+            border: 0;
+        }
+
+        .lang-node {
+            display: none;
+        }
+
+        .lang-active {
+            display: block;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #374151;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        aru: {
+                            50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
+                            400: '#fb923c', 500: '#f97316', 600: '#ea580c', 700: '#c2410c',
+                            800: '#9a3412', 900: '#7c2d12',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body
+    class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300">
+
+    <div class="max-w-4xl mx-auto px-4 py-8 md:py-12">
+        <!-- Content Area -->
+        <main
+            class="glass rounded-3xl p-6 md:p-10 shadow-xl shadow-slate-200/50 dark:shadow-none custom-scrollbar overflow-y-auto max-h-[70vh] md:max-h-none">
+
+            <!-- Shared Header for Modal Injection -->
+            <div
+                class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 border-b border-slate-100 dark:border-slate-800 pb-6">
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 bg-aru-500 rounded-xl flex items-center justify-center shadow-lg shadow-aru-500/20">
+                        <i data-lucide="shield-check" class="text-white w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white"
+                            data-i18n="eula_title">License Agreement</h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Aru Ai Policy</p>
+                    </div>
+                </div>
+
+                <!-- Language Switcher -->
+                <div class="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
+                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'kz')" id="btn-kz-inner"
+                        class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">KZ</button>
+                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'en')" id="btn-en-inner"
+                        class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">EN</button>
+                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'ru')" id="btn-ru-inner"
+                        class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">RU</button>
+                </div>
+            </div>
+
+            <!-- RUSSIAN VERSION -->
+            <div id="lang-ru" class="lang-node lang-active space-y-8">
+                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                    <h2 class="text-xl font-bold mb-2">ЛИЦЕНЗИОННОЕ СОГЛАШЕНИЕ С КОНЕЧНЫМ ПОЛЬЗОВАТЕЛЕМ (EULA)</h2>
+                    <p class="text-sm text-slate-500">Редакция от 31 января 2026 г.</p>
+                </div>
+
+                <div
+                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                    <p>Настоящее Лицензионное соглашение (далее — «Соглашение») является юридически значимым документом,
+                        заключаемым между Вами (далее — «Пользователь») и разработчиком программного обеспечения
+                        <strong>Aru-Lab</strong> (далее — «Разработчик»). Установка, запуск или любое использование ПО
+                        Aru Ai означает Ваше полное и безоговорочное согласие с условиями данного Соглашения.
+                    </p>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. ПРЕДМЕТ СОГЛАШЕНИЯ</h3>
+                        <p>1.1. Разработчик предоставляет Пользователю неисключительную, безвозмездную лицензию на
+                            использование ПО Aru Ai в личных, образовательных или коммерческих целях.</p>
+                        <p>1.2. ПО Aru Ai является интерфейсным решением (оболочкой) для взаимодействия с моделями
+                            искусственного интеллекта и управления локальными данными.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. АРХИТЕКТУРА ДАННЫХ И
+                            КОНФИДЕНЦИАЛЬНОСТЬ</h3>
+                        <p>2.1. <strong>Локальное хранение:</strong> Все данные Пользователя (история чатов, артефакты,
+                            персональные факты) сохраняются исключительно на устройстве Пользователя в формате базы
+                            данных SQLite.</p>
+                        <p>2.2. <strong>Отсутствие шифрования:</strong> Пользователь уведомлен и согласен с тем, что
+                            база данных SQLite не зашифрована в целях обеспечения производительности и доступности
+                            данных для Пользователя вне ПО Aru Ai.</p>
+                        <p>2.3. <strong>Ответственность за доступ:</strong> Пользователь несет единоличную
+                            ответственность за сохранность файла базы данных. Разработчик не имеет технической
+                            возможности восстановить данные в случае их удаления или утери пароля.</p>
+                        <p>2.4. <strong>Передача данных:</strong> ПО Aru Ai передает данные только выбранному
+                            Пользователем стороннему провайдеру (Google Gemini, OpenRouter и др.) в момент совершения
+                            запроса.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. СТОРОННИЕ ПРОВАЙДЕРЫ И API
+                        </h3>
+                        <p>3.1. ПО Aru Ai не является самостоятельной языковой моделью. Для функционирования требуется
+                            подключение к сторонним API.</p>
+                        <p>3.2. Пользователь самостоятельно несет ответственность за соблюдение условий использования
+                            (Terms of Service) сторонних провайдеров.</p>
+                        <p>3.3. Риски обучения: При использовании бесплатных тарифов сторонних провайдеров данные могут
+                            быть использованы ими для обучения моделей.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ВОЗРАСТНЫЕ ПРОФИЛИ И
+                            БЕЗОПАСНОСТЬ</h3>
+                        <p>4.1. ПО предоставляет функционал «Детского» и «Подросткового» профилей с фильтрацией
+                            контента.</p>
+                        <p>4.2. Фильтрация осуществляется на базе семантического анализа сторонних LLM, что не исключает
+                            вероятность ошибок.</p>
+                        <p>4.3. Использование ПО детьми должно осуществляться под контролем взрослых.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. ОГРАНИЧЕНИЕ ОТВЕТСТВЕННОСТИ
+                        </h3>
+                        <p>5.1. <strong>«КАК ЕСТЬ»:</strong> ПО предоставляется на условиях «AS IS». Разработчик не
+                            гарантирует отсутствие ошибок или бесперебойную работу сторонних API.</p>
+                        <p>5.2. Разработчик не несет ответственности за любой ущерб, возникший в результате
+                            использования ПО, включая утечку данных по вине Пользователя.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ИНТЕЛЛЕКТУАЛЬНАЯ
+                            СОБСТВЕННОСТЬ</h3>
+                        <p>6.1. Исходный код является открытым (Open Source) согласно условиям в репозитории.</p>
+                        <p>6.2. Визуальные активы, включая персонажа <strong>«Лисичка Ару» (маскот)</strong>, являются
+                            объектами авторского права Aru-Lab.</p>
+                    </section>
+                </div>
+            </div>
+
+            <!-- ENGLISH VERSION -->
+            <div id="lang-en" class="lang-node space-y-8">
+                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                    <h2 class="text-xl font-bold mb-2">END-USER LICENSE AGREEMENT (EULA)</h2>
+                    <p class="text-sm text-slate-500">Revised on January 31, 2026</p>
+                </div>
+
+                <div
+                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                    <p>This License Agreement (hereinafter the "Agreement") is a legally binding document between you
+                        (hereinafter the "User") and the software developer <strong>Aru-Lab</strong> (hereinafter the
+                        "Developer"). Installing or using Aru Ai software constitutes your full and unconditional
+                        acceptance of this Agreement.</p>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. SUBJECT OF THE AGREEMENT
+                        </h3>
+                        <p>1.1. The Developer grants the User a non-exclusive, royalty-free license to use Aru Ai for
+                            personal, educational, or commercial purposes.</p>
+                        <p>1.2. Aru Ai is an interface solution (wrapper) for interacting with AI models and managing
+                            local data.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. DATA ARCHITECTURE & PRIVACY
+                        </h3>
+                        <p>2.1. <strong>Local Storage:</strong> All User data (chat history, artifacts, embeddings) is
+                            stored exclusively on the User's device in SQLite database format.</p>
+                        <p>2.2. <strong>No Encryption:</strong> The User is notified that the SQLite database is not
+                            encrypted to ensure performance and data accessibility.</p>
+                        <p>2.3. <strong>Access Responsibility:</strong> The User is solely responsible for securing the
+                            database file. The Developer cannot restore data in case of loss or forgotten passwords.</p>
+                        <p>2.4. <strong>Data Transfer:</strong> Aru Ai transmits data only to the User-selected
+                            third-party provider (Google Gemini, OpenRouter, etc.) at the moment of a request.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. THIRD-PARTY PROVIDERS & API
+                        </h3>
+                        <p>3.1. Aru Ai is not a standalone language model and requires connection to third-party APIs.
+                        </p>
+                        <p>3.2. The User is responsible for complying with the Terms of Service of third-party
+                            providers.</p>
+                        <p>3.3. Training Risks: Data used on free tiers of third-party providers might be used for model
+                            training.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. AGE PROFILES & SAFETY</h3>
+                        <p>4.1. Aru Ai provides "Child" and "Teen" profiles with content filtering features.</p>
+                        <p>4.2. Filtering is based on semantic analysis of third-party LLMs and may not be 100%
+                            error-proof.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. LIMITATION OF LIABILITY
+                        </h3>
+                        <p>5.1. <strong>AS IS:</strong> The software is provided "AS IS". The Developer does not
+                            guarantee error-free performance.</p>
+                        <p>5.2. The Developer is not liable for any direct or indirect damage resulting from the use or
+                            inability to use the software.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. INTELLECTUAL PROPERTY</h3>
+                        <p>6.1. The source code is Open Source as specified in the project repository.</p>
+                        <p>6.2. Visual assets, including the <strong>"Aru Fox" mascot</strong>, are copyrighted
+                            properties of Aru-Lab.</p>
+                    </section>
+                </div>
+            </div>
+
+            <!-- KAZAKH VERSION -->
+            <div id="lang-kz" class="lang-node space-y-8">
+                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                    <h2 class="text-xl font-bold mb-2">СОҢҒЫ ПАЙДАЛАНУШЫНЫҢ ЛИЦЕНЗИЯЛЫҚ КЕЛІСІМІ (EULA)</h2>
+                    <p class="text-sm text-slate-500">2026 жылғы 31 қаңтардағы редакция</p>
+                </div>
+
+                <div
+                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                    <p>Осы Лицензиялық келісім (бұдан әрі — «Келісім») Сіз (бұдан әрі — «Пайдаланушы») және
+                        <strong>Aru-Lab</strong> бағдарламалық қамтамасыз етуді әзірлеуші (бұдан әрі — «Әзірлеуші»)
+                        арасында жасалатын заңды құжат болып табылады. Aru Ai БҚ орнату немесе кез келген түрде
+                        пайдалану осы Келісім шарттарымен толық келісуді білдіреді.
+                    </p>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. КЕЛІСІМ ПӘНІ</h3>
+                        <p>1.1. Әзірлеуші Пайдаланушыға Aru Ai БҚ-ны жеке, білім беру немесе коммерциялық мақсатта
+                            пайдалануға айрықша емес, өтеусіз лицензия береді.</p>
+                        <p>1.2. Aru Ai жасанды интеллект модельдерімен өзара әрекеттесуге арналған интерфейстік шешім
+                            (қабықша) болып табылады.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. ДЕРЕКТЕР АРХИТЕКТУРАСЫ ЖӘНЕ
+                            ҚҰПИЯЛЫЛЫҚ</h3>
+                        <p>2.1. <strong>Жергілікті сақтау:</strong> Пайдаланушының барлық деректері (чат тарихы,
+                            артефактілер) тек Пайдаланушының құрылғысында SQLite форматында сақталады.</p>
+                        <p>2.2. <strong>Шифрлаудың болмауы:</strong> SQLite дерекқоры деректердің қолжетімділігі мен
+                            жылдамдығын қамтамасыз ету мақсатында шифрланбаған.</p>
+                        <p>2.3. <strong>Қолжетімділік үшін жауапкершілік:</strong> Дерекқор файлының сақталуына
+                            Пайдаланушы ғана жауапты. Әзірлеушіде деректерді қалпына келтіру мүмкіндігі жоқ.</p>
+                        <p>2.4. <strong>Деректерді беру:</strong> БҚ деректерді тек Пайдаланушы таңдаған сыртқы
+                            провайдерге (Google Gemini және т.б.) сұраныс кезінде ғана жібереді.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. СЫРТҚЫ ПРОВАЙДЕРЛЕР ЖӘНЕ
+                            API</h3>
+                        <p>3.1. Aru Ai дербес тілдік модель емес. Жұмыс істеу үшін сыртқы API-ге қосылу қажет.</p>
+                        <p>3.2. Пайдаланушы сыртқы провайдерлердің пайдалану шарттарын (Terms of Service) сақтауға
+                            міндетті.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ЖАС ЕРЕКШЕЛІК ПРОФИЛЬДЕРІ
+                        </h3>
+                        <p>4.1. БҚ мазмұнды сүзгілеу мүмкіндігі бар «Балалар» және «Жасөспірімдер» профильдерін ұсынады.
+                        </p>
+                        <p>4.2. Сүзгілеу сыртқы LLM-дердің семантикалық талдауы негізінде жүзеге асады, қателердің болуы
+                            мүмкін.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. ЖАУАПКЕРШІЛІКТІ ШЕКТЕУ</h3>
+                        <p>5.1. <strong>«СОЛАЙ БОЛҒАН КҮЙІНДЕ»:</strong> БҚ «AS IS» шартымен беріледі. Әзірлеуші
+                            үздіксіз жұмысқа кепілдік бермейді.</p>
+                        <p>5.2. Әзірлеуші БҚ-ны пайдалану нәтижесінде болған кез келген тікелей немесе жанама залал үшін
+                            жауап бермейді.</p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ЗИЯТКЕРЛІК МЕНШІК</h3>
+                        <p>6.1. Бастапқы код жоба репозиторийіндегі шарттарға сәйкес ашық (Open Source) болып табылады.
+                        </p>
+                        <p>6.2. Визуалды активтер, соның ішінде <strong>«Ару Түлкісі» (маскот)</strong>, Aru-Lab
+                            авторлық құқық объектілері болып табылады.</p>
+                    </section>
+                </div>
+            </div>
+
+        </main>
+
+        <script>
+            // Initialize Lucide icons
+            lucide.createIcons();
+
+            function setLanguage(lang) {
+                // Hide all nodes
+                document.querySelectorAll('.lang-node').forEach(node => {
+                    node.classList.remove('lang-active');
+                });
+
+                // Show selected language
+                document.getElementById('lang-' + lang).classList.add('lang-active');
+
+                // Update buttons styling
+                const buttons = {
+                    kz: document.getElementById('btn-kz'),
+                    en: document.getElementById('btn-en'),
+                    ru: document.getElementById('btn-ru')
+                };
+
+                Object.keys(buttons).forEach(key => {
+                    const btn = buttons[key];
+                    if (key === lang) {
+                        btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                        btn.classList.remove('text-slate-500');
+                    } else {
+                        btn.classList.remove('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                        btn.classList.add('text-slate-500');
+                    }
+                });
+            }
+
+            // Dark mode detection (optional, follows system or class)
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                // document.documentElement.classList.add('dark');
+            }
+        </script>
+</body>
+
+</html>
