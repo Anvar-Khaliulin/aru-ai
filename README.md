@@ -19,7 +19,7 @@
   </a>
   <!-- Release -->
   <a href="https://github.com/Anvar-Khaliulin/aru-ai/releases">
-    <img src="https://img.shields.io/badge/Release-v1.0.0-green.svg?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/Release-v0.9.5-green.svg?style=flat-square" alt="Version">
   </a>
   <!-- Stack -->
   <img src="https://img.shields.io/badge/Built_With-Vanilla_JS-yellow.svg?style=flat-square&logo=javascript" alt="Vanilla JS">
