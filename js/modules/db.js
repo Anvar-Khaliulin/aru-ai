@@ -58,6 +58,23 @@ export const DB = {
                 try {
                     this.db = new this.SQL.Database(new Uint8Array(savedData));
 
+                    // Self-healing forward migration: upgrades existing databases in place (folders, favorites, chapters)
+                    try {
+                        if (this.migrateSchema()) {
+                            let canPersist = !this.fileHandle;
+                            if (this.fileHandle) {
+                                try { canPersist = (await this.fileHandle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch (permErr) { canPersist = false; }
+                            }
+                            if (canPersist) {
+                                await this.save();
+                            } else {
+                                console.log('DB: schema migrated in memory; file write deferred until access is authorized');
+                            }
+                        }
+                    } catch (migErr) {
+                        console.warn('DB: forward migration on load failed', migErr);
+                    }
+
                     // Flush any pending plugin saves that were queued before DB was ready
                     try {
                         const pending = localStorage.getItem('task_plugin_pending');
@@ -105,6 +122,7 @@ export const DB = {
         }
         this.db = new this.SQL.Database();
         this.initSchema();
+        this.migrateSchema();
         // Persists root database settings utilizing UPSERT operations to bypass schema collisions
         this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['db_password', passwordHash], false);
         this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['rules', '0'], false);
@@ -188,6 +206,144 @@ export const DB = {
         } catch (e) {
             // Suppresses conflicts for pre-existing modifications
         }
+    },
+
+    // --- Schema Migration (forward compatible with older databases) ---
+
+    tableExists(name) {
+        const rows = this.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [name]);
+        return rows.length > 0;
+    },
+
+    hasColumn(table, column) {
+        try {
+            const rows = this.query(`PRAGMA table_info(${table})`);
+            return rows.some(r => r.name === column);
+        } catch (e) {
+            return false;
+        }
+    },
+
+    // Idempotent upgrade of any existing database file. Adds only new structures,
+    // never alters or drops existing ones, so older app versions keep working.
+    migrateSchema() {
+        let changed = false;
+        try {
+            // Baseline tables: introduced at different app versions, may be missing in old files
+            if (!this.tableExists('settings')) {
+                this.run(`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('chats')) {
+                this.run(`CREATE TABLE chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    folder_id INTEGER DEFAULT NULL,
+                    is_favorite INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('messages')) {
+                this.run(`CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER,
+                    role TEXT,
+                    content TEXT,
+                    emotion TEXT,
+                    is_html INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('memory_facts')) {
+                this.run(`CREATE TABLE memory_facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT,
+                    category TEXT,
+                    embedding TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('modules_data')) {
+                this.run(`CREATE TABLE modules_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT,
+                    name TEXT,
+                    content TEXT,
+                    tags TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('personality_state')) {
+                this.run(`CREATE TABLE personality_state (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT UNIQUE,
+                    mood INTEGER DEFAULT 50,
+                    sarcasm INTEGER DEFAULT 0,
+                    humor INTEGER DEFAULT 50,
+                    affinity INTEGER DEFAULT 0,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.hasColumn('chats', 'sort_order')) {
+                this.run("ALTER TABLE chats ADD COLUMN sort_order INTEGER DEFAULT 0", [], false);
+                changed = true;
+            }
+            if (!this.hasColumn('messages', 'is_html')) {
+                this.run("ALTER TABLE messages ADD COLUMN is_html INTEGER DEFAULT 0", [], false);
+                changed = true;
+            }
+            if (!this.hasColumn('chats', 'folder_id')) {
+                this.run("ALTER TABLE chats ADD COLUMN folder_id INTEGER DEFAULT NULL", [], false);
+                changed = true;
+            }
+            if (!this.hasColumn('chats', 'is_favorite')) {
+                this.run("ALTER TABLE chats ADD COLUMN is_favorite INTEGER DEFAULT 0", [], false);
+                changed = true;
+            }
+            if (!this.tableExists('folders')) {
+                this.run(`CREATE TABLE folders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('chat_sections')) {
+                this.run(`CREATE TABLE chat_sections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER,
+                    title TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (!this.tableExists('chat_chapters')) {
+                this.run(`CREATE TABLE chat_chapters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER,
+                    section_id INTEGER,
+                    title TEXT,
+                    anchor_message_id INTEGER,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, [], false);
+                changed = true;
+            }
+            if (changed) console.log('DB: schema migrated (folders/favorites/chapters ready)');
+        } catch (e) {
+            console.warn('DB.migrateSchema failed', e);
+        }
+        return changed;
     },
 
     // --- Personality State Helpers ---
@@ -296,6 +452,9 @@ export const DB = {
     },
 
     deleteChat(id) {
+        this.run("DELETE FROM chat_chapters WHERE chat_id = ?", [id], false);
+        this.run("DELETE FROM chat_sections WHERE chat_id = ?", [id], false);
+        this.run("DELETE FROM messages WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM chats WHERE id = ?", [id]);
     },
 
@@ -305,8 +464,13 @@ export const DB = {
 
     saveMessage(chatId, role, content, emotion = '', isHTML = false) {
         const isHtmlVal = isHTML ? 1 : 0;
-        this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html) VALUES (?, ?, ?, ?, ?)", [chatId, role, content, emotion, isHtmlVal]);
-        this.run("UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", [chatId]);
+        // autoSave=false keeps last_insert_rowid() reliable for the id read below
+        this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html) VALUES (?, ?, ?, ?, ?)", [chatId, role, content, emotion, isHtmlVal], false);
+        const res = this.exec("SELECT last_insert_rowid() as id");
+        const id = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
+        this.run("UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", [chatId], false);
+        this.save();
+        return id;
     },
 
     updateChatTitle(id, title) {
@@ -316,6 +480,88 @@ export const DB = {
 
     updateChatOrder(id, order, autoSave = true) {
         this.run("UPDATE chats SET sort_order = ? WHERE id = ?", [order, id], autoSave);
+    },
+
+    // --- Folders & Favorites ---
+
+    createFolder(title = '') {
+        this.run("INSERT INTO folders (title, sort_order) VALUES (?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM folders))", [title], false);
+        const res = this.exec("SELECT last_insert_rowid() as id");
+        const id = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
+        this.save();
+        return id;
+    },
+
+    getFolders() {
+        return this.query("SELECT * FROM folders ORDER BY sort_order ASC, id ASC");
+    },
+
+    renameFolder(id, title) {
+        this.run("UPDATE folders SET title = ? WHERE id = ?", [title, id]);
+    },
+
+    updateFolderOrder(id, order, autoSave = true) {
+        this.run("UPDATE folders SET sort_order = ? WHERE id = ?", [order, id], autoSave);
+    },
+
+    deleteFolder(id) {
+        this.run("UPDATE chats SET folder_id = NULL WHERE folder_id = ?", [id], false);
+        this.run("DELETE FROM folders WHERE id = ?", [id]);
+    },
+
+    setChatFolder(chatId, folderId, autoSave = true) {
+        this.run("UPDATE chats SET folder_id = ? WHERE id = ?", [folderId, chatId], autoSave);
+    },
+
+    setChatFavorite(chatId, isFavorite) {
+        this.run("UPDATE chats SET is_favorite = ? WHERE id = ?", [isFavorite ? 1 : 0, chatId]);
+    },
+
+    // --- Sections & Chapters (in-chat navigation) ---
+
+    createSection(chatId, title = '') {
+        this.run("INSERT INTO chat_sections (chat_id, title, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM chat_sections WHERE chat_id = ?))", [chatId, title, chatId], false);
+        const res = this.exec("SELECT last_insert_rowid() as id");
+        const id = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
+        this.save();
+        return id;
+    },
+
+    getSections(chatId) {
+        return this.query("SELECT * FROM chat_sections WHERE chat_id = ? ORDER BY sort_order ASC, id ASC", [chatId]);
+    },
+
+    renameSection(id, title) {
+        this.run("UPDATE chat_sections SET title = ? WHERE id = ?", [title, id]);
+    },
+
+    deleteSection(id) {
+        this.run("DELETE FROM chat_chapters WHERE section_id = ?", [id], false);
+        this.run("DELETE FROM chat_sections WHERE id = ?", [id]);
+    },
+
+    createChapter(chatId, sectionId, title = '', anchorMessageId = null) {
+        this.run("INSERT INTO chat_chapters (chat_id, section_id, title, anchor_message_id, sort_order) VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM chat_chapters WHERE section_id = ?))", [chatId, sectionId, title, anchorMessageId, sectionId], false);
+        const res = this.exec("SELECT last_insert_rowid() as id");
+        const id = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
+        this.save();
+        return id;
+    },
+
+    getChaptersByChat(chatId) {
+        return this.query("SELECT * FROM chat_chapters WHERE chat_id = ? ORDER BY section_id ASC, sort_order ASC, id ASC", [chatId]);
+    },
+
+    renameChapter(id, title) {
+        this.run("UPDATE chat_chapters SET title = ? WHERE id = ?", [title, id]);
+    },
+
+    updateChapterAnchor(id, anchorMessageId) {
+        this.run("UPDATE chat_chapters SET anchor_message_id = ? WHERE id = ?", [anchorMessageId, id]);
+    },
+
+    deleteChapter(id) {
+        this.run("DELETE FROM chat_chapters WHERE id = ?", [id]);
     },
 
     // --- Memory & Vector Search ---
@@ -655,6 +901,7 @@ export const DB = {
 
             this.SQL = tempSQL; // Ensure we use the same SQL instance
             this.db = tempDB;
+            this.migrateSchema(); // Forward migration for databases created by older app versions
             await this.save(); // Save the loaded data to IndexedDB
             return true;
 
@@ -690,6 +937,7 @@ export const DB = {
 
         this.SQL = tempSQL;
         this.db = tempDB;
+        this.migrateSchema(); // Forward migration for databases created by older app versions
         await this.save();
         return true;
     },
@@ -800,6 +1048,7 @@ export const DB = {
                     this.fileHandle = null;
                     if (this.handleKey) await localforage.removeItem(this.handleKey);
 
+                    this.migrateSchema(); // Forward migration for databases created by older app versions
                     await this.save();
                     resolve(true);
                 } catch (e) {
@@ -831,14 +1080,23 @@ export const DB = {
                 if (filters.chats.length === 0) {
                     result.data.chats = [];
                     result.data.messages = [];
+                    result.data.folders = [];
+                    result.data.sections = [];
+                    result.data.chapters = [];
                 } else {
                     const ids = filters.chats.join(',');
                     result.data.chats = this.query(`SELECT * FROM chats WHERE id IN (${ids})`);
                     result.data.messages = this.query(`SELECT * FROM messages WHERE chat_id IN (${ids})`);
+                    result.data.folders = this.query("SELECT * FROM folders");
+                    result.data.sections = this.query(`SELECT * FROM chat_sections WHERE chat_id IN (${ids})`);
+                    result.data.chapters = this.query(`SELECT * FROM chat_chapters WHERE chat_id IN (${ids})`);
                 }
             } else {
                 result.data.chats = this.query("SELECT * FROM chats");
                 result.data.messages = this.query("SELECT * FROM messages");
+                result.data.folders = this.query("SELECT * FROM folders");
+                result.data.sections = this.query("SELECT * FROM chat_sections");
+                result.data.chapters = this.query("SELECT * FROM chat_chapters");
             }
         }
 
@@ -902,17 +1160,29 @@ export const DB = {
                 const imported = JSON.parse(dataStr);
                 
                 const tempDb = new this.SQL.Database();
-                tempDb.run(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, sort_order INTEGER DEFAULT 0)`);
+                tempDb.run(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, sort_order INTEGER DEFAULT 0, folder_id INTEGER DEFAULT NULL, is_favorite INTEGER DEFAULT 0)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, role TEXT, content TEXT, emotion TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_html INTEGER DEFAULT 0)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS personality_state (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, mood INTEGER DEFAULT 50, sarcasm INTEGER DEFAULT 0, humor INTEGER DEFAULT 50, affinity INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS memory_facts (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, category TEXT, embedding TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS modules_data (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, content TEXT, tags TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                tempDb.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_sections (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_chapters (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, section_id INTEGER, title TEXT, anchor_message_id INTEGER, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
 
                 const data = imported.data;
                 if (data.chats) {
-                    for (const chat of data.chats) tempDb.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null]);
+                    for (const chat of data.chats) tempDb.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0]);
                     for (const m of data.messages) tempDb.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null]);
+                    if (data.folders) {
+                        for (const f of data.folders) tempDb.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null]);
+                    }
+                    if (data.sections) {
+                        for (const s of data.sections) tempDb.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null]);
+                    }
+                    if (data.chapters) {
+                        for (const c of data.chapters) tempDb.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null]);
+                    }
                 }
                 if (data.settings) {
                     for (const s of data.settings) tempDb.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value || '']);
@@ -954,9 +1224,20 @@ export const DB = {
 
             if (mode === 'overwrite') {
                 if (data.chats) { 
-                    this.run("DELETE FROM messages"); this.run("DELETE FROM chats"); 
-                    for (const chat of data.chats) this.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null]);
-                    for (const m of data.messages) this.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null]);
+                    this.run("DELETE FROM messages", [], false); this.run("DELETE FROM chat_chapters", [], false); this.run("DELETE FROM chat_sections", [], false); this.run("DELETE FROM chats"); 
+                    for (const chat of data.chats) this.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0], false);
+                    for (const m of data.messages) this.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null], false);
+                    // Folders/sections/chapters exist only in payloads from newer app versions; keep local ones otherwise
+                    if (data.folders) {
+                        this.run("DELETE FROM folders", [], false);
+                        for (const f of data.folders) this.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null], false);
+                    }
+                    if (data.sections) {
+                        for (const s of data.sections) this.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null], false);
+                    }
+                    if (data.chapters) {
+                        for (const c of data.chapters) this.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
+                    }
                 }
                 if (data.settings) { 
                     this.run("DELETE FROM settings"); this.run("DELETE FROM personality_state"); this.run("DELETE FROM memory_facts"); 
@@ -976,13 +1257,28 @@ export const DB = {
                 if (data.chats) {
                     for (const chat of data.chats) {
                         const oldId = chat.id;
-                        this.run("INSERT INTO chats (title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?)", [chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null]);
+                        // Folder references are not carried over on merge (folder ids would collide with local ones)
+                        this.run("INSERT INTO chats (title, sort_order, created_at, updated_at, is_favorite) VALUES (?, ?, ?, ?, ?)", [chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.is_favorite || 0], false);
                         const res = this.exec("SELECT last_insert_rowid() as id");
                         const newId = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
 
                         const messages = data.messages.filter(m => String(m.chat_id) === String(oldId));
                         for (const m of messages) {
-                            this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null]);
+                            this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null], false);
+                        }
+
+                        // Re-create sections/chapters under the merged chat with remapped ids
+                        const sections = (data.sections || []).filter(s => String(s.chat_id) === String(oldId));
+                        const sectionMap = {};
+                        for (const s of sections) {
+                            this.run("INSERT INTO chat_sections (chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [newId, s.title || '', s.sort_order || 0, s.created_at || null], false);
+                            const sres = this.exec("SELECT last_insert_rowid() as id");
+                            sectionMap[s.id] = (sres && sres[0] && sres[0].values && sres[0].values[0]) ? sres[0].values[0][0] : null;
+                        }
+                        const chapters = (data.chapters || []).filter(c => String(c.chat_id) === String(oldId));
+                        for (const c of chapters) {
+                            const mappedSection = (c.section_id !== undefined && c.section_id !== null && sectionMap[c.section_id] !== undefined) ? sectionMap[c.section_id] : null;
+                            this.run("INSERT INTO chat_chapters (chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, mappedSection, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
                         }
                     }
                 }

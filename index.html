@@ -379,27 +379,35 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                             oninput="app.searchChats(this.value)">
                     </div>
 
-                    <div class="flex gap-2">
+                    <div class="grid grid-cols-4 gap-2">
                         <button onclick="app.newChat()"
-                            class="flex-1 py-2.5 px-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:border-aru-400 hover:shadow-md transition-all flex items-center justify-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                            <i data-lucide="plus" class="w-4 h-4 text-aru-500"></i>
-                            <span data-i18n="sidebar_new_chat"></span>
+                            class="aspect-square bg-aru-50 dark:bg-aru-900/20 border border-aru-100 dark:border-aru-800 rounded-xl shadow-sm hover:border-aru-400 hover:bg-aru-100 dark:hover:bg-aru-900/40 transition-all flex items-center justify-center text-aru-500 dark:text-aru-400"
+                            data-i18n-title="sidebar_new_chat">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                        </button>
+                        <button onclick="app.createFolder()"
+                            class="aspect-square bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl shadow-sm hover:border-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-all flex items-center justify-center text-amber-600 dark:text-amber-400"
+                            data-i18n-title="sidebar_new_folder">
+                            <i data-lucide="folder-plus" class="w-5 h-5"></i>
                         </button>
                         <button onclick="app.newChat(true)"
-                            class="w-12 h-10.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl shadow-sm hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all flex items-center justify-center text-blue-600 dark:text-blue-400"
+                            class="aspect-square bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl shadow-sm hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all flex items-center justify-center text-blue-600 dark:text-blue-400"
                             data-i18n-title="sidebar_private_chat">
                             <i data-lucide="shield-check" class="w-5 h-5"></i>
                         </button>
                         <button onclick="app.openPlugins()"
-                            class="w-12 h-10.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-xl shadow-sm hover:border-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all flex items-center justify-center text-purple-600 dark:text-purple-400"
+                            class="aspect-square bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-xl shadow-sm hover:border-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all flex items-center justify-center text-purple-600 dark:text-purple-400"
                             data-i18n-title="sidebar_plugins">
                             <i data-lucide="app-window" class="w-5 h-5"></i>
                         </button>
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar" id="chat-list">
-                    <!-- Chat List Items will be injected here via JS -->
+                <div class="flex-1 overflow-y-auto px-3 custom-scrollbar" id="chats-scroll">
+                    <div id="folders-list" class="space-y-1"></div>
+                    <div id="chat-list" class="space-y-1">
+                        <!-- Chat List Items will be injected here via JS -->
+                    </div>
                 </div>
 
                 <!-- Sidebar Footer -->
@@ -450,6 +458,19 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         aria-label="Next tabs" title="Next tabs">
                         <i data-lucide="chevron-right" class="w-4 h-4"></i>
                     </button>
+                </div>
+
+                <!-- Sections & Chapters (in-chat navigation) -->
+                <button type="button" id="chapters-fab" class="chapters-fab hidden" data-i18n-title="chapters_button"
+                    title="Разделы и главы" aria-label="Sections & chapters">
+                    <i data-lucide="list" class="w-4 h-4"></i>
+                </button>
+                <div id="chapters-panel" class="chapters-panel hidden">
+                    <div id="chapters-list" class="chapters-list"></div>
+                    <div class="chapters-footer">
+                        <button type="button" id="chapters-add-section" class="chapters-add-section"
+                            data-i18n="chapters_add_section">+ Раздел</button>
+                    </div>
                 </div>
 
                 <!-- Messages List -->
@@ -633,6 +654,13 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
     <!-- Modals Container (Inject dynamically via JS) -->
     <div id="modal-container" class="relative z-[100]"></div>
+
+    <!-- Anchor picking banner for chapters -->
+    <div id="chapters-pick-banner" class="chapters-pick-banner hidden">
+        <i data-lucide="crosshair" class="w-4 h-4"></i>
+        <span data-i18n="chapters_pick_hint">Нажмите на сообщение, чтобы привязать главу</span>
+        <button type="button" id="chapters-pick-cancel" data-i18n="btn_cancel"></button>
+    </div>
 
     <!-- Drag & Drop Overlay -->
     <div id="drag-drop-overlay"

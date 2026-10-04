@@ -112,6 +112,8 @@ export const UI = {
         if (!window.aruContentCache) window.aruContentCache = {};
         window.aruContentCache[msgId] = msg.content;
 
+        const dbIdAttr = (msg.id !== undefined && msg.id !== null) ? ` data-msg-id="${msg.id}"` : '';
+
         let html = '';
 
         // Implements safe access to the global application state object
@@ -120,7 +122,7 @@ export const UI = {
 
         if (isUser) {
             html = `
-            <div class="flex gap-3 mb-6 flex-row-reverse animate-fade-in-up group">
+            <div class="flex gap-3 mb-6 flex-row-reverse animate-fade-in-up group"${dbIdAttr}>
                 <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 overflow-hidden">
                     <i data-lucide="user" class="w-5 h-5"></i>
                 </div>
@@ -144,7 +146,7 @@ export const UI = {
             }
 
             html = `
-            <div class="flex flex-col mb-8 animate-fade-in-up group">
+            <div class="flex flex-col mb-8 animate-fade-in-up group"${dbIdAttr}>
                 <div class="flex gap-4">
                     <div class="flex flex-col items-center">
                         <div class="w-10 h-10 rounded-full bg-aru-50 dark:bg-aru-900/50 flex items-center justify-center border border-aru-100 dark:border-aru-800 shadow-sm relative text-xl">

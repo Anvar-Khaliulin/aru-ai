@@ -19,7 +19,7 @@
   </a>
   <!-- Release -->
   <a href="https://github.com/Anvar-Khaliulin/aru-ai/releases">
-    <img src="https://img.shields.io/badge/Release-v0.9.5-green.svg?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/Release-v0.9.6-green.svg?style=flat-square" alt="Version">
   </a>
   <!-- Stack -->
   <img src="https://img.shields.io/badge/Built_With-Vanilla_JS-yellow.svg?style=flat-square&logo=javascript" alt="Vanilla JS">
@@ -39,9 +39,6 @@ Aru AI is **100% free and open-source**. There are no ads, subscriptions, paywal
   </a>
   <a href="https://www.paypal.com/paypalme/sudoibot">
     <img src="https://img.shields.io/badge/PayPal-003087?style=for-the-badge&logo=paypal&logoColor=white" alt="PayPal">
-  </a>
-  <a href="https://donate.trybit.com/04HEFZKA">
-    <img src="https://img.shields.io/badge/Crypto_Donation-Trybit-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Crypto">
   </a>
 </p>
 
@@ -86,6 +83,12 @@ Supports three flexible ways to connect LLMs:
 - **WebRTC P2P**: Direct peer-to-peer sharing of databases, chats, and artefacts via QR code without intermediary servers.
 - **Kanban Plugin**: Built-in task board deeply integrated into Aru's prompts and heuristic engine.
 - **Multilingual (i18n)**: Full UI localization in Kazakh, English, and Russian.
+---
+## 🗂️ Chat Organization & Customization
+
+- **Folders**: Group chats into collapsible folders that always stay on top of the list — rename, reorder, and drag chats in and out.
+- **Favorites & Drag-and-Drop Order**: Star chats to pin them above regular ones, then drag to arrange each group exactly how you like.
+- **Sections & Chapters**: Split long dialogues into sections and chapters with message anchors — a built-in table of contents for your conversations.
 ---
 ## 📄 License
 

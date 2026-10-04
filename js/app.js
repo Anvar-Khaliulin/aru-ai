@@ -17,6 +17,7 @@ import { SettingsController } from './modules/settingsController.js';
 import { PluginManager } from './modules/pluginManager.js';
 import { TransferController } from './modules/transferController.js';
 import { RemoteStorage } from './modules/remoteStorage.js';
+import { Chapters } from './modules/chapters.js';
 
 const llm = new LLMClient();
 
@@ -124,6 +125,11 @@ const app = {
     discussNewsFromEl: (...args) => ChatController.discussNewsFromEl(...args),
     discussNews: (...args) => ChatController.discussNews(...args),
     searchChats: (...args) => ChatController.searchChats(...args),
+    createFolder: (...args) => ChatController.createFolder(...args),
+    renameFolder: (...args) => ChatController.renameFolder(...args),
+    deleteFolder: (...args) => ChatController.deleteFolder(...args),
+    toggleFolder: (...args) => ChatController.toggleFolder(...args),
+    toggleChatFavorite: (...args) => ChatController.toggleChatFavorite(...args),
 
     toggleSearchMode: () => {
         const activeTab = state.tabs[state.activeTabIndex];
@@ -1269,4 +1275,5 @@ window.TransferController = TransferController;
 ChatController.init(app);
 WizardController.init(app);
 SettingsController.init(app);
+Chapters.init();
 document.addEventListener('DOMContentLoaded', app.init);

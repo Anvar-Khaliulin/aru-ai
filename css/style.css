@@ -758,6 +758,11 @@ a:focus-visible {
         max-height: calc(100dvh - 20px) !important;
         border-radius: var(--aru-radius) !important;
     }
+
+    #modal-transfer-overlay[class] > div:not(.absolute),
+    #transfer-sub-modal[class] > div {
+        max-height: calc(100dvh - 76px) !important;
+    }
 }
 
 @media (min-width: 768px) {
@@ -778,5 +783,321 @@ a:focus-visible {
         animation-iteration-count: 1 !important;
         scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;
+    }
+}
+
+/* --- Chat folders & favorites --- */
+body.chats-dragging .folder-children {
+    display: block !important;
+}
+
+.folder-empty {
+    pointer-events: none;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+}
+
+.folder-children {
+    min-height: 6px;
+}
+
+@media (hover: none) {
+    .chat-actions {
+        opacity: 0.65 !important;
+    }
+}
+
+/* --- Sections & Chapters (in-chat navigation) --- */
+.chapters-fab {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(10px) saturate(1.4);
+    -webkit-backdrop-filter: blur(10px) saturate(1.4);
+    color: var(--aru-text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.chapters-fab:hover {
+    color: var(--aru-accent-strong);
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.dark .chapters-fab {
+    background: rgba(23, 23, 25, 0.5);
+}
+
+.dark .chapters-fab:hover {
+    background: rgba(23, 23, 25, 0.75);
+}
+
+.chapters-panel {
+    position: absolute;
+    top: 52px;
+    right: 10px;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: min(84vw, 300px);
+    max-height: min(62vh, 480px);
+    border-radius: var(--aru-radius);
+    background: rgba(255, 255, 255, 0.66);
+    backdrop-filter: blur(16px) saturate(1.5);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    overflow: hidden;
+}
+
+.dark .chapters-panel {
+    background: rgba(23, 23, 25, 0.62);
+}
+
+.chapters-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 6px 4px 2px;
+}
+
+.chapters-empty {
+    padding: 16px 10px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--aru-text-faint);
+}
+
+.chapters-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 3px 6px;
+    border-radius: var(--aru-radius-sm);
+    transition: background 0.12s ease;
+}
+
+.chapters-row:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dark .chapters-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.chapters-section-row {
+    margin-top: 2px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--aru-text);
+}
+
+.chapters-chapter-row {
+    padding-left: 14px;
+    font-size: 12px;
+    color: var(--aru-text-muted);
+}
+
+.chapters-chapter-row[data-anchor]:not([data-anchor=""]) {
+    cursor: pointer;
+}
+
+.chapters-dot {
+    flex: 0 0 auto;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--aru-text-faint);
+    opacity: 0.7;
+}
+
+.chapters-chapter-row[data-anchor]:not([data-anchor=""]) .chapters-dot {
+    background: var(--aru-accent);
+    opacity: 1;
+}
+
+.chapters-title {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapters-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.chapters-row:hover .chapters-actions,
+.chapters-row:focus-within .chapters-actions {
+    opacity: 1;
+}
+
+.chapters-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--aru-text-faint);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.chapters-icon-btn:hover {
+    color: var(--aru-accent-strong);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.dark .chapters-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.chapters-icon-btn.is-on {
+    color: var(--aru-accent);
+}
+
+.chapters-rename-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+}
+
+.chapters-footer {
+    flex: 0 0 auto;
+    padding: 4px 4px 5px;
+}
+
+.chapters-add-section {
+    width: 100%;
+    padding: 7px 8px;
+    border-radius: var(--aru-radius-sm);
+    background: transparent;
+    text-align: left;
+    font-size: 12px;
+    color: var(--aru-text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.chapters-add-section:hover {
+    color: var(--aru-accent-strong);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dark .chapters-add-section:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.chapters-pick-banner {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 105;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 24px);
+    padding: 8px 10px 8px 14px;
+    border-radius: 999px;
+    background: rgba(28, 25, 23, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #fafaf9;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.chapters-pick-banner span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapters-pick-banner button {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fafaf9;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.chapters-pick-banner button:hover {
+    background: rgba(255, 255, 255, 0.26);
+}
+
+body.chapters-picking [data-msg-id] {
+    cursor: crosshair;
+}
+
+.msg-anchor-flash {
+    border-radius: var(--aru-radius);
+    animation: aru-anchor-flash 1.8s ease;
+}
+
+@keyframes aru-anchor-flash {
+    0% {
+        background-color: rgba(249, 115, 22, 0);
+    }
+
+    15%,
+    55% {
+        background-color: rgba(249, 115, 22, 0.16);
+    }
+
+    100% {
+        background-color: rgba(249, 115, 22, 0);
+    }
+}
+
+@media (hover: none) {
+    .chapters-actions {
+        opacity: 0.55;
+    }
+
+    .chapters-icon-btn {
+        width: 28px;
+        height: 28px;
+    }
+
+    .chapters-row {
+        min-height: 34px;
+    }
+}
+
+@media (min-width: 768px) {
+    .chapters-fab {
+        top: 62px;
+        right: 14px;
+    }
+
+    .chapters-panel {
+        top: 104px;
+        right: 14px;
     }
 }

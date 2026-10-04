@@ -11,6 +11,7 @@ import { Heuristics } from './heuristics.js';
 import { Triggers } from './triggers.js';
 import { CanvasManager } from './canvas.js';
 import { PluginManager } from './pluginManager.js';
+import { Chapters } from './chapters.js';
 
 export const ChatController = {
     app: null,
@@ -20,17 +21,55 @@ export const ChatController = {
     },
 
     loadChatsList: async () => {
-        const chats = DB.getChats();
+        const foldersList = document.getElementById('folders-list');
         const list = document.getElementById('chat-list');
-        const t = state.translations || {};
         if (!list) return;
-        list.innerHTML = chats.map(chat => `
-            <div data-id="${chat.id}" onclick="app.loadChat(${chat.id})" class="chat-item p-3 mb-1 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center justify-between group ${state.currentChatId == chat.id ? 'bg-aru-50 dark:bg-aru-900/30 border border-aru-100 dark:border-aru-800' : ''}">
+
+        const folders = DB.getFolders();
+        const chats = DB.getChats();
+
+        const folderChats = {};
+        const looseChats = [];
+        chats.forEach(chat => {
+            const inFolder = chat.folder_id !== null && chat.folder_id !== undefined && folders.some(f => f.id == chat.folder_id);
+            if (inFolder) {
+                (folderChats[chat.folder_id] = folderChats[chat.folder_id] || []).push(chat);
+            } else {
+                looseChats.push(chat);
+            }
+        });
+
+        const favFirst = arr => arr.slice().sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
+
+        if (foldersList) {
+            foldersList.innerHTML = folders.map(folder =>
+                ChatController.folderBlockHTML(folder, favFirst(folderChats[folder.id] || []))
+            ).join('');
+        }
+
+        list.innerHTML = favFirst(looseChats).map(chat => ChatController.chatItemHTML(chat)).join('');
+
+        lucide.createIcons();
+        ChatController.app.initChatSorting();
+        ChatController.renderTabs();
+        ChatController._applyChatSearchFilter();
+    },
+
+    chatItemHTML: (chat) => {
+        const t = state.translations || {};
+        const isFav = !!chat.is_favorite;
+        const title = UI.escapeHTML(chat.title) || (t.sidebar_new_chat || 'Новый чат');
+        const favTitle = isFav ? (t.chat_favorite_remove || 'Убрать из избранного') : (t.chat_favorite_add || 'В избранное');
+        return `
+            <div data-id="${chat.id}" data-fav="${isFav ? 1 : 0}" onclick="app.loadChat(${chat.id})" class="chat-item p-3 mb-1 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center justify-between group ${state.currentChatId == chat.id ? 'bg-aru-50 dark:bg-aru-900/30 border border-aru-100 dark:border-aru-800' : ''}">
                 <div class="flex items-center gap-3 overflow-hidden">
-                    <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
-                    <span class="text-sm truncate select-none">${UI.escapeHTML(chat.title) || (t.sidebar_new_chat || 'Новый чат')}</span>
+                    <i data-lucide="${isFav ? 'star' : 'message-circle'}" class="w-4 h-4 shrink-0 ${isFav ? 'text-amber-400 fill-current' : 'text-gray-400'}"></i>
+                    <span class="text-sm truncate select-none">${title}</span>
                 </div>
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div class="chat-actions flex items-center gap-1 transition-opacity ${isFav ? '' : 'opacity-0 group-hover:opacity-100'}">
+                    <button onclick="event.stopPropagation(); app.toggleChatFavorite(${chat.id})" class="p-1 ${isFav ? 'text-amber-400' : 'text-gray-400'} hover:text-amber-400 transition" title="${favTitle}">
+                        <i data-lucide="star" class="w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}"></i>
+                    </button>
                     <button onclick="event.stopPropagation(); app.renameChat(${chat.id})" class="p-1 text-gray-400 hover:text-aru-500 transition" title="${t.btn_rename || 'Rename'}">
                         <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
                     </button>
@@ -38,11 +77,64 @@ export const ChatController = {
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                 </div>
-            </div>`).join('');
+            </div>`;
+    },
 
-        lucide.createIcons();
-        ChatController.app.initChatSorting();
-        ChatController.renderTabs();
+    folderBlockHTML: (folder, chats) => {
+        const t = state.translations || {};
+        const collapsed = ChatController.isFolderCollapsed(folder.id);
+        const title = UI.escapeHTML(folder.title) || (t.default_folder_name || 'Папка');
+        return `
+            <div class="folder-block" data-id="${folder.id}">
+                <div class="folder-header p-3 mb-1 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center justify-between group" onclick="app.toggleFolder(${folder.id})">
+                    <div class="flex items-center gap-2.5 overflow-hidden">
+                        <i data-lucide="${collapsed ? 'chevron-right' : 'chevron-down'}" class="w-3.5 h-3.5 shrink-0 text-gray-400"></i>
+                        <i data-lucide="${collapsed ? 'folder' : 'folder-open'}" class="w-4 h-4 shrink-0 text-amber-500"></i>
+                        <span class="folder-title text-sm font-medium truncate select-none">${title}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 shrink-0">${chats.length}</span>
+                    </div>
+                    <div class="chat-actions flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="event.stopPropagation(); app.renameFolder(${folder.id})" class="p-1 text-gray-400 hover:text-aru-500 transition" title="${t.prompt_rename_folder || 'Переименовать'}">
+                            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); app.deleteFolder(${folder.id})" class="p-1 text-gray-400 hover:text-red-500 transition" title="${t.btn_delete || 'Delete'}">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="folder-children space-y-1 pl-2 mb-2 ${collapsed ? 'hidden' : ''}" data-folder-id="${folder.id}">
+                    ${chats.length ? chats.map(c => ChatController.chatItemHTML(c)).join('') : `<div class="folder-empty text-xs text-gray-400 px-3 py-2 select-none">${t.folder_empty_hint || 'Перетащите чаты сюда'}</div>`}
+                </div>
+            </div>`;
+    },
+
+    isFolderCollapsed: (folderId) => {
+        try {
+            const map = JSON.parse(localStorage.getItem('aru_folder_collapsed') || '{}');
+            return !!map[folderId];
+        } catch (e) {
+            return false;
+        }
+    },
+
+    toggleFolder: (folderId) => {
+        try {
+            const map = JSON.parse(localStorage.getItem('aru_folder_collapsed') || '{}');
+            if (map[folderId]) delete map[folderId];
+            else map[folderId] = true;
+            localStorage.setItem('aru_folder_collapsed', JSON.stringify(map));
+        } catch (e) { }
+        ChatController.loadChatsList();
+    },
+
+    expandFolder: (folderId) => {
+        try {
+            const map = JSON.parse(localStorage.getItem('aru_folder_collapsed') || '{}');
+            if (map[folderId]) {
+                delete map[folderId];
+                localStorage.setItem('aru_folder_collapsed', JSON.stringify(map));
+            }
+        } catch (e) { }
     },
 
     renderTabs: () => {
@@ -235,6 +327,7 @@ export const ChatController = {
                 }
             }
             PluginManager.handleLifecycle(tab.pluginId, 'activate', { tab, container: pluginViewport });
+            Chapters.refreshVisibility();
             return; // Exit early for plugins
         } else {
             if (msgContainer) msgContainer.classList.remove('hidden');
@@ -283,6 +376,8 @@ export const ChatController = {
                 if (backdrop) backdrop.classList.add('hidden');
             }
         }
+
+        Chapters.refreshVisibility();
     },
 
     closeTab: (index, event) => {
@@ -303,6 +398,7 @@ export const ChatController = {
             if (placeholder) placeholder.classList.remove('hidden');
             CanvasManager.clearCanvas();
             ChatController.renderTabs(); // Sync tab bar UI
+            Chapters.refreshVisibility();
         } else {
             if (state.activeTabIndex >= index) {
                 state.activeTabIndex = Math.max(0, state.activeTabIndex - 1);
@@ -324,26 +420,125 @@ export const ChatController = {
     },
 
     initChatSorting: () => {
+        if (typeof Sortable === 'undefined') return;
+        const foldersList = document.getElementById('folders-list');
         const list = document.getElementById('chat-list');
-        if (!list || typeof Sortable === 'undefined') return;
+        if (!list) return;
 
-        Sortable.create(list, {
+        (ChatController._sortables || []).forEach(s => {
+            try { s.destroy(); } catch (e) { }
+        });
+        const sortables = [];
+
+        const chatSortableOptions = () => ({
             animation: 150,
             ghostClass: 'bg-aru-100',
-            handle: '.chat-item',
+            draggable: '.chat-item',
+            filter: 'button',
+            preventOnFilter: false,
             delay: 500, // 500ms delay to allow scrolling
             delayOnTouchOnly: true,
             touchStartThreshold: 5,
-            onEnd: function (evt) {
-                const items = list.querySelectorAll('.chat-item');
-                items.forEach((el, index) => {
-                    const id = el.getAttribute('data-id');
-                    // autoSave=false for batch update
-                    DB.updateChatOrder(id, index, false);
-                });
-                DB.save(); // Single save after all updates
+            group: { name: 'aru-chats', pull: true, put: true },
+            onMove: (evt) => {
+                const related = evt.related;
+                if (!related || !related.classList || !related.classList.contains('chat-item')) return true;
+                const draggedFav = evt.dragged.getAttribute('data-fav') === '1';
+                const relatedFav = related.getAttribute('data-fav') === '1';
+                const willInsertAfter = !!evt.willInsertAfter;
+                const siblings = Array.from(related.parentNode.children)
+                    .filter(el => el.classList.contains('chat-item') && el !== evt.dragged);
+
+                if (draggedFav) {
+                    // Избранный нельзя опустить ниже обычного
+                    if (willInsertAfter) return relatedFav;
+                    if (relatedFav) return true;
+                    const idx = siblings.indexOf(related);
+                    return siblings.slice(0, idx).every(el => el.getAttribute('data-fav') === '1');
+                }
+                // Обычный нельзя поднять выше избранных
+                if (!willInsertAfter) return !relatedFav;
+                if (!relatedFav) return true;
+                const idx = siblings.indexOf(related);
+                return siblings.slice(idx + 1).every(el => el.getAttribute('data-fav') !== '1');
+            },
+            onStart: () => document.body.classList.add('chats-dragging'),
+            onEnd: (evt) => {
+                document.body.classList.remove('chats-dragging');
+                const folderId = evt && evt.to && evt.to.dataset ? evt.to.dataset.folderId : null;
+                if (folderId) ChatController.expandFolder(folderId);
+                ChatController.persistChatOrder();
             },
         });
+
+        if (foldersList && foldersList.querySelector('.folder-block')) {
+            sortables.push(Sortable.create(foldersList, {
+                animation: 150,
+                ghostClass: 'bg-aru-100',
+                draggable: '.folder-block',
+                handle: '.folder-header',
+                delay: 500,
+                delayOnTouchOnly: true,
+                touchStartThreshold: 5,
+                onEnd: () => {
+                    foldersList.querySelectorAll(':scope > .folder-block').forEach((el, index) => {
+                        DB.updateFolderOrder(el.getAttribute('data-id'), index, false);
+                    });
+                    DB.save();
+                },
+            }));
+        }
+
+        const containers = [list, ...document.querySelectorAll('.folder-children')];
+        containers.forEach(container => sortables.push(Sortable.create(container, chatSortableOptions())));
+
+        ChatController._sortables = sortables;
+    },
+
+    persistChatOrder: () => {
+        const containers = [document.getElementById('chat-list'), ...document.querySelectorAll('.folder-children')].filter(Boolean);
+        containers.forEach(container => {
+            const folderId = container.dataset.folderId ? parseInt(container.dataset.folderId, 10) : null;
+            container.querySelectorAll(':scope > .chat-item').forEach((el, index) => {
+                const id = el.getAttribute('data-id');
+                DB.updateChatOrder(id, index, false);
+                DB.setChatFolder(id, folderId, false);
+            });
+        });
+        DB.save().then(() => ChatController.loadChatsList());
+    },
+
+    createFolder: () => {
+        const t = state.translations || {};
+        const name = prompt(t.prompt_folder_name || 'Введите название папки:');
+        if (name === null) return;
+        DB.createFolder((name || '').trim() || (t.default_folder_name || 'Папка'));
+        ChatController.loadChatsList();
+    },
+
+    renameFolder: (id) => {
+        const t = state.translations || {};
+        const folder = DB.getFolders().find(f => f.id == id);
+        if (!folder) return;
+        const name = prompt(t.prompt_rename_folder || 'Новое название папки:', folder.title);
+        if (name && name.trim()) {
+            DB.renameFolder(id, name.trim());
+            ChatController.loadChatsList();
+        }
+    },
+
+    deleteFolder: (id) => {
+        const t = state.translations || {};
+        if (!confirm(t.confirm_delete_folder || 'Удалить папку? Чаты вернутся в общий список.')) return;
+        DB.deleteFolder(id);
+        ChatController.loadChatsList();
+    },
+
+    toggleChatFavorite: (id) => {
+        const chat = DB.getChats().find(c => c.id == id);
+        if (!chat) return;
+        DB.setChatFavorite(id, chat.is_favorite ? 0 : 1);
+        ChatController.loadChatsList();
     },
 
     renameChat: async (id) => {
@@ -441,6 +636,7 @@ export const ChatController = {
         }
         ChatController.app.loadChatsList();
         ChatController.renderTabs(); // Sync tab bar UI after deletion
+        Chapters.refreshVisibility();
     },
 
     sendMessage: async (e) => {
@@ -478,15 +674,16 @@ export const ChatController = {
             const placeholder = document.getElementById('chat-placeholder');
             if (placeholder && targetChatId === state.currentChatId) placeholder.classList.add('hidden');
 
-            if (targetChatId === state.currentChatId) {
-                UI.appendMessage({ role: 'user', content: text });
-                UI.showTyping();
-            }
-
+            let userMsgId = null;
             if (!activeTab.isPrivate) {
-                DB.saveMessage(targetChatId, 'user', text);
+                userMsgId = DB.saveMessage(targetChatId, 'user', text);
             } else {
                 activeTab.messages.push({ role: 'user', content: text });
+            }
+
+            if (targetChatId === state.currentChatId) {
+                UI.appendMessage({ role: 'user', content: text, id: userMsgId });
+                UI.showTyping();
             }
 
             let searchContext = '';
@@ -540,15 +737,16 @@ export const ChatController = {
             const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks);
             const finalHtml = await Triggers.processResponseForTools((typeof marked !== 'undefined') ? marked.parse(artifactsProcessed) : artifactsProcessed);
 
-            if (targetChatId === state.currentChatId) {
-                UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true });
-            }
-
+            let modelMsgId = null;
             if (!activeTab.isPrivate) {
-                DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
+                modelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
             } else {
                 activeTab.messages.push({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true });
+            }
+
+            if (targetChatId === state.currentChatId) {
+                UI.hideTyping();
+                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: modelMsgId });
             }
 
             if (!activeTab.isPrivate) {
@@ -608,10 +806,9 @@ export const ChatController = {
         if (!activeTab || activeTab.isSending) return;
 
         const visibleText = `#### [${title}](${link})\n\n${fullText || desc || ''}`;
-        if (targetChatId === state.currentChatId) UI.appendMessage({ role: 'user', content: visibleText });
-
         const payload = `[[NEWS_FULL]]\n${fullText || desc || ''}\n[[/NEWS_FULL]]\n${title}`;
-        DB.saveMessage(targetChatId, 'user', payload);
+        const newsMsgId = DB.saveMessage(targetChatId, 'user', payload);
+        if (targetChatId === state.currentChatId) UI.appendMessage({ role: 'user', content: visibleText, id: newsMsgId });
 
         activeTab.isSending = true;
         ChatController.renderTabs();
@@ -642,11 +839,11 @@ export const ChatController = {
             const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks);
             const finalHtml = await Triggers.processResponseForTools(typeof marked !== 'undefined' ? marked.parse(artifactsProcessed) : artifactsProcessed);
 
+            const newsModelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true });
+                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: newsModelMsgId });
             }
-            DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
         } catch (err) {
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
@@ -659,17 +856,39 @@ export const ChatController = {
         }
     },
     searchChats: (query) => {
-        const q = (query || '').toLowerCase().trim();
-        const items = document.querySelectorAll('.chat-item');
-        items.forEach(el => {
-            const title = el.querySelector('span')?.innerText.toLowerCase() || '';
-            if (title.includes(q)) {
-                el.classList.remove('hidden');
-                el.classList.add('flex');
-            } else {
-                el.classList.add('hidden');
-                el.classList.remove('flex');
-            }
+        ChatController._applyChatSearchFilter(query);
+    },
+
+    _applyChatSearchFilter: (query) => {
+        const input = document.getElementById('chat-search');
+        const q = ((query !== undefined ? query : (input ? input.value : '')) || '').toLowerCase().trim();
+        const list = document.getElementById('chat-list');
+        if (!list) return;
+
+        list.querySelectorAll(':scope > .chat-item').forEach(el => {
+            const title = (el.querySelector('span')?.innerText || '').toLowerCase();
+            const match = !q || title.includes(q);
+            el.classList.toggle('hidden', !match);
+            el.classList.toggle('flex', match);
+        });
+
+        document.querySelectorAll('.folder-block').forEach(block => {
+            const folderTitle = (block.querySelector('.folder-title')?.innerText || '').toLowerCase();
+            const folderMatch = !!q && folderTitle.includes(q);
+            let visibleChildren = 0;
+            block.querySelectorAll('.folder-children > .chat-item').forEach(el => {
+                const title = (el.querySelector('span')?.innerText || '').toLowerCase();
+                const match = !q || folderMatch || title.includes(q);
+                el.classList.toggle('hidden', !match);
+                el.classList.toggle('flex', match);
+                if (match) visibleChildren++;
+            });
+            block.classList.toggle('hidden', !!q && !folderMatch && visibleChildren === 0);
+        });
+
+        document.querySelectorAll('.folder-children').forEach(box => {
+            if (q) box.classList.remove('hidden');
+            else box.classList.toggle('hidden', ChatController.isFolderCollapsed(box.dataset.folderId));
         });
     },
 };

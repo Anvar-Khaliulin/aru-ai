@@ -30,7 +30,7 @@ export const TransferController = {
         const html = `
         <div id="modal-transfer-overlay" class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center p-2 md:p-4 animate-fade-in backdrop-blur-md bg-white/5 dark:bg-black/5">
             <div class="absolute inset-0" onclick="TransferController.closeModal()"></div>
-            <div class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-full h-[85vh] scale-in">
+            <div class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-[calc(100dvh-76px)] md:max-h-[calc(100dvh-104px)] scale-in">
                 
                 <!-- Compact Header -->
                 <div class="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
@@ -45,7 +45,7 @@ export const TransferController = {
                     </button>
                 </div>
 
-                <div id="transfer-main-layout" class="flex flex-col overflow-y-auto">
+                <div id="transfer-main-layout" class="flex flex-col overflow-y-auto min-h-0">
                     <div class="p-5 flex flex-col items-center">
                         
                         <!-- Premium Tab Switcher -->
@@ -303,7 +303,7 @@ export const TransferController = {
         
         const html = `
         <div id="${subModalId}" class="absolute inset-0 z-[120] flex items-center justify-center p-4 bg-white/5 dark:bg-black/5 backdrop-blur-md animate-fade-in">
-            <div class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col max-h-full h-[85vh]">
+            <div class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col max-h-[calc(100dvh-76px)] md:max-h-[calc(100dvh-104px)]">
                 <!-- Header -->
                 <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                     <h4 class="text-xs font-bold text-gray-800 dark:text-gray-100 uppercase tracking-wider">${t.transfer_select_items || 'Select items'}</h4>
@@ -317,7 +317,7 @@ export const TransferController = {
                 </div>
 
                 <!-- List -->
-                <div class="flex-1 overflow-y-auto p-2" id="sub-modal-list">
+                <div class="flex-1 overflow-y-auto p-2 min-h-0" id="sub-modal-list">
                     ${items.length === 0 ? `<div class="p-6 text-center text-gray-400 text-[10px] font-medium">${t.transfer_no_data || 'No data'}</div>` : ''}
                     ${items.map(item => {
                         const isChecked = currentlySelected === null || currentlySelected.includes(item.id);
