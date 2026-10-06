@@ -345,8 +345,16 @@ export const ChatController = {
             UI.appendMessage(m);
         });
 
+        if (!tab.artifact && !tab.isPrivate && DB.getLatestChatArtifact) {
+            const latest = DB.getLatestChatArtifact(tab.chatId);
+            if (latest) tab.artifact = { type: latest.type, title: latest.title, code: latest.code };
+        }
+
         if (tab.artifact) {
             CanvasManager.currentArtifact = { ...tab.artifact };
+            if (!CanvasManager.containers[tab.chatId]) {
+                CanvasManager.renderPreview(); // Rebuilds the per-chat iframe after reload
+            }
             CanvasManager.switchChat(tab.chatId);
             // Optionally update UI for artifact view (tabs, title)
             const tabsEl = document.getElementById('canvas-tabs');
@@ -734,7 +742,7 @@ export const ChatController = {
             const responseAfterMemoryCheck = await Triggers.processResponseForMemory(raw, activeTab.isPrivate);
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, activeTab.isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterTasks, { userText: text });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks);
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks, targetChatId, activeTab.isPrivate);
             const finalHtml = await Triggers.processResponseForTools((typeof marked !== 'undefined') ? marked.parse(artifactsProcessed) : artifactsProcessed);
 
             let modelMsgId = null;
@@ -836,7 +844,7 @@ export const ChatController = {
             const responseAfterMemoryCheck = await Triggers.processResponseForMemory(raw);
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, false);
             const emotion = Heuristics.determineEmotion(responseAfterTasks, { userText: payload });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks);
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks, targetChatId, activeTab.isPrivate);
             const finalHtml = await Triggers.processResponseForTools(typeof marked !== 'undefined' ? marked.parse(artifactsProcessed) : artifactsProcessed);
 
             const newsModelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);

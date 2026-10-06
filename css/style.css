@@ -1101,3 +1101,75 @@ body.chapters-picking [data-msg-id] {
         right: 14px;
     }
 }
+
+#doc-editor {
+    line-height: 1.65;
+}
+
+#doc-editor h1,
+#doc-editor h2,
+#doc-editor h3 {
+    font-weight: 700;
+    margin: 0.9em 0 0.45em;
+    line-height: 1.3;
+}
+
+#doc-editor h1 { font-size: 1.45em; }
+#doc-editor h2 { font-size: 1.25em; }
+#doc-editor h3 { font-size: 1.1em; }
+
+#doc-editor p { margin: 0.5em 0; }
+
+#doc-editor ul,
+#doc-editor ol {
+    padding-left: 1.4em;
+    margin: 0.5em 0;
+}
+
+#doc-editor ul { list-style: disc; }
+#doc-editor ol { list-style: decimal; }
+
+#doc-editor blockquote {
+    border-left: 3px solid #f97316;
+    padding-left: 0.9em;
+    margin: 0.6em 0;
+    color: #6b7280;
+}
+
+.dark #doc-editor blockquote {
+    color: #9ca3af;
+}
+
+#doc-editor a {
+    color: #f97316;
+    text-decoration: underline;
+}
+
+#doc-editor code {
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.dark #doc-editor code {
+    background: #1f2937;
+}
+
+#doc-editor pre {
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 0.8em 1em;
+    overflow-x: auto;
+    margin: 0.6em 0;
+}
+
+.dark #doc-editor pre {
+    background: #1f2937;
+}
+
+#doc-editor pre code {
+    background: transparent;
+    padding: 0;
+}

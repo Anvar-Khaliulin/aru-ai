@@ -58,8 +58,10 @@ export const CanvasManager = {
         document.getElementById('canvas-render-area').classList.remove('hidden');
 
         const tabsEl = document.getElementById('canvas-tabs');
-        const showTabs = (type === 'app' || type === 'game' || type === 'analytics');
+        const btnEdit = document.getElementById('btn-canvas-edit');
+        const showTabs = (type === 'app' || type === 'game' || type === 'analytics' || type === 'doc');
         if (tabsEl) tabsEl.classList.toggle('hidden', !showTabs);
+        if (btnEdit) btnEdit.classList.toggle('hidden', type !== 'doc');
         document.getElementById('canvas-title-text').textContent = title;
 
         this.switchTab('preview');
@@ -68,26 +70,33 @@ export const CanvasManager = {
     switchTab(tab) {
         const renderArea = document.getElementById('canvas-render-area');
         const codeArea = document.getElementById('canvas-code-area');
+        const editArea = document.getElementById('canvas-edit-area');
         const btnPreview = document.getElementById('btn-canvas-preview');
         const btnCode = document.getElementById('btn-canvas-code');
+        const btnEdit = document.getElementById('btn-canvas-edit');
 
-        const interactiveTypes = ['app', 'game', 'analytics'];
-        if (!this.currentArtifact || (!interactiveTypes.includes(this.currentArtifact.type) && tab === 'code')) {
-            tab = 'preview';
+        if (!this.currentArtifact) tab = 'preview';
+        if (this.currentArtifact && this.currentArtifact.type !== 'doc' && tab === 'edit') tab = 'preview';
+
+        const activeCls = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition-all';
+        const idleCls = 'flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all';
+        btnPreview.className = tab === 'preview' ? activeCls : idleCls;
+        btnCode.className = tab === 'code' ? activeCls : idleCls;
+        if (btnEdit) {
+            const isDoc = this.currentArtifact && this.currentArtifact.type === 'doc';
+            btnEdit.className = (tab === 'edit' ? activeCls : idleCls) + (isDoc ? '' : ' hidden');
         }
 
+        renderArea.classList.toggle('hidden', tab !== 'preview');
+        codeArea.classList.toggle('hidden', tab !== 'code');
+        if (editArea) editArea.classList.toggle('hidden', tab !== 'edit');
+
         if (tab === 'preview') {
-            renderArea.classList.remove('hidden');
-            codeArea.classList.add('hidden');
-            btnPreview.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition-all';
-            btnCode.className = 'flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all';
             this.renderPreview();
-        } else {
-            renderArea.classList.add('hidden');
-            codeArea.classList.remove('hidden');
-            btnPreview.className = 'flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all';
-            btnCode.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition-all';
+        } else if (tab === 'code') {
             this.renderCode();
+        } else if (tab === 'edit') {
+            this.loadDocEditor();
         }
     },
 
@@ -208,9 +217,83 @@ export const CanvasManager = {
 
     renderCode() {
         if (!this.currentArtifact) return;
+        const { type, code } = this.currentArtifact;
         const codeDisplay = document.getElementById('code-display');
-        codeDisplay.textContent = this.currentArtifact.code;
-        if (typeof hljs !== 'undefined') hljs.highlightElement(codeDisplay);
+        let lang = 'javascript';
+        if (type === 'doc') lang = 'markdown';
+        else if (/^\s*</.test(code) || /<!DOCTYPE html>/i.test(code)) lang = 'xml';
+        codeDisplay.className = `language-${lang}`;
+        codeDisplay.textContent = code;
+        if (typeof hljs !== 'undefined') {
+            if (hljs.getLanguage(lang)) {
+                codeDisplay.removeAttribute('data-highlighted');
+                hljs.highlightElement(codeDisplay);
+            } else {
+                codeDisplay.removeAttribute('data-highlighted');
+                codeDisplay.className = 'language-plaintext';
+            }
+        }
+    },
+
+    loadDocEditor() {
+        if (!this.currentArtifact || this.currentArtifact.type !== 'doc') return;
+        const editor = document.getElementById('doc-editor');
+        if (!editor) return;
+        const code = this.currentArtifact.code;
+        if (typeof marked !== 'undefined') {
+            editor.innerHTML = marked.parse(code);
+        } else {
+            editor.textContent = code;
+        }
+        if (window.lucide) window.lucide.createIcons();
+    },
+
+    docEditCommand(cmd, value = null) {
+        const editor = document.getElementById('doc-editor');
+        if (!editor) return;
+        editor.focus();
+        if (cmd === 'formatBlock') {
+            document.execCommand('formatBlock', false, value);
+        } else if (cmd === 'createLink') {
+            const t = window.aruState && window.aruState.translations ? window.aruState.translations : {};
+            const url = window.prompt(t.edit_link_prompt || 'URL:', 'https://');
+            if (url) document.execCommand('createLink', false, url);
+        } else {
+            document.execCommand(cmd, false, value);
+        }
+    },
+
+    saveDocEdit() {
+        if (!this.currentArtifact || this.currentArtifact.type !== 'doc') return;
+        const editor = document.getElementById('doc-editor');
+        if (!editor) return;
+        let markdown = editor.innerText;
+        if (typeof TurndownService !== 'undefined') {
+            const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+            td.addRule('strikethrough', {
+                filter: ['del', 's'],
+                replacement: (content) => `~~${content}~~`
+            });
+            markdown = td.turndown(editor.innerHTML);
+        }
+        this.currentArtifact.code = markdown;
+
+        const state = window.aruState;
+        const tab = state && state.tabs[state.activeTabIndex];
+        if (tab) {
+            tab.artifact = { ...this.currentArtifact };
+            const cacheKey = (tab.chatId !== null && tab.chatId !== undefined) ? `${tab.chatId}:${this.currentArtifact.title}` : this.currentArtifact.title;
+            if (!window.aruArtifactsCache) window.aruArtifactsCache = {};
+            window.aruArtifactsCache[cacheKey] = { type: 'doc', title: this.currentArtifact.title, code: markdown };
+            if (!tab.isPrivate && tab.chatId !== null && tab.chatId !== undefined && window.DB && DB.saveChatArtifact) {
+                DB.saveChatArtifact(tab.chatId, this.currentArtifact.title, 'doc', markdown);
+            }
+        }
+        this.switchTab('preview');
+    },
+
+    cancelDocEdit() {
+        this.switchTab('preview');
     },
 
     copyCode() {
@@ -232,6 +315,7 @@ export const CanvasManager = {
             render.querySelectorAll('.chat-artifact-container').forEach(el => el.classList.add('hidden'));
         }
         const codeArea = document.getElementById('canvas-code-area'); if (codeArea) codeArea.classList.add('hidden');
+        const editArea = document.getElementById('canvas-edit-area'); if (editArea) editArea.classList.add('hidden');
         const tabs = document.getElementById('canvas-tabs'); if (tabs) tabs.classList.add('hidden');
         const title = document.getElementById('canvas-title-text'); if (title) title.textContent = 'Canvas';
     },

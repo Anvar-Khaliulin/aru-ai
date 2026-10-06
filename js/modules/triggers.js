@@ -271,7 +271,7 @@ export const Triggers = {
 
     //3. TRIGGER THINKING (Artifacts)
 
-    processResponseForArtifacts(llmResponse) {
+    processResponseForArtifacts(llmResponse, chatId = null, isPrivate = false) {
         this.PATTERNS.ARTIFACT.lastIndex = 0;
         const artifactRegex = this.PATTERNS.ARTIFACT;
 
@@ -312,13 +312,17 @@ export const Triggers = {
                 }
 
                 const title = "Auto Generated " + (type.charAt(0).toUpperCase() + type.slice(1));
-                artifactsFound.push({ type, title, code: code.trim(), fullMatch });
+                artifactsFound.push({ type, title, code: code.trim(), fullMatch, autoTitle: true });
             }
         }
 
         // Process all found artifacts (standard or heuristic)
         for (const art of artifactsFound) {
-            const { type, title, code, fullMatch } = art;
+            let { type, title, code, fullMatch } = art;
+            if (art.autoTitle) {
+                title = this.makeUniqueArtifactTitle(title, chatId, isPrivate);
+                art.title = title;
+            }
 
             // Resolves explicit DOM operational references matching standardized classification identifiers
             const t = state.translations || {};
@@ -348,7 +352,12 @@ export const Triggers = {
 </div>`;
 
             if (!window.aruArtifactsCache) window.aruArtifactsCache = {};
-            window.aruArtifactsCache[title] = { type, title, code: code.trim() };
+            const cacheKey = (chatId !== null && chatId !== undefined) ? `${chatId}:${title}` : title;
+            window.aruArtifactsCache[cacheKey] = { type, title, code: code.trim() };
+
+            if (!isPrivate && chatId !== null && chatId !== undefined && DB.saveChatArtifact) {
+                DB.saveChatArtifact(chatId, title, type, code.trim());
+            }
 
             cleanResponse = cleanResponse.replace(fullMatch, replacementCard);
         }
@@ -362,10 +371,26 @@ export const Triggers = {
             const last = artifactsFound[artifactsFound.length - 1];
             setTimeout(() => {
                 CanvasManager.renderArtifact(last.type, last.title, last.code);
+                const st = window.aruState;
+                const tab = st && st.tabs[st.activeTabIndex];
+                if (tab) tab.artifact = { type: last.type, title: last.title, code: last.code };
             }, 500);
         }
 
         return cleanResponse;
+    },
+
+    makeUniqueArtifactTitle(baseTitle, chatId, isPrivate) {
+        const keyFor = (t) => (chatId !== null && chatId !== undefined) ? `${chatId}:${t}` : t;
+        const taken = (t) => {
+            if (window.aruArtifactsCache && window.aruArtifactsCache[keyFor(t)]) return true;
+            if (!isPrivate && chatId !== null && chatId !== undefined && DB.getChatArtifact && DB.getChatArtifact(chatId, t)) return true;
+            return false;
+        };
+        if (!taken(baseTitle)) return baseTitle;
+        let n = 2;
+        while (taken(`${baseTitle} ${n}`)) n++;
+        return `${baseTitle} ${n}`;
     },
 
     processResponseForTasks(llmResponse, isPrivate = false) {

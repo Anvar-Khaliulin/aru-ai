@@ -167,13 +167,25 @@ export const DB = {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
         this.run(`CREATE TABLE IF NOT EXISTS modules_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            type TEXT, 
-            name TEXT, 
-            content TEXT, 
-            tags TEXT, 
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT,
+            name TEXT,
+            content TEXT,
+            tags TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
+
+        this.run(`CREATE TABLE IF NOT EXISTS chat_artifacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER,
+            title TEXT,
+            type TEXT,
+            code TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(chat_id, title)
+        )`);
+        this.run(`CREATE INDEX IF NOT EXISTS idx_chat_artifacts_chat ON chat_artifacts(chat_id)`);
 
         // Personality state: persistent mood/sarcasm/humor
         this.run(`CREATE TABLE IF NOT EXISTS personality_state (
@@ -339,6 +351,20 @@ export const DB = {
                 )`, [], false);
                 changed = true;
             }
+            if (!this.tableExists('chat_artifacts')) {
+                this.run(`CREATE TABLE chat_artifacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER,
+                    title TEXT,
+                    type TEXT,
+                    code TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(chat_id, title)
+                )`, [], false);
+                this.run(`CREATE INDEX IF NOT EXISTS idx_chat_artifacts_chat ON chat_artifacts(chat_id)`, [], false);
+                changed = true;
+            }
             if (changed) console.log('DB: schema migrated (folders/favorites/chapters ready)');
         } catch (e) {
             console.warn('DB.migrateSchema failed', e);
@@ -454,8 +480,46 @@ export const DB = {
     deleteChat(id) {
         this.run("DELETE FROM chat_chapters WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM chat_sections WHERE chat_id = ?", [id], false);
+        this.run("DELETE FROM chat_artifacts WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM messages WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM chats WHERE id = ?", [id]);
+    },
+
+    // --- Chat Artifacts (latest version per chat+title) ---
+
+    saveChatArtifact(chatId, title, type, code) {
+        try {
+            const existing = this.query("SELECT id FROM chat_artifacts WHERE chat_id = ? AND title = ?", [chatId, title]);
+            if (existing && existing.length > 0) {
+                this.run("UPDATE chat_artifacts SET type = ?, code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [type, code, existing[0].id]);
+            } else {
+                this.run("INSERT INTO chat_artifacts (chat_id, title, type, code) VALUES (?, ?, ?, ?)", [chatId, title, type, code]);
+            }
+            return true;
+        } catch (e) {
+            console.error('DB.saveChatArtifact failed', e);
+            return false;
+        }
+    },
+
+    getChatArtifact(chatId, title) {
+        try {
+            const rows = this.query("SELECT * FROM chat_artifacts WHERE chat_id = ? AND title = ? LIMIT 1", [chatId, title]);
+            return (rows && rows.length > 0) ? rows[0] : null;
+        } catch (e) {
+            console.error('DB.getChatArtifact failed', e);
+            return null;
+        }
+    },
+
+    getLatestChatArtifact(chatId) {
+        try {
+            const rows = this.query("SELECT * FROM chat_artifacts WHERE chat_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1", [chatId]);
+            return (rows && rows.length > 0) ? rows[0] : null;
+        } catch (e) {
+            console.error('DB.getLatestChatArtifact failed', e);
+            return null;
+        }
     },
 
     getMessages(chatId) {
@@ -1083,6 +1147,7 @@ export const DB = {
                     result.data.folders = [];
                     result.data.sections = [];
                     result.data.chapters = [];
+                    result.data.chat_artifacts = [];
                 } else {
                     const ids = filters.chats.join(',');
                     result.data.chats = this.query(`SELECT * FROM chats WHERE id IN (${ids})`);
@@ -1090,6 +1155,7 @@ export const DB = {
                     result.data.folders = this.query("SELECT * FROM folders");
                     result.data.sections = this.query(`SELECT * FROM chat_sections WHERE chat_id IN (${ids})`);
                     result.data.chapters = this.query(`SELECT * FROM chat_chapters WHERE chat_id IN (${ids})`);
+                    result.data.chat_artifacts = this.query(`SELECT * FROM chat_artifacts WHERE chat_id IN (${ids})`);
                 }
             } else {
                 result.data.chats = this.query("SELECT * FROM chats");
@@ -1097,6 +1163,7 @@ export const DB = {
                 result.data.folders = this.query("SELECT * FROM folders");
                 result.data.sections = this.query("SELECT * FROM chat_sections");
                 result.data.chapters = this.query("SELECT * FROM chat_chapters");
+                result.data.chat_artifacts = this.query("SELECT * FROM chat_artifacts");
             }
         }
 
@@ -1169,6 +1236,7 @@ export const DB = {
                 tempDb.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS chat_sections (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
                 tempDb.run(`CREATE TABLE IF NOT EXISTS chat_chapters (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, section_id INTEGER, title TEXT, anchor_message_id INTEGER, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, type TEXT, code TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(chat_id, title))`);
 
                 const data = imported.data;
                 if (data.chats) {
@@ -1182,6 +1250,9 @@ export const DB = {
                     }
                     if (data.chapters) {
                         for (const c of data.chapters) tempDb.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null]);
+                    }
+                    if (data.chat_artifacts) {
+                        for (const a of data.chat_artifacts) tempDb.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null]);
                     }
                 }
                 if (data.settings) {
@@ -1238,6 +1309,10 @@ export const DB = {
                     if (data.chapters) {
                         for (const c of data.chapters) this.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
                     }
+                    if (data.chat_artifacts) {
+                        this.run("DELETE FROM chat_artifacts", [], false);
+                        for (const a of data.chat_artifacts) this.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
+                    }
                 }
                 if (data.settings) { 
                     this.run("DELETE FROM settings"); this.run("DELETE FROM personality_state"); this.run("DELETE FROM memory_facts"); 
@@ -1279,6 +1354,10 @@ export const DB = {
                         for (const c of chapters) {
                             const mappedSection = (c.section_id !== undefined && c.section_id !== null && sectionMap[c.section_id] !== undefined) ? sectionMap[c.section_id] : null;
                             this.run("INSERT INTO chat_chapters (chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, mappedSection, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
+                        }
+                        const artifacts = (data.chat_artifacts || []).filter(a => String(a.chat_id) === String(oldId));
+                        for (const a of artifacts) {
+                            this.run("INSERT INTO chat_artifacts (chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
                         }
                     }
                 }

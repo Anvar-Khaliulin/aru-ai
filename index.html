@@ -115,6 +115,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/turndown@7/dist/turndown.min.js"></script>
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="css/style.css">
@@ -619,6 +620,9 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         <button onclick="CanvasManager.switchTab('code')" id="btn-canvas-code"
                             class="flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all"
                             data-i18n="canvas_code_tab"></button>
+                        <button onclick="CanvasManager.switchTab('edit')" id="btn-canvas-edit"
+                            class="flex-1 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all hidden"
+                            data-i18n="canvas_edit_tab"></button>
                     </div>
                 </div>
 
@@ -644,6 +648,42 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         </div>
                         <pre
                             class="m-0 p-0 text-sm font-mono"><code id="code-display" class="language-html"></code></pre>
+                    </div>
+                    <div id="canvas-edit-area" class="w-full h-full hidden flex flex-col">
+                        <div class="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 flex-wrap">
+                            <button onclick="CanvasManager.docEditCommand('bold')" title="Bold"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="bold" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('italic')" title="Italic"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="italic" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<h2>')" title="H2"
+                                class="px-1.5 py-1 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">H2</button>
+                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<h3>')" title="H3"
+                                class="px-1.5 py-1 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">H3</button>
+                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<p>')" title="Text"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="pilcrow" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('insertUnorderedList')" title="List"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="list" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('insertOrderedList')" title="Numbered list"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="list-ordered" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<blockquote>')" title="Quote"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="quote" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <button onclick="CanvasManager.docEditCommand('createLink')" title="Link"
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
+                                    data-lucide="link" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
+                            <div class="flex-1"></div>
+                            <button onclick="CanvasManager.cancelDocEdit()" data-i18n="edit_cancel"
+                                class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition"></button>
+                            <button onclick="CanvasManager.saveDocEdit()" data-i18n="edit_save"
+                                class="px-3 py-1.5 text-xs font-bold bg-aru-500 hover:bg-aru-600 text-white rounded-lg transition"></button>
+                        </div>
+                        <div id="doc-editor" contenteditable="true" spellcheck="false"
+                            class="flex-1 overflow-auto custom-scrollbar p-5 text-sm text-gray-800 dark:text-gray-200 outline-none"></div>
                     </div>
                 </div>
             </aside>

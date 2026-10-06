@@ -1101,9 +1101,30 @@ If the user provides personal facts, output the [[MEMORY: ...]] tag at the start
     // renderLibraryItems & launchModule removed (handled by Library module)
 
     openArtifact: (type, title) => {
-        if (window.aruArtifactsCache && window.aruArtifactsCache[title]) {
-            const art = window.aruArtifactsCache[title];
+        const st = window.aruState;
+        const tab = st && st.tabs[st.activeTabIndex];
+        const chatId = tab ? tab.chatId : null;
+        const cacheKey = (chatId !== null && chatId !== undefined) ? `${chatId}:${title}` : title;
+        let art = (window.aruArtifactsCache && window.aruArtifactsCache[cacheKey]) || null;
+        if (!art && chatId !== null && chatId !== undefined && !(tab && tab.isPrivate)) {
+            const row = DB.getChatArtifact ? DB.getChatArtifact(chatId, title) : null;
+            if (row) art = { type: row.type, title: row.title, code: row.code };
+        }
+        if (art) {
             CanvasManager.renderArtifact(art.type, art.title, art.code);
+            if (tab) tab.artifact = { type: art.type, title: art.title, code: art.code };
+        } else {
+            const t = (st && st.translations) || {};
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-3 rounded-full opacity-0 transition-opacity duration-500 z-50 flex items-center gap-2';
+            toast.innerHTML = `<i data-lucide="file-warning" class="w-3 h-3 text-aru-400"></i> ${UI.escapeHTML(t.artifact_not_found || "Couldn't open the artifact — code not found")}`;
+            document.body.appendChild(toast);
+            if (window.lucide) lucide.createIcons();
+            requestAnimationFrame(() => toast.classList.remove('opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 500);
+            }, 2000);
         }
     },
 
