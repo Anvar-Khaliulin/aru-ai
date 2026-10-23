@@ -12,6 +12,7 @@ import { Triggers } from './triggers.js';
 import { CanvasManager } from './canvas.js';
 import { PluginManager } from './pluginManager.js';
 import { Chapters } from './chapters.js';
+import { Safety } from './safety.js';
 
 export const ChatController = {
     app: null,
@@ -683,16 +684,36 @@ export const ChatController = {
             if (placeholder && targetChatId === state.currentChatId) placeholder.classList.add('hidden');
 
             let userMsgId = null;
+            const fileNames = attachments.map(f => f.name);
             if (!activeTab.isPrivate) {
-                userMsgId = DB.saveMessage(targetChatId, 'user', text);
+                userMsgId = DB.saveMessage(targetChatId, 'user', text, '', 0, fileNames);
             } else {
-                activeTab.messages.push({ role: 'user', content: text });
+                activeTab.messages.push({ role: 'user', content: text, fileNames: fileNames });
             }
 
             if (targetChatId === state.currentChatId) {
-                UI.appendMessage({ role: 'user', content: text, id: userMsgId });
-                UI.showTyping();
+                UI.appendMessage({ role: 'user', content: text, id: userMsgId, fileNames: fileNames });
             }
+
+            // Age-mode guard: deterministic local screening in child profiles.
+            // The refusal is produced without any LLM call, so it holds on every provider.
+            const safetyHit = Safety.checkInput(text);
+            if (safetyHit) {
+                const refusal = Safety.getRefusal(safetyHit);
+                let refusalMsgId = null;
+                if (!activeTab.isPrivate) {
+                    refusalMsgId = DB.saveMessage(targetChatId, 'model', refusal, '', 1);
+                } else {
+                    activeTab.messages.push({ role: 'model', content: refusal, emotion: '', isHTML: true });
+                }
+                if (targetChatId === state.currentChatId) {
+                    UI.appendMessage({ role: 'model', content: refusal, emotion: '', isHTML: true, id: refusalMsgId });
+                }
+                console.info(`Safety: local refusal (${safetyHit}) in child mode`);
+                return;
+            }
+
+            if (targetChatId === state.currentChatId) UI.showTyping();
 
             let searchContext = '';
             if (activeTab.isSearchEnabled) {
@@ -700,11 +721,21 @@ export const ChatController = {
                 try {
                     const snippets = await Search.query(text);
                     if (snippets) {
-                        const prefix = state.translations.search_prefix || "According to search results:";
-                        searchContext = `\n\n[SYSTEM: WEB SEARCH RESULTS]\n${snippets}\n\nINSTRUCTION: Using ONLY the search results provided above, generate a helpful answer. MUST start your response with "${prefix}". If results are completely irrelevant, still use the prefix but explain you found nothing specifically matching.`;
+                        const smartMode = (state.userSettings.search_smart ?? 'true') !== 'false';
+                        if (smartMode) {
+                            console.log("Grounding: Smart mode - enriching the answer with search results");
+                            searchContext = `\n\n[SYSTEM: WEB SEARCH RESULTS]\n${snippets}\n\nINSTRUCTION: Fresh web search results are attached above. Combine them with your own knowledge and your memory about the user to produce a complete, natural and engaging answer. Give priority to the search results for time-sensitive facts (news, dates, prices, versions). If the results are irrelevant, disregard them and answer normally. Do not mention the search or these instructions unless the user asks.`;
+                        } else {
+                            console.log("Grounding: Strict mode - answering from search results only");
+                            const prefix = state.translations.search_prefix || "According to search results:";
+                            searchContext = `\n\n[SYSTEM: WEB SEARCH RESULTS]\n${snippets}\n\nINSTRUCTION: Using ONLY the search results provided above, generate a helpful answer. MUST start your response with "${prefix}". If results are completely irrelevant, still use the prefix but explain you found nothing specifically matching.`;
+                        }
                         console.log("Grounding: Results injected into context");
                     }
-                } catch (e) { console.error("Grounding: Search failed", e); }
+                } catch (e) {
+                    console.error("Grounding: Search failed", e);
+                    UI.showToast(`${state.translations.search_error_toast || 'Web search failed, answering from knowledge'}: ${e.message}`, 'cloud-off');
+                }
             }
 
             const context = await Triggers.getRelevantContext(text);
@@ -730,7 +761,7 @@ export const ChatController = {
             }
 
             const allMessages = activeTab.isPrivate ? activeTab.messages : DB.getMessages(targetChatId);
-            const contextLimit = parseInt(state.userSettings.token_limit) || 2048;
+            const contextLimit = parseInt(state.userSettings.token_limit) || 8192;
             const history = ChatController.app.buildContextHistory(
                 allMessages.slice(0, -1),
                 ChatController.app.tokenEstimator(ChatController.app.llm.systemInstruction),
@@ -738,12 +769,20 @@ export const ChatController = {
                 contextLimit
             );
 
-            const raw = await ChatController.app.llm.sendMessage(history, toSend);
-            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(raw, activeTab.isPrivate);
+            let raw = await ChatController.app.llm.sendMessage(history, toSend);
+            if (raw == null) {
+                raw = Safety.getRefusal('output');
+            } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
+                console.warn('Safety: model output filtered in child mode');
+                raw = Safety.getRefusal('output');
+            }
+            const extracted = Triggers.extractSuggestions(raw);
+            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse, activeTab.isPrivate);
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, activeTab.isPrivate);
-            const emotion = Heuristics.determineEmotion(responseAfterTasks, { userText: text });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks, targetChatId, activeTab.isPrivate);
-            const finalHtml = await Triggers.processResponseForTools((typeof marked !== 'undefined') ? marked.parse(artifactsProcessed) : artifactsProcessed);
+            const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, activeTab.isPrivate);
+            const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: text });
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate);
+            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
 
             let modelMsgId = null;
             if (!activeTab.isPrivate) {
@@ -754,7 +793,7 @@ export const ChatController = {
 
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: modelMsgId });
+                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: modelMsgId, suggestions: extracted.suggestions });
             }
 
             if (!activeTab.isPrivate) {
@@ -813,8 +852,9 @@ export const ChatController = {
         const activeTab = state.tabs.find(t => t.chatId == targetChatId);
         if (!activeTab || activeTab.isSending) return;
 
-        const visibleText = `#### [${title}](${link})\n\n${fullText || desc || ''}`;
-        const payload = `[[NEWS_FULL]]\n${fullText || desc || ''}\n[[/NEWS_FULL]]\n${title}`;
+        const cleanFull = (fullText || desc || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const visibleText = `#### [${title}](${link})\n\n${cleanFull}`;
+        const payload = `[[NEWS_FULL]]\n${cleanFull}\n[[/NEWS_FULL]]\n${title}`;
         const newsMsgId = DB.saveMessage(targetChatId, 'user', payload);
         if (targetChatId === state.currentChatId) UI.appendMessage({ role: 'user', content: visibleText, id: newsMsgId });
 
@@ -823,7 +863,10 @@ export const ChatController = {
 
         try {
             if (targetChatId === state.currentChatId) UI.showTyping();
-            let toSend = payload;
+            const langNames = { ru: 'Russian', kk: 'Kazakh', en: 'English' };
+            const replyLang = langNames[state.lang] || 'Russian';
+            const discussNote = `[SYSTEM: The user wants to DISCUSS this news item with you. Give YOUR OWN take: what stands out, why it matters, your opinion and mood. Do NOT just retell or summarize the article. Reply in ${replyLang}.]`;
+            let toSend = `${discussNote}\n\n${payload}`;
             const context = await Triggers.getRelevantContext(title);
             if (context) toSend = `[SYSTEM_MEMORY_CONTEXT]\n${context}\n[/SYSTEM_MEMORY_CONTEXT]\n\nUser: ${toSend}`;
 
@@ -833,24 +876,32 @@ export const ChatController = {
             }
 
             const allMessages = DB.getMessages(targetChatId);
-            const contextLimit = parseInt(state.userSettings.token_limit) || 2048;
+            const contextLimit = parseInt(state.userSettings.token_limit) || 8192;
             const history = ChatController.app.buildContextHistory(
                 allMessages.slice(0, -1),
                 ChatController.app.tokenEstimator(ChatController.app.llm.systemInstruction),
                 ChatController.app.tokenEstimator(toSend),
                 contextLimit
             );
-            const raw = await ChatController.app.llm.sendMessage(history, toSend);
-            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(raw);
+            let raw = await ChatController.app.llm.sendMessage(history, toSend);
+            if (raw == null) {
+                raw = Safety.getRefusal('output');
+            } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
+                console.warn('Safety: model output filtered in child mode');
+                raw = Safety.getRefusal('output');
+            }
+            const extracted = Triggers.extractSuggestions(raw);
+            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse);
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, false);
-            const emotion = Heuristics.determineEmotion(responseAfterTasks, { userText: payload });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterTasks, targetChatId, activeTab.isPrivate);
-            const finalHtml = await Triggers.processResponseForTools(typeof marked !== 'undefined' ? marked.parse(artifactsProcessed) : artifactsProcessed);
+            const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, false);
+            const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: payload });
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate);
+            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
 
             const newsModelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: newsModelMsgId });
+                UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: newsModelMsgId, suggestions: extracted.suggestions });
             }
         } catch (err) {
             if (targetChatId === state.currentChatId) {

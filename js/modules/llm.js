@@ -14,6 +14,7 @@ export class LLMClient {
         this.systemInstruction = '';
         this.maxOutputTokens = 2048;
         this.temperature = 0.9;
+        this.ageMode = 'adult'; // 'child', 'teen', 'adult' — set from updateSystemPrompt
     }
 
     setLLMConfig(config) {
@@ -31,6 +32,16 @@ export class LLMClient {
     setBaseUrl(url) { this.baseUrl = url; }
     setModelName(name) { this.modelName = name; }
     setSystemInstruction(text) { this.systemInstruction = text; }
+    setAgeMode(m) { this.ageMode = m || 'adult'; }
+
+    // Child/teen profiles get a hard temperature ceiling: high temperature degrades
+    // instruction-following on weak local models, which is exactly where mode rules fail.
+    effectiveTemperature() {
+        if (this.ageMode === 'child' || this.ageMode === 'teen') {
+            return Math.min(this.temperature, 0.5);
+        }
+        return this.temperature;
+    }
 
     async sendMessage(history, currentMessage) {
         if (this.llmType === 'gemini') {
@@ -57,13 +68,23 @@ export class LLMClient {
         const payload = {
             contents,
             generationConfig: {
-                temperature: this.temperature,
+                temperature: this.effectiveTemperature(),
                 maxOutputTokens: this.maxOutputTokens,
             }
         };
 
         if (this.systemInstruction) {
             payload.systemInstruction = { parts: [{ text: this.systemInstruction }] };
+        }
+
+        // Native Google safety filters as a backstop for child profiles (no cost, server-side)
+        if (this.ageMode === 'child') {
+            payload.safetySettings = [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+            ];
         }
 
         const res = await Network.fetch(url, {
@@ -78,7 +99,19 @@ export class LLMClient {
         }
 
         const data = await res.json();
-        return data.candidates[0].content.parts[0].text;
+
+        const candidate = data.candidates && data.candidates[0];
+        if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+            // Gemini blocked the prompt/response on safety grounds — handled upstream as a soft refusal
+            if (this.ageMode === 'child' && data.promptFeedback && data.promptFeedback.blockReason) {
+                console.warn('Gemini safety block:', data.promptFeedback.blockReason);
+                return null;
+            }
+            console.error('Gemini Response Error:', data);
+            throw new Error('Invalid response from LLM (missing candidates)');
+        }
+
+        return candidate.content.parts[0].text;
     }
 
     async sendOpenAI(history, currentMessage) {
@@ -101,7 +134,7 @@ export class LLMClient {
         const payload = {
             model: this.modelName,
             messages: messages,
-            temperature: this.temperature,
+            temperature: this.effectiveTemperature(),
             max_tokens: this.maxOutputTokens
         };
 

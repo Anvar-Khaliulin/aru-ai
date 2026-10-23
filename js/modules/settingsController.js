@@ -44,6 +44,12 @@ export const SettingsController = {
         if (geminiBlock) geminiBlock.classList.toggle('hidden', type !== 'gemini');
         if (orBlock) orBlock.classList.toggle('hidden', type !== 'openrouter');
         if (customBlock) customBlock.classList.toggle('hidden', type !== 'custom');
+
+        // Suggest a context budget that fits the provider unless the user edited the field
+        const tokenLimitInput = document.getElementById('inp-token-limit');
+        if (tokenLimitInput && tokenLimitInput.dataset.userEdited !== 'true') {
+            tokenLimitInput.value = type === 'custom' ? 8192 : 32768;
+        }
     },
 
     updateSearchProviderParams() {
@@ -90,6 +96,8 @@ export const SettingsController = {
     saveAllSettings: async () => {
         const typeSelect = document.getElementById('inp-llm-type');
         const llmType = typeSelect?.value || state.userSettings.llm_type || 'gemini';
+        const t = state.translations || {};
+        const prevUserMode = state.userSettings.user_mode;
 
         const getVal = (id, fallback = '') => {
             const el = document.getElementById(id);
@@ -111,12 +119,13 @@ export const SettingsController = {
 
             user_name: getVal('inp-user-name', state.userSettings.user_name || 'User'),
             user_mode: getVal('inp-user-mode', state.userSettings.user_mode || 'adult'),
-            token_limit: getVal('inp-token-limit', state.userSettings.token_limit || 2048),
+            token_limit: getVal('inp-token-limit', state.userSettings.token_limit || 8192),
             max_output_tokens: getVal('inp-max-output', state.userSettings.max_output_tokens || 2048),
             show_stickers: getVal('inp-show-stickers', state.userSettings.show_stickers ?? 'true'),
             ai_temp: getVal('inp-ai-temp', state.userSettings.ai_temp ?? 0.9),
             rss_urls: document.getElementById('inp-rss-urls')?.value || state.userSettings.rss_urls || '',
             search_provider: getVal('inp-search-provider', state.userSettings.search_provider || 'none'),
+            search_smart: getVal('inp-search-smart', state.userSettings.search_smart ?? 'true'),
             tavily_key: getVal('inp-tavily-key', state.userSettings.tavily_key || ''),
             searxng_url: getVal('inp-searxng-url', state.userSettings.searxng_url || ''),
             proxy_strategy: getVal('inp-proxy-strategy', state.userSettings.proxy_strategy || 'auto'),
@@ -136,6 +145,17 @@ export const SettingsController = {
         const sigC = document.getElementById('inp-signaling-custom')?.value;
         settings.signaling_server = (sigS === 'custom' && sigC) ? sigC : 'peerjs-default';
 
+        if (settings.proxy_strategy === 'custom' && !/^https?:\/\/.+/i.test((settings.proxy_custom_url || '').trim())) {
+            const el = document.getElementById('inp-proxy-custom-url');
+            if (el) {
+                el.classList.add('border-red-400');
+                el.focus();
+            }
+            alert(t.network_custom_proxy_invalid || 'Enter a valid proxy URL (must start with https:// or http://)');
+            return;
+        }
+        document.getElementById('inp-proxy-custom-url')?.classList.remove('border-red-400');
+
         for (let k in settings) {
             DB.saveSetting(k, settings[k], false); // Batch mode: no auto-save
         }
@@ -148,7 +168,6 @@ export const SettingsController = {
         let config = {
             llmType: settings.llm_type,
             aiTemp: settings.ai_temp,
-            contextLimit: settings.token_limit,
             maxOutputTokens: settings.max_output_tokens
         };
         if (settings.llm_type === 'gemini') {
@@ -161,6 +180,11 @@ export const SettingsController = {
         SettingsController.app.llm.setLLMConfig(config);
 
         SettingsController.app.updateSystemPrompt();
+
+        // Mode gate listeners (adult-only surfaces like the Skills plugin) close themselves on downgrade
+        if (settings.user_mode !== prevUserMode) {
+            try { window.dispatchEvent(new CustomEvent('aru-user-mode-changed', { detail: { mode: settings.user_mode } })); } catch (e) { }
+        }
 
         // Apply remote polling changes immediately if cloud sync is active
         try {
@@ -175,6 +199,14 @@ export const SettingsController = {
     checkMixedContent: (url) => {
         if (!url) return false;
         return window.location.protocol === 'https:' && url.startsWith('http:');
+    },
+
+    updateNetworkStrategyUI: () => {
+        const strategy = document.getElementById('inp-proxy-strategy')?.value || 'auto';
+        const wrap = document.getElementById('wrap-proxy-custom-url');
+        const hint = document.getElementById('hint-proxy-auto');
+        if (wrap) wrap.classList.toggle('hidden', strategy !== 'custom');
+        if (hint) hint.classList.toggle('hidden', strategy !== 'auto');
     },
 
     openSettings: () => {
@@ -346,8 +378,16 @@ export const SettingsController = {
                                     ${t.label_context_creativity || 'Context & Creativity'}
                                 </div>
                                 <div class="grid grid-cols-2 gap-4">
-                                    <div><label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_context_limit || 'Контекст'}</label><input type="number" id="inp-token-limit" value="${s.token_limit || 2048}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500"></div>
-                                    <div><label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_ai_tokens || 'Ответ'}</label><input type="number" id="inp-max-output" value="${s.max_output_tokens || 2048}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500"></div>
+                                    <div>
+                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_context_limit || 'Контекст'}</label>
+                                        <input type="number" id="inp-token-limit" value="${s.token_limit || 8192}" oninput="this.dataset.userEdited='true'" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <p class="text-[9px] text-gray-400 mt-1.5 leading-snug">${t.hint_token_limit || 'Сколько последних сообщений беседы Ару помнит. В API не передаётся: облачным моделям можно ставить 32 000+, для локальных — равным num_ctx сервера.'}</p>
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_ai_tokens || 'Ответ'}</label>
+                                        <input type="number" id="inp-max-output" value="${s.max_output_tokens || 2048}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <p class="text-[9px] text-gray-400 mt-1.5 leading-snug">${t.hint_max_output || 'Максимальная длина одного ответа Ару. Передаётся в API модели как жёсткий лимит.'}</p>
+                                    </div>
                                 </div>
                                 
                                 <div class="space-y-2">
@@ -403,7 +443,7 @@ export const SettingsController = {
                             <h4 class="text-sm font-bold mb-2 flex items-center gap-2"><i data-lucide="rss" class="w-4 h-4 text-aru-500"></i> ${t.settings_tab_rss || 'Новости (RSS)'}</h4>
                             <p class="text-xs text-gray-500 mb-4">${t.settings_rss_urls_hint || 'Ару будет использовать эти ссылки для поиска новостей.'}</p>
                             <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">${t.settings_rss_urls_label || 'RSS ленты (одна на строку)'}</label>
-                            <textarea id="inp-rss-urls" rows="6" class="w-full p-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl text-xs outline-none focus:border-aru-500 dark:text-gray-200" placeholder="https://example.com/rss.xml">${s.rss_urls || ''}</textarea>
+                            <textarea id="inp-rss-urls" rows="6" class="w-full p-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl text-xs outline-none focus:border-aru-500 dark:text-gray-200" placeholder="${t.settings_rss_urls_placeholder || 'https://example.com/rss.xml #tag'}">${s.rss_urls || ''}</textarea>
                         </div>
                     </div>
 
@@ -419,16 +459,22 @@ export const SettingsController = {
                                 </div>
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_proxy_strategy || 'Стратегия подключения'}</label>
-                                        <select id="inp-proxy-strategy" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                        <select id="inp-proxy-strategy" onchange="SettingsController.updateNetworkStrategyUI()" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                                             <option value="none" ${isOpt(s.proxy_strategy, 'none')}>${t.label_proxy_none || 'Прямое (Без прокси)'}</option>
-                                            <option value="auto" ${isOpt(s.proxy_strategy, 'auto')}>${t.label_proxy_auto || 'Авто (Публичные прокси)'}</option>
+                                            <option value="auto" ${isOpt(s.proxy_strategy, 'auto') || !s.proxy_strategy ? 'selected' : ''}>${t.label_proxy_auto || 'Авто (Публичные прокси)'}</option>
                                             <option value="custom" ${isOpt(s.proxy_strategy, 'custom')}>${t.label_proxy_custom || 'Свой прокси'}</option>
                                         </select>
                                     </div>
+                                    <div id="hint-proxy-auto" class="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] rounded-lg border border-amber-100 dark:border-amber-800/30 flex items-start gap-1.5 ${(s.proxy_strategy || 'auto') === 'auto' ? '' : 'hidden'}">
+                                        <i data-lucide="shield-alert" class="w-3 h-3 mt-0.5 shrink-0"></i>
+                                        <span>${t.hint_proxy_auto_warn || 'Запросы к сайтам без CORS проходят через сторонние публичные прокси (corsproxy.io, allorigins.win). Не отправляйте через них конфиденциальные данные.'}</span>
+                                    </div>
+                                    <div id="wrap-proxy-custom-url" class="${(s.proxy_strategy || 'auto') === 'custom' ? '' : 'hidden'}">
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_custom_proxy_url || 'URL кастомного прокси'}</label>
                                         <input type="text" id="inp-proxy-custom-url" value="${s.proxy_custom_url || ''}" placeholder="https://myproxy.com/?url=" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                                         <p class="text-[9px] text-gray-400 mt-1">${t.hint_custom_proxy || 'Используйте %URL% для подстановки адреса.'}</p>
+                                    </div>
                                     </div>
                                     <div class="flex items-center gap-2 pt-2">
                                         <input type="checkbox" id="inp-localhost-priority" ${s.localhost_priority !== 'false' ? 'checked' : ''} class="accent-aru-500">
@@ -444,6 +490,11 @@ export const SettingsController = {
                                         <option value="searxng" ${isOpt(s.search_provider, 'searxng')}>${t.label_provider_searxng || 'SearXNG'}</option>
                                     </select>
                                 </div>
+                                <div class="flex items-center gap-2 pt-2">
+                                    <input type="checkbox" id="inp-search-smart" ${s.search_smart !== 'false' ? 'checked' : ''} class="accent-aru-500">
+                                    <label for="inp-search-smart" class="text-xs font-bold text-gray-600 dark:text-gray-400 cursor-pointer">${t.label_search_smart || 'Умный поиск'}</label>
+                                </div>
+                                <p class="text-[9px] text-gray-400">${t.hint_search_smart || 'Результаты из интернета дополняют знания модели и факты о вас, а не заменяют их. Выключите, чтобы получать ответы строго по результатам поиска.'}</p>
                                 <div id="search-params-container" class="space-y-4 pt-2">
                                     <div id="params-tavily" class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 space-y-4 ${s.search_provider === 'tavily' ? '' : 'hidden'}">
                                         <div class="flex items-center gap-2 text-xs font-bold text-aru-500"><i data-lucide="key" class="w-4 h-4"></i> Tavily</div>

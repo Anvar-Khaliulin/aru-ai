@@ -12,7 +12,7 @@ export const Tools = {
     async getWeatherCard(locationName = 'Almaty') {
         try {
             const langParam = state.lang || 'ru';
-            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1&language=${langParam}&format=json`);
+            const geoRes = await Network.fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1&language=${langParam}&format=json`, {}, 'cors_safe');
             const geoData = await geoRes.json();
 
             const labels = {
@@ -24,7 +24,7 @@ export const Tools = {
             if (!geoData.results) return `<div class="p-3 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl text-xs flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i> ${labels.error}: ${locationName}</div>`;
 
             const { latitude, longitude, name, country } = geoData.results[0];
-            const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`);
+            const weatherRes = await Network.fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`, {}, 'cors_safe');
             const wData = await weatherRes.json();
             const current = wData.current;
             const daily = wData.daily;
@@ -81,6 +81,113 @@ export const Tools = {
         }
     },
 
+    // --- TASK BOARD ---
+    async getTasksCard(projectQuery = '') {
+        const plugin = window.TaskPlugin;
+        const t = (key, fallback) => {
+            const raw = window.PluginManager ? window.PluginManager.getTranslation(key) : key;
+            return (raw && raw !== key) ? raw : fallback;
+        };
+
+        if (!plugin || !plugin.state || !Array.isArray(plugin.state.projects) || plugin.state.projects.length === 0) {
+            return `<div class="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl text-gray-500 text-xs flex items-center gap-2"><i data-lucide="folder-kanban"></i> ${t('task_show_no_projects', 'No projects yet. Ask Aru to create one.')}</div>`;
+        }
+
+        const query = (projectQuery || '').trim().toLowerCase();
+        let projects = plugin.state.projects;
+        if (query) {
+            const filtered = projects.filter(p => p.name.toLowerCase().includes(query));
+            if (filtered.length > 0) projects = filtered;
+        }
+
+        const palette = ['bg-aru-500', 'bg-amber-400', 'bg-emerald-500', 'bg-sky-500', 'bg-rose-500', 'bg-violet-500'];
+
+        let html = `<div class="my-4 space-y-3 animate-fade-in" data-tasks-card>`;
+
+        for (const p of projects) {
+            const allTasks = (p.columns || []).flatMap(c => c.tasks || []);
+            html += `
+            <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-4 shadow-xl overflow-hidden" data-tasks-project="${Tools._esc(p.name)}">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <h3 class="font-bold text-sm text-gray-800 dark:text-gray-100 flex items-center gap-2 min-w-0">
+                        <i data-lucide="folder-kanban" class="w-4 h-4 text-aru-500 shrink-0"></i>
+                        <span class="truncate">${Tools._esc(p.name)}</span>
+                    </h3>
+                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-lg border border-gray-100 dark:border-gray-800 shrink-0">${allTasks.length} ${t('task_count_' + Tools._pluralForm(allTasks.length, state.lang), 'tasks')}</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    ${(p.columns || []).map((c, ci) => `
+                        <div class="rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 p-3" data-tasks-column="${Tools._esc(c.title)}">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="w-2 h-2 rounded-full ${palette[ci % palette.length]}"></span>
+                                <span class="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 truncate">${Tools._esc(c.title)}</span>
+                                <span class="ml-auto text-[10px] font-bold text-gray-300 dark:text-gray-600">${(c.tasks || []).length}</span>
+                            </div>
+                            <div class="space-y-2">
+                                ${(c.tasks && c.tasks.length) ? c.tasks.map(task => Tools._renderTaskRow(task, t)).join('') : `<p class="text-[10px] text-gray-300 dark:text-gray-600 italic">&mdash;</p>`}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+
+        html += `</div>`;
+        return html;
+    },
+
+    // Count word form: ru uses 1/2-4/5+ rules, kk keeps a single form after numerals
+    _pluralForm(n, lang) {
+        const l = String(lang || 'en').split('-')[0];
+        if (l === 'ru') {
+            const m10 = Math.abs(n) % 10, m100 = Math.abs(n) % 100;
+            if (m10 === 1 && m100 !== 11) return 'one';
+            if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return 'few';
+            return 'many';
+        }
+        if (l === 'kk') return 'many';
+        return n === 1 ? 'one' : 'many';
+    },
+
+    _renderTaskRow(task, t) {
+        const dl = Tools._parseTaskDate(task.deadline);
+        let badge = '';
+        if (dl) {
+            const isOverdue = dl.getTime() < Date.now();
+            const isToday = !isOverdue && dl.toDateString() === new Date().toDateString();
+            const cls = isOverdue
+                ? 'bg-red-50 dark:bg-red-900/20 text-red-500'
+                : (isToday ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600' : 'bg-gray-100/70 dark:bg-gray-800 text-gray-400');
+            badge = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${cls}">
+                <i data-lucide="clock" class="w-2.5 h-2.5"></i>
+                ${Tools._esc(dl.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))}
+            </span>`;
+        }
+        return `
+            <div class="p-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm" data-task-title="${Tools._esc(task.title)}">
+                <p class="text-[11px] font-bold text-gray-700 dark:text-gray-200 leading-snug">${Tools._esc(task.title)}</p>
+                ${task.desc ? `<p class="text-[10px] text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">${Tools._esc(task.desc)}</p>` : ''}
+                ${badge ? `<div class="mt-1.5">${badge}</div>` : ''}
+            </div>`;
+    },
+
+    // Local-time parse: date-only values default to 12:00 so they are not
+    // shifted by UTC interpretation (new Date('2026-10-08') => 05:00 in UTC+5).
+    _parseTaskDate(raw) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(raw || ''));
+        if (!m) return null;
+        return new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
+    },
+
+    _esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
     // --- NEWS RSS ---
     async getNewsCard(rssRawList, filterTag = '') {
         if (!rssRawList || rssRawList.length === 0) {
@@ -89,8 +196,8 @@ export const Tools = {
 
         const feeds = rssRawList.map(item => {
             const parts = item.split('#').map(s => s.trim());
-            return { url: parts[0], tag: parts[1] || '' };
-        });
+            return { url: Tools._normalizeFeedUrl(parts[0]), tag: parts.slice(1).filter(Boolean).join(' ') };
+        }).filter(f => f.url);
 
         const currentLang = state.lang || 'ru';
         let targetFeeds = feeds;
@@ -116,81 +223,29 @@ export const Tools = {
 
         let html = `<div class="my-4 grid grid-cols-1 gap-3 animate-fade-in">`;
         let count = 0;
+        let feedErrors = 0;
 
         for (const feed of targetFeeds) {
-            if (count >= 10) break; // Increased individual feed limit but globally still capped
+            if (count >= 10) break; // Global cap across all feeds
             try {
                 console.log(`Tools: Fetching feed ${feed.url} (Tag: ${feed.tag})`);
-                const res = await Network.fetch(feed.url, {}, 'cors_unsafe');
-                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-
-                const xmlText = await res.text();
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-                // Detect Parsing Error
-                const parseError = xmlDoc.getElementsByTagName("parsererror");
-                if (parseError.length > 0) {
-                    console.error(`Tools: XML Parse Error for ${feed.url}`, parseError[0].textContent);
-                    continue;
-                }
-
-                // Supports data normalization for both standard RSS (item) and Atom (entry) feeds
-                let items = xmlDoc.querySelectorAll("item");
-                let isAtom = false;
-                if (items.length === 0) {
-                    items = xmlDoc.querySelectorAll("entry");
-                    isAtom = true;
-                }
-
-                console.log(`Tools: Found ${items.length} items in ${feed.url} (Format: ${isAtom ? 'Atom' : 'RSS'})`);
+                const items = await Tools._fetchFeedItems(feed.url);
+                console.log(`Tools: Found ${items.length} items in ${feed.url}`);
 
                 for (const item of items) {
                     if (count >= 10) break;
 
-                    let title = "", link = "#", desc = "", fullTextRaw = "", imgUrl = "";
-
-                    if (isAtom) {
-                        // Atom Format
-                        title = item.querySelector("title")?.textContent || "No Title";
-                        // Atom links are usually <link href="..."/>
-                        const linkNode = item.querySelector("link[rel='alternate']") || item.querySelector("link:not([rel])") || item.querySelector("link");
-                        link = linkNode ? (linkNode.getAttribute("href") || linkNode.textContent) : "#";
-
-                        const summary = item.querySelector("summary")?.textContent || "";
-                        const content = item.querySelector("content")?.textContent || "";
-                        desc = summary || content || "";
-                        fullTextRaw = content || summary;
-                    } else {
-                        // RSS Format
-                        title = item.querySelector("title")?.textContent || "No Title";
-                        link = item.querySelector("link")?.textContent || "#";
-                        const contentEncoded = item.getElementsByTagName('content:encoded')[0];
-                        const description = item.querySelector("description")?.textContent || "";
-                        desc = description;
-                        fullTextRaw = contentEncoded?.textContent || description;
-                    }
+                    const title = item.title;
+                    const link = item.link;
+                    const desc = item.desc;
+                    const imgUrl = item.imgUrl;
 
                     // Sanitizes HTML elements from string payload and truncates text for safe UI preview rendering
-                    const cleanDesc = desc.replace(/<[^>]*>/g, '').trim().slice(0, 150) + (desc.length > 150 ? '...' : '');
+                    const cleanText = Tools._stripHtml(desc);
+                    const cleanDesc = cleanText.slice(0, 150) + (cleanText.length > 150 ? '...' : '');
 
-                    // Prepare safe full text for data attribute (URI-encoded)
-                    // We remove excessive whitespace and safely encode
-                    const safeFull = encodeURIComponent(fullTextRaw.replace(/\s+/g, ' ').trim());
-
-                    // Analyzes enclosure targets to identify optimal image thumbnails
-                    const enclosure = item.querySelector("enclosure[type^='image']");
-                    if (enclosure) imgUrl = enclosure.getAttribute('url');
-
-                    if (!imgUrl) {
-                        const mediaContent = item.getElementsByTagName("media:content")[0] || item.getElementsByTagName("content")[0];
-                        if (mediaContent) imgUrl = mediaContent.getAttribute('url');
-                    }
-
-                    if (!imgUrl) {
-                        const imgMatch = desc.match(/<img[^>]+src="([^">]+)"/);
-                        if (imgMatch) imgUrl = imgMatch[1];
-                    }
+                    // Prepare safe full text for data attribute (URI-encoded, HTML stripped)
+                    const safeFull = encodeURIComponent(Tools._stripHtml(item.full));
 
                     const source = new URL(feed.url).hostname.replace('www.', '');
 
@@ -230,13 +285,162 @@ export const Tools = {
                     count++;
                 }
             } catch (e) {
+                feedErrors++;
                 console.warn(`Tools: RSS Feed failed for ${feed.url}`, e);
             }
         }
         html += `</div>`;
 
-        if (count === 0) return `<div class="p-4 text-center text-gray-400 text-xs italic">${state.translations?.msg_rss_no_news || 'No news found'}</div>`;
+        if (count === 0) {
+            if (feedErrors > 0) {
+                return `<div class="p-4 text-center text-gray-400 text-xs italic">${state.translations?.msg_rss_unreachable || 'Could not load the feeds. Check your internet, feed URLs, or network settings.'}</div>`;
+            }
+            return `<div class="p-4 text-center text-gray-400 text-xs italic">${state.translations?.msg_rss_no_news || 'No news found'}</div>`;
+        }
 
         return html;
+    },
+
+    // --- RSS HELPERS ---
+
+    _normalizeFeedUrl(raw) {
+        const s = (raw || '').trim();
+        if (!s || /^https?:\/\//i.test(s)) return s;
+        let hostname = '';
+        try {
+            hostname = new URL(`http://${s}`).hostname.toLowerCase();
+        } catch (e) {
+            return s;
+        }
+        const isLocal = Network._isLoopback(hostname) || Network._isPrivateNetwork(hostname);
+        return `${isLocal ? 'http' : 'https'}://${s}`;
+    },
+
+    async _fetchFeedItems(feedUrl) {
+        const strategy = (state.userSettings || {}).proxy_strategy || 'auto';
+
+        // In auto mode prefer rss2json: it parses the feed server-side and also
+        // rescues feeds that do not send CORS headers.
+        if (strategy === 'auto') {
+            try {
+                return await Tools._fetchFeedViaRss2Json(feedUrl);
+            } catch (e) {
+                console.warn(`Tools: rss2json failed for ${feedUrl}, falling back to raw feed`, e);
+            }
+        }
+
+        const xmlText = await Tools._fetchFeedXml(feedUrl);
+        return Tools._parseFeedXml(xmlText, feedUrl);
+    },
+
+    async _fetchFeedViaRss2Json(feedUrl) {
+        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        let res;
+        try {
+            res = await Network.fetch(apiUrl, { signal: controller.signal }, 'cors_safe');
+        } finally {
+            clearTimeout(timer);
+        }
+        if (!res.ok) throw new Error(`rss2json HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (data.status !== 'ok' || !Array.isArray(data.items)) {
+            throw new Error(`rss2json error: ${data.message || data.status}`);
+        }
+
+        return data.items.map(it => {
+            const desc = it.description || '';
+            return {
+                title: it.title || 'No Title',
+                link: it.link || '#',
+                desc: desc,
+                full: it.content || desc,
+                imgUrl: it.thumbnail || it.enclosure?.link || Tools._firstImage(desc) || ''
+            };
+        });
+    },
+
+    async _fetchFeedXml(feedUrl) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        let res;
+        try {
+            res = await Network.fetch(feedUrl, { signal: controller.signal }, 'cors_unsafe');
+        } finally {
+            clearTimeout(timer);
+        }
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+        return res.text();
+    },
+
+    _parseFeedXml(xmlText, feedUrl) {
+        const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
+        const parseError = xmlDoc.getElementsByTagName('parsererror');
+        if (parseError.length > 0) {
+            throw new Error(`Invalid XML from ${feedUrl}`);
+        }
+
+        // Supports data normalization for both standard RSS (item) and Atom (entry) feeds
+        let nodes = xmlDoc.querySelectorAll('item');
+        let isAtom = false;
+        if (nodes.length === 0) {
+            nodes = xmlDoc.querySelectorAll('entry');
+            isAtom = true;
+        }
+
+        const items = [];
+        for (const node of nodes) {
+            let title = '', link = '#', desc = '', full = '', imgUrl = '';
+
+            if (isAtom) {
+                // Atom Format
+                title = node.querySelector('title')?.textContent || 'No Title';
+                // Atom links are usually <link href="..."/>
+                const linkNode = node.querySelector("link[rel='alternate']") || node.querySelector("link:not([rel])") || node.querySelector('link');
+                link = linkNode ? (linkNode.getAttribute('href') || linkNode.textContent) : '#';
+
+                const summary = node.querySelector('summary')?.textContent || '';
+                const content = node.querySelector('content')?.textContent || '';
+                desc = summary || content || '';
+                full = content || summary;
+            } else {
+                // RSS Format
+                title = node.querySelector('title')?.textContent || 'No Title';
+                link = node.querySelector('link')?.textContent || '#';
+                const contentEncoded = node.getElementsByTagName('content:encoded')[0];
+                const description = node.querySelector('description')?.textContent || '';
+                desc = description;
+                full = contentEncoded?.textContent || description;
+            }
+
+            // Analyzes enclosure targets to identify optimal image thumbnails
+            const enclosure = node.querySelector("enclosure[type^='image']");
+            if (enclosure) imgUrl = enclosure.getAttribute('url') || '';
+
+            if (!imgUrl) {
+                const mediaContent = node.getElementsByTagName('media:content')[0] || node.getElementsByTagName('content')[0];
+                if (mediaContent) imgUrl = mediaContent.getAttribute('url') || '';
+            }
+
+            if (!imgUrl) imgUrl = Tools._firstImage(desc) || '';
+
+            items.push({ title, link, desc, full, imgUrl });
+        }
+        return items;
+    },
+
+    _firstImage(html) {
+        const m = (html || '').match(/<img[^>]+src="([^">]+)"/);
+        return m ? m[1] : '';
+    },
+
+    _stripHtml(html) {
+        return (html || '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
     },
 };

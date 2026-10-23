@@ -14,6 +14,19 @@ export const UI = {
         else document.getElementById('modal-container').innerHTML = '';
     },
 
+    showToast(message, icon = 'info') {
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1.5 px-3 rounded-full opacity-0 transition-opacity duration-500 z-50 flex items-center gap-2 max-w-[90vw] shadow-lg';
+        toast.innerHTML = `<i data-lucide="${icon}" class="w-3 h-3 text-aru-400 shrink-0"></i> <span class="truncate">${UI.escapeHTML(message)}</span>`;
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.remove('opacity-0'));
+        setTimeout(() => {
+            toast.classList.add('opacity-0');
+            setTimeout(() => toast.remove(), 500);
+        }, 3500);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
     scrollToBottom() {
         if (this.container) this.container.scrollTop = this.container.scrollHeight;
     },
@@ -93,19 +106,22 @@ export const UI = {
 
         if (msg.isHTML) {
             parsedContent = msg.content;
-            // Decodes HTML entities if the content appears to be escaped for proper rendering
+            // Legacy rows may hold fully escaped HTML; decode only those, otherwise
+            // legitimate entities (code samples, TeX like `a &lt; b`) would flatten the markup
             try {
-                if (typeof parsedContent === 'string' && parsedContent.indexOf('&lt;') !== -1) {
+                const looksEscaped = typeof parsedContent === 'string' &&
+                    parsedContent.indexOf('&lt;') !== -1 &&
+                    !/<[a-zA-Z!/]/.test(parsedContent);
+                if (looksEscaped) {
                     const doc = new DOMParser().parseFromString(parsedContent, 'text/html');
                     const decoded = doc.documentElement.textContent || parsedContent;
-                    // Heuristic check: restricts replacement to strings that successfully decoded into HTML tags
                     if (decoded && decoded.indexOf('<') !== -1) parsedContent = decoded;
                 }
             } catch (e) {
                 // Fallback to original content in case of decoding errors
             }
         } else {
-            parsedContent = typeof marked !== 'undefined' ? marked.parse(msg.content) : msg.content;
+            parsedContent = this.parseMarkdownWithMath(msg.content);
         }
 
         const msgId = 'm-' + Math.random().toString(36).substring(2, 9);
@@ -121,20 +137,63 @@ export const UI = {
         const settings = appState.userSettings || {};
 
         if (isUser) {
+            // Message file names (sent attachments) — stored as an array or a JSON string from DB
+            let fileNames = Array.isArray(msg.fileNames) ? msg.fileNames : null;
+            if (!fileNames && typeof msg.attachments === 'string' && msg.attachments) {
+                try {
+                    const parsed = JSON.parse(msg.attachments);
+                    if (Array.isArray(parsed)) fileNames = parsed;
+                } catch (e) { /* legacy rows without attachments */ }
+            }
+
+            let filesBadgeHTML = '';
+            if (fileNames && fileNames.length > 0) {
+                if (!window.aruFilesCache) window.aruFilesCache = {};
+                window.aruFilesCache[msgId] = fileNames;
+                const badgeTitle = (appState.translations && appState.translations.msg_files_badge) || 'Файлы сообщения';
+                filesBadgeHTML = `
+                <div class="msg-files-badge-wrap" onmouseenter="window.aruMsgFiles.show('${msgId}', this)" onmouseleave="window.aruMsgFiles.hide(this)">
+                    <button type="button" class="msg-files-badge" onclick="window.aruMsgFiles.toggle('${msgId}', this)" title="${UI.escapeHTML(badgeTitle)}" aria-label="${UI.escapeHTML(badgeTitle)}">
+                        <i data-lucide="paperclip" class="w-3.5 h-3.5"></i>
+                        <span>${fileNames.length}</span>
+                    </button>
+                    <div class="msg-files-popover chapters-panel hidden" role="tooltip"></div>
+                </div>`;
+            }
+
             html = `
-            <div class="flex gap-3 mb-6 flex-row-reverse animate-fade-in-up group"${dbIdAttr}>
+            <div class="flex gap-3 mb-6 flex-row-reverse animate-fade-in-up group${filesBadgeHTML ? ' relative z-10' : ''}"${dbIdAttr}>
                 <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 overflow-hidden">
                     <i data-lucide="user" class="w-5 h-5"></i>
                 </div>
-                <div class="max-w-[80%] bg-aru-500 text-white p-3 px-4 rounded-2xl rounded-tr-none shadow-md text-sm selection:bg-white/30">
-                    <div class="prose prose-invert prose-sm max-w-none break-words">
-                        ${parsedContent}
+                <div class="max-w-[80%] flex flex-col items-end gap-1.5">
+                    <div class="bg-aru-500 text-white p-3 px-4 rounded-2xl rounded-tr-none shadow-md text-sm selection:bg-white/30">
+                        <div class="prose prose-invert prose-sm max-w-none break-words">
+                            ${parsedContent}
+                        </div>
                     </div>
+                    ${filesBadgeHTML}
                 </div>
             </div>`;
         } else {
             const showStickers = settings.show_stickers !== 'false';
             const moodClass = msg.emotion ? `aru-${msg.emotion}` : '';
+
+            // Renders clickable quick-reply buttons proposed by the model; clicking one
+            // sends its label as the user's next message
+            let suggestionsHTML = '';
+            if (Array.isArray(msg.suggestions) && msg.suggestions.length > 0) {
+                if (!window.aruSuggestionsCache) window.aruSuggestionsCache = {};
+                window.aruSuggestionsCache[msgId] = msg.suggestions;
+                suggestionsHTML = `
+                <div class="flex flex-wrap gap-2 mt-2 ml-12 mr-4">
+                    ${msg.suggestions.map((s, i) => `
+                        <button type="button" onclick="window.aruSendSuggestion('${msgId}', ${i})"
+                            class="text-xs bg-aru-50 dark:bg-aru-900/50 border border-aru-200 dark:border-aru-800 text-aru-700 dark:text-aru-300 rounded-full px-3 py-1.5 hover:bg-aru-100 dark:hover:bg-aru-900 hover:border-aru-300 dark:hover:border-aru-700 transition-colors animate-fade-in-up text-left max-w-full">
+                            ${UI.escapeHTML(s)}
+                        </button>`).join('')}
+                </div>`;
+            }
 
             // Generates and appends HTML for character stickers if enabled in user settings
             let stickerHTML = '';
@@ -166,17 +225,135 @@ export const UI = {
                          </div>
                     </div>
                 </div>
+                ${suggestionsHTML}
                 ${stickerHTML}
             </div>`;
         }
 
         if (this.container) {
             this.container.insertAdjacentHTML('beforeend', html);
+            this.renderMath(this.container.lastElementChild);
             if (typeof hljs !== 'undefined') {
                 document.querySelectorAll('pre code').forEach((el) => hljs.highlightElement(el));
             }
             if (typeof lucide !== 'undefined') lucide.createIcons();
             this.scrollToBottom();
+        }
+    },
+
+    /**
+     * Markdown → HTML with TeX math shielded from the parser.
+     * marked would otherwise eat `\(`, `\[` and treat `_`/`*` inside formulas as
+     * emphasis, so math segments are swapped for placeholders and restored as
+     * plain text for renderMath() to pick up.
+     */
+    parseMarkdownWithMath(text) {
+        if (typeof text !== 'string') return text;
+        if (typeof marked === 'undefined') return text;
+
+        const MATH_RULES = [
+            /\$\$[\s\S]+?\$\$/g,
+            /\\\[[\s\S]+?\\\]/g,
+            /\\\([\s\S]+?\\\)/g,
+            // Inline $...$: non-space inner edges keep prose like "$5 and $10" as text
+            /\$[^$\s](?:[^$\n]*[^$\s])?\$/g
+        ];
+
+        const vault = [];
+        const nonce = Math.random().toString(36).slice(2, 8);
+        const shieldMath = (part) => {
+            for (const re of MATH_RULES) {
+                re.lastIndex = 0;
+                part = part.replace(re, (match) => {
+                    vault.push(match);
+                    return `@@ARUMATH${nonce}_${vault.length - 1}@@`;
+                });
+            }
+            return part;
+        };
+
+        const shielded = text.split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+            .map((part, i) => (i % 2 === 1) ? part : shieldMath(part))
+            .join('');
+
+        const restore = new RegExp(`@@ARUMATH${nonce}_(\\d+)@@`, 'g');
+        return marked.parse(shielded).replace(restore, (placeholder, index) => {
+            const raw = vault[Number(index)] || '';
+            return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        });
+    },
+
+    /**
+     * Renders LaTeX math ($...$, $$...$$, \( \), \[ \]) inside a message bubble with KaTeX.
+     * Works on the live DOM only: stored message HTML keeps raw TeX, so existing
+     * databases and the copy button are unaffected.
+     */
+    renderMath(root) {
+        if (!root || typeof katex === 'undefined') return;
+
+        const SKIP = { PRE: 1, CODE: 1, SCRIPT: 1, STYLE: 1, TEXTAREA: 1, INPUT: 1, BUTTON: 1 };
+        const RULES = [
+            { re: /\$\$([\s\S]+?)\$\$/g, display: true },
+            { re: /\\\[([\s\S]+?)\\\]/g, display: true },
+            { re: /\\\(([\s\S]+?)\\\)/g, display: false },
+            // Inline $...$: inner edges must be non-space so prose like "$5 and $10" is not treated as math
+            { re: /\$([^$\s](?:[^$\n]*[^$\s])?)\$/g, display: false }
+        ];
+
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+                if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                let el = node.parentElement;
+                while (el && el !== root) {
+                    if (SKIP[el.tagName] || el.classList.contains('katex')) return NodeFilter.FILTER_REJECT;
+                    el = el.parentElement;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        const textNodes = [];
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+        for (const node of textNodes) {
+            const text = node.nodeValue;
+            if (text.indexOf('$') === -1 && text.indexOf('\\(') === -1 && text.indexOf('\\[') === -1) continue;
+
+            const matches = [];
+            for (const rule of RULES) {
+                rule.re.lastIndex = 0;
+                let m;
+                while ((m = rule.re.exec(text)) !== null) {
+                    matches.push({ start: m.index, end: m.index + m[0].length, tex: m[1], display: rule.display });
+                    if (m[0] === '') rule.re.lastIndex++;
+                }
+            }
+            if (!matches.length) continue;
+
+            matches.sort((a, b) => a.start - b.start);
+            const picked = [];
+            let lastEnd = -1;
+            for (const m of matches) {
+                if (m.start >= lastEnd) {
+                    picked.push(m);
+                    lastEnd = m.end;
+                }
+            }
+
+            const frag = document.createDocumentFragment();
+            let pos = 0;
+            for (const m of picked) {
+                if (m.start > pos) frag.appendChild(document.createTextNode(text.slice(pos, m.start)));
+                const span = document.createElement('span');
+                try {
+                    katex.render(m.tex, span, { displayMode: m.display, throwOnError: false });
+                } catch (e) {
+                    span.textContent = text.slice(m.start, m.end);
+                }
+                frag.appendChild(span);
+                pos = m.end;
+            }
+            if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+            node.parentNode.replaceChild(frag, node);
         }
     },
 
@@ -210,6 +387,54 @@ export const UI = {
 
     clearAttachments() {
         this.renderAttachments([]);
+    },
+
+    // --- Message attachments popover (file names of a sent message) ---
+
+    showMsgFiles(msgId, wrapEl) {
+        const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        if (!pop) return;
+        clearTimeout(wrapEl._filesHideTimer);
+        if (pop.dataset.rendered !== msgId) {
+            const names = (window.aruFilesCache && window.aruFilesCache[msgId]) || [];
+            pop.innerHTML = `<div class="msg-files-list">${names.map(n => `
+                <div class="msg-files-row">
+                    <i data-lucide="file-text" class="w-3.5 h-3.5 shrink-0 text-aru-500"></i>
+                    <span>${this.escapeHTML(n)}</span>
+                </div>`).join('')}</div>`;
+            pop.dataset.rendered = msgId;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+        pop.classList.remove('hidden');
+    },
+
+    hideMsgFiles(wrapEl) {
+        const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        if (!pop || pop.classList.contains('hidden') || pop.dataset.pinned === '1') return;
+        clearTimeout(wrapEl._filesHideTimer);
+        wrapEl._filesHideTimer = setTimeout(() => pop.classList.add('hidden'), 250);
+    },
+
+    toggleMsgFiles(msgId, btnEl) {
+        const wrapEl = btnEl && btnEl.closest('.msg-files-badge-wrap');
+        const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        if (!pop) return;
+        if (!pop.classList.contains('hidden') && pop.dataset.pinned === '1') {
+            pop.classList.add('hidden');
+            pop.dataset.pinned = '';
+            if (this._msgFilesOutside) document.removeEventListener('click', this._msgFilesOutside, true);
+            return;
+        }
+        this.showMsgFiles(msgId, wrapEl);
+        pop.dataset.pinned = '1';
+        if (this._msgFilesOutside) document.removeEventListener('click', this._msgFilesOutside, true);
+        this._msgFilesOutside = (e) => {
+            if (wrapEl.contains(e.target)) return;
+            pop.classList.add('hidden');
+            pop.dataset.pinned = '';
+            document.removeEventListener('click', this._msgFilesOutside, true);
+        };
+        setTimeout(() => document.addEventListener('click', this._msgFilesOutside, true), 0);
     },
 
     updateModelProgress(progress) {
@@ -255,4 +480,20 @@ export const UI = {
         if (bar) bar.style.width = `${progress}%`;
         if (text) text.innerText = (t.model_loading_progress || 'Загрузка: {p}%').replace('{p}', progress);
     }
+};
+
+// Sends a quick-reply label as the user's next message
+window.aruSendSuggestion = (msgId, idx) => {
+    const suggestion = ((window.aruSuggestionsCache || {})[msgId] || [])[idx];
+    if (!suggestion) return;
+    const input = document.getElementById('prompt-input');
+    if (input) input.value = suggestion;
+    if (window.app && typeof window.app.sendMessage === 'function') window.app.sendMessage();
+};
+
+// Inline handlers for the message attachments popover (UI is module-scoped)
+window.aruMsgFiles = {
+    show: (msgId, el) => UI.showMsgFiles(msgId, el),
+    hide: (el) => UI.hideMsgFiles(el),
+    toggle: (msgId, el) => UI.toggleMsgFiles(msgId, el)
 };

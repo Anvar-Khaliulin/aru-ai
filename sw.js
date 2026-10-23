@@ -3,7 +3,7 @@
 Progressive Web App Service Worker for offline caching and resource management.
 ---chat.aru-lab.space---PWA---
 */
-const APP_VERSION = '0.9.7';
+const APP_VERSION = '1.0.0';
 const CACHE_PREFIX = 'aru-ai';
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`;
 
@@ -46,6 +46,15 @@ const ASSETS_TO_CACHE = [
   './plugins/task/task.css',
   './plugins/task/task.html',
   './plugins/task/task.js',
+  './plugins/fit-care/fit-care.css',
+  './plugins/fit-care/fit-care.html',
+  './plugins/fit-care/fit-care.js',
+  './plugins/fit-care/fit-care-calendar.js',
+  './plugins/fit-care/fit-care-dashboard.js',
+  './plugins/fit-care/fit-care-plan.js',
+  './plugins/fit-care/fit-care-health.js',
+  './plugins/fit-care/fit-care-settings.js',
+  './plugins/fit-care/fit-care-i18n.json',
   './media/emotions/angry.png',
   './media/emotions/cool.png',
   './media/emotions/crazy.png',

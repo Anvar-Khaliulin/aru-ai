@@ -12,36 +12,42 @@ export class SemanticCore {
     constructor() {
         this.pipe = null;
         this.modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight and high-performance model for embeddings
-        this.isLoading = false;
+        this.readyPromise = null;
     }
 
-    async init(progressCallback) {
-        if (this.pipe) return;
+    init(progressCallback) {
+        if (this.pipe) return Promise.resolve();
+        // Concurrent callers (startup + first embedding) must share one load:
+        // a bare isLoading flag would let both pass and build the pipeline twice.
+        if (this.readyPromise) return this.readyPromise;
 
-        this.isLoading = true;
-        try {
-            // Initializes the feature-extraction pipeline
-            this.pipe = await pipeline('feature-extraction', this.modelName, {
-                progress_callback: (data) => {
-                    if (progressCallback) {
-                        // Data status is 'progress', data.progress ranges from 0-100
-                        if (data.status === 'progress') {
-                            progressCallback(Math.round(data.progress));
+        this.readyPromise = (async () => {
+            try {
+                // Initializes the feature-extraction pipeline
+                this.pipe = await pipeline('feature-extraction', this.modelName, {
+                    progress_callback: (data) => {
+                        if (progressCallback) {
+                            // Data status is 'progress', data.progress ranges from 0-100
+                            if (data.status === 'progress') {
+                                progressCallback(Math.round(data.progress));
+                            }
                         }
                     }
-                }
-            });
-            console.log("Semantic Model Loaded");
-        } catch (e) {
-            console.error("Failed to load semantic model", e);
-            throw e;
-        } finally {
-            this.isLoading = false;
-        }
+                });
+                console.log("Semantic Model Loaded");
+            } catch (e) {
+                // Allow a later retry after a failed load
+                this.readyPromise = null;
+                console.error("Failed to load semantic model", e);
+                throw e;
+            }
+        })();
+
+        return this.readyPromise;
     }
 
     async getEmbedding(text) {
-        if (!this.pipe) await this.init();
+        await this.init();
 
         // Computes embeddings using mean pooling and normalization
         const output = await this.pipe(text, { pooling: 'mean', normalize: true });

@@ -21,15 +21,12 @@ export const Search = {
             return null;
         }
 
-        try {
-            if (provider === 'tavily') {
-                return await this.queryTavily(text);
-            } else if (provider === 'searxng') {
-                return await this.querySearXNG(text);
-            }
-        } catch (e) {
-            console.error(`Search: Error with provider ${provider}:`, e);
-            return `[SEARCH_ERROR: ${e.message}]`;
+        // Errors propagate to the caller (chatController) so grounding
+        // can degrade gracefully to a knowledge-based answer
+        if (provider === 'tavily') {
+            return await this.queryTavily(text);
+        } else if (provider === 'searxng') {
+            return await this.querySearXNG(text);
         }
 
         return null;
@@ -69,20 +66,36 @@ export const Search = {
      * Queries a SearXNG instance with global Network strategy.
      */
     async querySearXNG(query) {
-        let instanceUrl = state.userSettings.searxng_url;
+        let instanceUrl = (state.userSettings.searxng_url || '').trim();
         if (!instanceUrl) throw new Error('SearXNG Instance URL is missing in settings.');
 
-        instanceUrl = instanceUrl.replace(/\/$/, '');
+        // Tolerate "searx.be" or "localhost:8888" (no scheme) and trailing slashes;
+        // local instances default to http, public ones to https
+        if (!/^https?:\/\//i.test(instanceUrl)) {
+            const isLocal = /^(localhost(\.|:|$)|127\.|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(instanceUrl);
+            instanceUrl = (isLocal ? 'http://' : 'https://') + instanceUrl;
+        }
+        instanceUrl = instanceUrl.replace(/\/+$/, '');
+
         const targetUrl = `${instanceUrl}/search?q=${encodeURIComponent(query)}&format=json`;
 
         console.log(`Search: Querying SearXNG via Network module...`);
         const response = await Network.fetch(targetUrl, {}, 'local_api');
 
         if (!response.ok) {
+            if (response.status === 403 || response.status === 404) {
+                throw new Error(`SearXNG returned ${response.status}. The instance most likely has the JSON format disabled — add "json" to search.formats in the instance settings.`);
+            }
             throw new Error(`Network error: ${response.statusText} (${response.status})`);
         }
 
-        const contents = await response.json();
+        let contents;
+        try {
+            contents = await response.json();
+        } catch (e) {
+            throw new Error('SearXNG did not return valid JSON. The instance may have the JSON format disabled, or a proxy returned an HTML error page.');
+        }
+
         const results = contents.results || [];
 
         if (results.length === 0) return null;

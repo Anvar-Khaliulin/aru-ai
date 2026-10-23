@@ -20,8 +20,9 @@ export const Triggers = {
         // Resolves semantic captures interpreting flexible multidimensional memory brackets
         MEMORY: /(?:\[\[|\[)\s*MEMORY:\s*([\s\S]*?)\s*(?:\]\]|\])/gi,
         ARTIFACT: /\[\[\s*ARU_ARTIFACT\s+type\s*=\s*(?:"|'|&quot;|)(.*?)(?:"|'|&quot;|)\s+title\s*=\s*(?:"|'|&quot;|)(.*?)(?:"|'|&quot;|)\s*\]\]([\s\S]*?)\[\[?\s*\/ARU_ARTIFACT\s*\]?\]/gi,
-        TOOL: /\[\[\s*TOOL\s*:\s*(\w+)\s*(.*?)\s*\]\]/gi,
-        TASK: /\[\[\s*TASK\s*:\s*(\w+)\s*(.*?)\s*\]\]/gi
+        TOOL: /\[\[\s*TOOL\s*:\s*(\w+)\s*([\s\S]*?)\s*\]\]/gi,
+        TASK: /\[\[\s*TASK\s*:\s*(\w+)\s*([\s\S]*?)\s*\]\]/gi,
+        FIT: /\[\[\s*FIT\s*:\s*(\w+)\s*([\s\S]*?)\s*\]\]/gi
     },
 
     // 1. TRIGGER ORGANIZATION (RAG)
@@ -156,23 +157,30 @@ export const Triggers = {
                     const text = (llmResponse || '').toString();
 
                     // Identifies associative parameters utilizing standard Cyrillic syntactic definitions
+                    const saneAge = (s) => {
+                        const n = parseInt(s, 10);
+                        return (n >= 3 && n <= 99) ? String(n) : null;
+                    };
+
                     const nameRu = text.match(/(?:Привет,\s*|я знаю, что тебя зовут\s*|тебя зовут\s*|тебя зовут,?\s*)([А-ЯЁA-Z][а-яёА-ЯA-Za-z\-']{1,30})/i);
-                    const ageRu = text.match(/(?:тебе|вам)\s*(\d{1,3})\s*(?:год|года|лет)?/i);
+                    // Year-word is MANDATORY and range-checked: bare "тебе 2/100" matched
+                    // everything from "варианта" to "процентов" and poisoned memory with junk ages.
+                    const ageRuM = text.match(/(?:тебе|вам)\s+(\d{1,3})\s*(?:год|года|годы|лет)(?![а-яё])/i);
 
                     if (nameRu && nameRu[1]) heuristics.push(`Имя: ${nameRu[1].trim()}`);
-                    if (ageRu && ageRu[1]) heuristics.push(`Возраст: ${ageRu[1].trim()}`);
+                    if (ageRuM) { const a = saneAge(ageRuM[1]); if (a) heuristics.push(`Возраст: ${a}`); }
 
                     // Identifies associative parameters utilizing generalized ASCII language bindings
                     const nameEn = text.match(/(?:Hi,\s*|Hello,\s*|I know your name is\s*|your name is\s*)([A-Z][a-z\-']{1,30})/i);
-                    const ageEn = text.match(/(?:you are|you're|age is|you are )\s*(\d{1,3})\b/i);
+                    const ageEnM = text.match(/(?:you are|you're)\s+(\d{1,3})\s*years?\s+old\b/i) || text.match(/\bage\s+is\s+(\d{1,3})\b/i);
                     if (nameEn && nameEn[1]) heuristics.push(`Name: ${nameEn[1].trim()}`);
-                    if (ageEn && ageEn[1]) heuristics.push(`Age: ${ageEn[1].trim()}`);
+                    if (ageEnM) { const a = saneAge(ageEnM[1]); if (a) heuristics.push(`Age: ${a}`); }
 
                     // Identifies associative parameters utilizing specific Turkic grammatical heuristics
                     const nameKz = text.match(/(?:Менің атым|Сіздің атыңыз|сенің атың)\s*[:,\-]?\s*([А-ЯӘІӨҰҮA-Z][а-яәіөүұүА-ЯA-Za-z\-']{1,30})/i);
-                    const ageKz = text.match(/(?:жасыңыз|жасың|жасы)\s*(\d{1,3})/i);
+                    const ageKzM = text.match(/(?:жасыңыз|жасың|жасы)\s*(\d{1,3})/i);
                     if (nameKz && nameKz[1]) heuristics.push(`Аты: ${nameKz[1].trim()}`);
-                    if (ageKz && ageKz[1]) heuristics.push(`Жасы: ${ageKz[1].trim()}`);
+                    if (ageKzM) { const a = saneAge(ageKzM[1]); if (a) heuristics.push(`Жасы: ${a}`); }
 
                     if (heuristics.length > 0) {
                         console.log('Triggers.processResponseForMemory: heuristics extracted facts', heuristics);
@@ -236,7 +244,16 @@ export const Triggers = {
                 try {
                     const similar = await DB.searchFacts(vecArr, this.DUPLICATE_SIMILARITY, 3);
                     if (similar && similar.length > 0) {
-                        console.log('Triggers.saveMemories: found similar memory, skipping save', { fact, similar: similar.map(s => ({ id: s.id, similarity: s.similarity })) });
+                        const best = similar[0]; // sorted by similarity desc
+                        if (best.similarity >= 0.97) {
+                            // Same fact, changed value (e.g. new age): update in place so RAG
+                            // never serves the stale value. Distinct-but-close facts stay untouched.
+                            console.log('Triggers.saveMemories: near-identical memory, updating in place', { fact, id: best.id, similarity: best.similarity });
+                            await DB.updateFact(best.id, fact, vecArr);
+                            this.showMemoryToast();
+                        } else {
+                            console.log('Triggers.saveMemories: found similar memory, skipping save', { fact, similar: similar.map(s => ({ id: s.id, similarity: s.similarity })) });
+                        }
                         continue; // Cancels write transaction maintaining dataset cleanliness
                     }
                 } catch (e) {
@@ -393,6 +410,48 @@ export const Triggers = {
         return `${baseTitle} ${n}`;
     },
 
+    // Localized text for task automation notices (falls back to English defaults)
+    taskT(key, vars, fallback) {
+        let text = window.PluginManager ? window.PluginManager.getTranslation(key) : key;
+        if (!text || text === key) text = fallback || key;
+        if (vars) {
+            for (const k in vars) text = text.split(`{${k}}`).join(vars[k]);
+        }
+        return text;
+    },
+
+    // Normalizes LLM-provided deadlines to "YYYY-MM-DDTHH:MM" (local time).
+    // Date-only values default to 12:00 and NOT to UTC midnight (which shifts the day in UTC+5).
+    _normalizeTaskDeadline(raw) {
+        if (!raw) return '';
+        const s = String(raw).trim();
+        let m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(s);
+        if (m) {
+            // Absolute ISO timestamps (with Z or offset) are converted to local time as-is
+            if (/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) {
+                const d = new Date(s);
+                if (!isNaN(d.getTime())) {
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                }
+            }
+            return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+        }
+        m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+        if (m) return `${m[1]}-${m[2]}-${m[3]}T12:00`;
+        return '';
+    },
+
+    // Fallback columns used when the task plugin build is stale (no getDefaultColumns)
+    defaultTaskColumns() {
+        const uid = () => 'c-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        return [
+            { id: uid(), title: this.taskT('task_col_todo', null, 'To Do'), tasks: [] },
+            { id: uid(), title: this.taskT('task_col_progress', null, 'In Progress'), tasks: [] },
+            { id: uid(), title: this.taskT('task_col_done', null, 'Done'), tasks: [] }
+        ];
+    },
+
     processResponseForTasks(llmResponse, isPrivate = false) {
         if (!llmResponse) return llmResponse;
         let cleanResponse = llmResponse;
@@ -405,11 +464,12 @@ export const Triggers = {
         const WRITE_COMMANDS = new Set(['CREATE_PROJECT', 'CREATE_TASK', 'MOVE_TASK', 'DELETE_TASK', 'UPDATE_TASK']);
 
         let privateBlockShown = false; // Show the notice only once per response
+        const notices = []; // Localized system notices appended once at the end
 
         for (const match of matches) {
             const [fullMatch, command, argsStr] = match;
             const args = {};
-            const argRegex = /(\w+)\s*=\s*(?:"|'|&quot;)(.*?)(?:"|'|&quot;)/g;
+            const argRegex = /(\w+)\s*=\s*(?:"|'|&quot;)([\s\S]*?)(?:"|'|&quot;)/g;
             let argMatch;
             while ((argMatch = argRegex.exec(argsStr)) !== null) {
                 args[argMatch[1]] = argMatch[2];
@@ -437,104 +497,139 @@ export const Triggers = {
 
                     // Helper to find project by name or ID
                     const findProject = (query) => {
-                        if (!query) return taskPlugin.state.projects.find(p => p.id === taskPlugin.state.activeProjectId);
+                        if (!query) return taskPlugin.state.projects.find(p => p.id === taskPlugin.state.activeProjectId) || taskPlugin.state.projects[0];
                         return taskPlugin.state.projects.find(p => p.id === query || p.name.toLowerCase() === query.toLowerCase());
                     };
 
+                    const uid = (prefix) => (typeof taskPlugin._uid === 'function')
+                        ? taskPlugin._uid(prefix)
+                        : prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-                    // Localized default column names based on current app language
-                    const getLang = () => {
-                        try { return (window.aruGlobalState || state).lang || 'en'; } catch (e) { return 'en'; }
+                    const defaultColumns = () => (typeof taskPlugin.getDefaultColumns === 'function')
+                        ? taskPlugin.getDefaultColumns()
+                        : this.defaultTaskColumns();
+
+                    const defaultTaskTitle = () => (typeof taskPlugin.getDefaultTaskTitle === 'function')
+                        ? taskPlugin.getDefaultTaskTitle()
+                        : this.taskT('task_default_title', null, 'New Task');
+
+                    const ensureColumns = (project) => {
+                        if (!project.columns || project.columns.length === 0) project.columns = defaultColumns();
                     };
-                    const defaultColumns = () => {
-                        const lang = getLang();
-                        if (lang === 'ru') return ['К выполнению', 'В работе', 'Готово'];
-                        if (lang === 'kk') return ['Орындалатын', 'Жүріп жатыр', 'Дайын'];
-                        return ['To Do', 'In Progress', 'Done'];
+
+                    const findTask = (query, projectScope) => {
+                        if (!query) return null;
+                        const projects = projectScope ? [projectScope] : taskPlugin.state.projects;
+                        for (const p of projects) {
+                            for (const c of (p.columns || [])) {
+                                const t = c.tasks.find(t => t.id === query || t.title.toLowerCase() === query.toLowerCase());
+                                if (t) return { project: p, column: c, task: t };
+                            }
+                        }
+                        return null;
                     };
 
                     switch (command) {
-                        case 'CREATE_PROJECT':
-                            if (args.name) {
-                                const colNames = defaultColumns();
-                                taskPlugin.state.projects.push({
-                                    id: 'p-' + Date.now(),
-                                    name: args.name,
-                                    columns: [
-                                        { id: 'c1-' + Date.now(), title: colNames[0], tasks: [] },
-                                        { id: 'c2-' + Date.now() + 1, title: colNames[1], tasks: [] },
-                                        { id: 'c3-' + Date.now() + 2, title: colNames[2], tasks: [] }
-                                    ]
-                                });
-                                taskPlugin.saveState();
-                                taskPlugin.renderProjects();
+                        case 'CREATE_PROJECT': {
+                            if (!args.name) break;
+                            const existing = taskPlugin.state.projects.find(p => p.name.toLowerCase() === args.name.toLowerCase());
+                            if (existing) {
+                                notices.push(this.taskT('task_notice_project_exists', { project: args.name }, `Project "${args.name}" already exists.`));
+                                break;
                             }
+                            taskPlugin.state.projects.push({
+                                id: uid('p'),
+                                name: args.name,
+                                columns: defaultColumns()
+                            });
+                            taskPlugin.saveState();
+                            taskPlugin.renderProjects();
                             break;
+                        }
 
                         case 'CREATE_TASK': {
-                            const targetProject = findProject(args.project);
-                            if (targetProject) {
-                                // Try to find column by name if specified, else default to first
-                                let col = targetProject.columns[0];
-                                if (args.column) {
-                                    const found = targetProject.columns.find(c => c.title.toLowerCase() === args.column.toLowerCase());
-                                    if (found) col = found;
-                                }
-                                col.tasks.push({
-                                    id: 't-' + Date.now(),
-                                    title: args.title || 'New Task',
-                                    desc: args.desc || '',
-                                    deadline: args.deadline || ''
-                                });
-                                taskPlugin.saveState();
-                                taskPlugin.renderBoard();
+                            let targetProject = findProject(args.project);
+                            if (!targetProject) {
+                                const projName = args.project || (typeof taskPlugin.getT === 'function'
+                                    ? taskPlugin.getT('task_seed_project', 'My First Project')
+                                    : 'My First Project');
+                                targetProject = { id: uid('p'), name: projName, columns: defaultColumns() };
+                                taskPlugin.state.projects.push(targetProject);
+                                if (!taskPlugin.state.activeProjectId) taskPlugin.state.activeProjectId = targetProject.id;
+                                notices.push(this.taskT('task_notice_project_created', { project: projName }, `Project "${projName}" was created.`));
                             }
-                            break;
-                        }
 
-                        case 'MOVE_TASK': {
-                            // Find task by title across all projects
-                            let foundTask = null;
-                            let sourceProject = null;
+                            ensureColumns(targetProject);
 
-                            taskPlugin.state.projects.forEach(p => {
-                                p.columns.forEach(c => {
-                                    const idx = c.tasks.findIndex(t =>
-                                        (args.id && t.id === args.id) ||
-                                        (args.title && t.title.toLowerCase() === args.title.toLowerCase())
-                                    );
-                                    if (idx !== -1 && !foundTask) {
-                                        sourceProject = p;
-                                        foundTask = c.tasks.splice(idx, 1)[0];
-                                    }
-                                });
-                            });
-
-                            if (foundTask) {
-                                const destProject = findProject(args.to_project) || sourceProject;
-                                // Match target column by exact name (case-insensitive, works with any language)
-                                const toCol = (args.to_column
-                                    ? destProject.columns.find(c => c.title.toLowerCase() === args.to_column.toLowerCase())
-                                    : null) || destProject.columns[0];
-                                toCol.tasks.push(foundTask);
-                                taskPlugin.saveState();
-                                taskPlugin.renderBoard();
+                            // Try to find column by name if specified, else default to first
+                            let col = targetProject.columns[0];
+                            if (args.column) {
+                                const found = targetProject.columns.find(c => c.title.toLowerCase() === args.column.toLowerCase());
+                                if (found) col = found;
+                                else notices.push(this.taskT('task_notice_column_not_found', { column: args.column, fallback: col.title }, `Column "${args.column}" was not found, used "${col.title}" instead.`));
                             }
-                            break;
-                        }
-
-                        case 'DELETE_TASK':
-                            taskPlugin.state.projects.forEach(p => {
-                                p.columns.forEach(c => {
-                                    c.tasks = c.tasks.filter(t =>
-                                        (!args.id || t.id !== args.id) &&
-                                        (!args.title || t.title.toLowerCase() !== args.title.toLowerCase())
-                                    );
-                                });
+                            col.tasks.push({
+                                id: uid('t'),
+                                title: args.title || defaultTaskTitle(),
+                                desc: args.desc || '',
+                                deadline: this._normalizeTaskDeadline(args.deadline)
                             });
                             taskPlugin.saveState();
                             taskPlugin.renderBoard();
                             break;
+                        }
+
+                        case 'MOVE_TASK': {
+                            const found = findTask(args.id || args.title);
+                            if (!found) {
+                                notices.push(this.taskT('task_notice_task_not_found', { title: args.title || args.id || '' }, `Task "${args.title || args.id || ''}" was not found.`));
+                                break;
+                            }
+
+                            const destProject = findProject(args.to_project) || found.project;
+                            ensureColumns(destProject);
+
+                            let toCol = args.to_column
+                                ? destProject.columns.find(c => c.title.toLowerCase() === args.to_column.toLowerCase())
+                                : null;
+                            if (args.to_column && !toCol) {
+                                notices.push(this.taskT('task_notice_column_not_found', { column: args.to_column, fallback: destProject.columns[0].title }, `Column "${args.to_column}" was not found, used "${destProject.columns[0].title}" instead.`));
+                            }
+                            toCol = toCol || destProject.columns[0];
+
+                            found.column.tasks = found.column.tasks.filter(t => t !== found.task);
+                            toCol.tasks.push(found.task);
+                            taskPlugin.saveState();
+                            taskPlugin.renderBoard();
+                            break;
+                        }
+
+                        case 'UPDATE_TASK': {
+                            const scopedProject = args.project ? findProject(args.project) : null;
+                            const found = findTask(args.id || args.title, scopedProject);
+                            if (!found) {
+                                notices.push(this.taskT('task_notice_task_not_found', { title: args.title || args.id || '' }, `Task "${args.title || args.id || ''}" was not found.`));
+                                break;
+                            }
+                            if (args.new_title) found.task.title = args.new_title;
+                            if ('desc' in args) found.task.desc = args.desc;
+                            if ('deadline' in args) found.task.deadline = this._normalizeTaskDeadline(args.deadline);
+                            taskPlugin.saveState();
+                            taskPlugin.renderBoard();
+                            break;
+                        }
+
+                        case 'DELETE_TASK': {
+                            const found = findTask(args.id || args.title);
+                            if (!found) {
+                                notices.push(this.taskT('task_notice_task_not_found', { title: args.title || args.id || '' }, `Task "${args.title || args.id || ''}" was not found.`));
+                                break;
+                            }
+                            found.column.tasks = found.column.tasks.filter(t => t !== found.task);
+                            taskPlugin.saveState();
+                            taskPlugin.renderBoard();
+                            break;
+                        }
                     }
                 } catch (e) {
                     console.error("Triggers: Task command failed", e);
@@ -544,7 +639,425 @@ export const Triggers = {
             cleanResponse = cleanResponse.replace(fullMatch, '');
         }
 
+        if (notices.length > 0) {
+            cleanResponse = cleanResponse.trim() + '\n\n' + notices.map(n => `*${n}*`).join('\n');
+        }
+
         return cleanResponse.trim();
+    },
+
+    // Localized text for Fit & Care notices (falls back to English defaults).
+    fitT(key, vars, fallback) {
+        let text = window.PluginManager ? window.PluginManager.getTranslation(key) : key;
+        if (!text || text === key) text = fallback || key;
+        if (vars) {
+            for (const k in vars) text = text.split(`{${k}}`).join(vars[k]);
+        }
+        return text;
+    },
+
+    fitDate(value, fallback) {
+        const text = String(value || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
+        const date = new Date(`${text}T12:00:00`);
+        return Number.isNaN(date.getTime()) ? fallback : text;
+    },
+
+    fitTime(value) {
+        const match = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim());
+        if (!match) return '';
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        if (hours > 23 || minutes > 59) return '';
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    },
+
+    fitNowTime() {
+        const now = new Date();
+        return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    },
+
+    fitNumber(value) {
+        if (value === undefined || value === null) return null;
+        const text = String(value).trim().replace(',', '.');
+        if (!text) return null;
+        const number = Number(text);
+        return Number.isFinite(number) ? number : null;
+    },
+
+    fitScale(value, min, max) {
+        const number = this.fitNumber(value);
+        if (number === null) return null;
+        const rounded = Math.round(number);
+        return rounded >= min && rounded <= max ? rounded : null;
+    },
+
+    fitList(value, limit = 20) {
+        return String(value || '')
+            .split(/[,;]+/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .filter((item, index, list) => list.indexOf(item) === index)
+            .slice(0, limit);
+    },
+
+    fitExercises(value) {
+        const text = String(value || '').trim();
+        if (!text) return '[]';
+        if (text.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) return JSON.stringify(parsed.slice(0, 50));
+            } catch (e) {
+                // Fall through to the plain-text format.
+            }
+        }
+        const items = text.split(/[;|]+/).map((item) => item.trim()).filter(Boolean).slice(0, 50);
+        return JSON.stringify(items);
+    },
+
+    // Plan-day exercises: either a JSON array or a compact string like
+    // "Жим лёжа 4x8 @50; Присед 3x10" → [{name, sets, reps, weight}].
+    fitPlanExercises(value) {
+        const text = String(value || '').trim();
+        if (!text) return '[]';
+        if (text.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) return JSON.stringify(parsed.slice(0, 30));
+            } catch (e) {
+                // Fall through to the compact string format.
+            }
+        }
+        const items = text.split(/[;\n|]+/).map((item) => item.trim()).filter(Boolean).slice(0, 30);
+        const parsed = items.map((item) => {
+            let rest = item;
+            const exercise = { name: item, sets: null, reps: null, weight: null };
+            const weight = /@\s*([\d.,]+)\s*(?:кг|kg)?$/i.exec(rest);
+            if (weight) {
+                exercise.weight = this.fitNumber(weight[1]);
+                rest = rest.slice(0, weight.index);
+            }
+            const setsReps = /(\d{1,2})\s*[x×]\s*(\d{1,3})\s*$/i.exec(rest);
+            if (setsReps) {
+                exercise.sets = Number(setsReps[1]);
+                exercise.reps = Number(setsReps[2]);
+                rest = rest.slice(0, setsReps.index);
+            }
+            exercise.name = rest.replace(/[\s,\-–—]+$/, '').trim() || item;
+            return exercise;
+        });
+        return JSON.stringify(parsed);
+    },
+
+    fitConflictNotices(meal) {
+        if (!(window.DB && typeof window.DB.getFitMealConflicts === 'function')) return [];
+        let conflicts = [];
+        try {
+            conflicts = window.DB.getFitMealConflicts(meal) || [];
+        } catch (e) {
+            return [];
+        }
+        return conflicts.map((conflict) => {
+            if (conflict.kind === 'delay') {
+                return this.fitT('fit_notice_conflict_delay', {
+                    name: conflict.protocol,
+                    meal_time: conflict.meal_time || '—',
+                    need: conflict.required,
+                    dose_time: conflict.dose_time || '—'
+                }, `${conflict.protocol}: the meal at ${conflict.meal_time || '—'} is less than ${conflict.required} min after the dose at ${conflict.dose_time || '—'}.`);
+            }
+            return this.fitT('fit_notice_conflict_tag', {
+                name: conflict.protocol,
+                tag: conflict.tag,
+                dose_time: conflict.dose_time || '—'
+            }, `${conflict.protocol}: "${conflict.tag}" is on your avoid list near the dose at ${conflict.dose_time || '—'}.`);
+        });
+    },
+
+    // Fit & Care commands let Aru record the user's routine from any normal chat
+    // and from the plugin's own day chat. They deliberately support logging only:
+    // no diagnosis, medication advice or health interpretation happens here.
+    // `fallbackDate` lets the day chat record into the day it is showing.
+    processResponseForFitCare(llmResponse, isPrivate = false, fallbackDate = '') {
+        if (!llmResponse) return llmResponse;
+        this.PATTERNS.FIT.lastIndex = 0;
+        const matches = [...String(llmResponse).matchAll(this.PATTERNS.FIT)];
+        if (!matches.length) return llmResponse;
+        let clean = String(llmResponse);
+        const notices = [];
+        const today = new Date();
+        const todayKey = /^\d{4}-\d{2}-\d{2}$/.test(String(fallbackDate))
+            ? String(fallbackDate)
+            : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const db = window.DB;
+        const canWrite = !!(db && db.patchFitDailyLog);
+        let cycleTrackingOn = false;
+        if (canWrite && typeof db.getFitProfile === 'function') {
+            try { cycleTrackingOn = Number(db.getFitProfile().cycle_tracking) === 1; } catch (e) { cycleTrackingOn = false; }
+        }
+        let wrote = false;
+        let privateNotified = false;
+        let cycleOffNotified = false;
+        let lastPlanId = null;
+        for (const match of matches) {
+            const [full, command, source] = match;
+            const args = {};
+            const attr = /(\w+)\s*=\s*(?:"([\s\S]*?)"|'([\s\S]*?)'|([^\s\]]+))/g;
+            let item;
+            while ((item = attr.exec(source)) !== null) args[item[1].toLowerCase()] = (item[2] ?? item[3] ?? item[4] ?? '').trim();
+            clean = clean.replace(full, '');
+            const name = String(command || '').toUpperCase();
+            if (isPrivate) {
+                if (!privateNotified) {
+                    notices.push(this.fitT('fit_notice_private', null, 'Health entries are not saved from a private chat.'));
+                    privateNotified = true;
+                }
+                continue;
+            }
+            if (!canWrite) continue;
+            const date = this.fitDate(args.date, todayKey);
+            const time = this.fitTime(args.time) || (date === todayKey ? this.fitNowTime() : '');
+            try {
+                if (name === 'LOG') {
+                    const patch = {};
+                    for (const field of ['weight', 'sleep_hours', 'body_fat', 'muscle_mass', 'water_pct',
+                        'bone_mass', 'visceral_fat', 'steps', 'calories', 'protein', 'carbs', 'fat', 'water_ml']) {
+                        if (args[field] === undefined) continue;
+                        const value = this.fitNumber(args[field]);
+                        if (value !== null) patch[field] = value;
+                    }
+                    const energy = this.fitScale(args.energy, 1, 5);
+                    if (energy !== null) patch.energy = energy;
+                    const mood = this.fitScale(args.mood, 1, 5);
+                    if (mood !== null) patch.mood = mood;
+                    const stress = this.fitScale(args.stress, 1, 5);
+                    if (stress !== null) patch.stress = stress;
+                    if (args.symptoms !== undefined) patch.symptoms = JSON.stringify(this.fitList(args.symptoms, 20));
+                    if (args.workout !== undefined) {
+                        const status = String(args.workout).toLowerCase();
+                        if (['done', 'planned', 'skipped'].includes(status)) patch.workout_status = status;
+                    }
+                    if (args.workout_note !== undefined) patch.workout_note = String(args.workout_note).slice(0, 1000);
+                    if (args.meal !== undefined) patch.meal_note = String(args.meal).slice(0, 1000);
+                    if (args.note !== undefined) patch.note = String(args.note).slice(0, 4000);
+                    if (Object.keys(patch).length) {
+                        db.patchFitDailyLog(date, patch);
+                        notices.push(this.fitT('fit_notice_daily', { date }, `Saved to Fit & Care for ${date}.`));
+                        wrote = true;
+                    }
+                } else if (name === 'MEAL') {
+                    const title = String(args.title || args.name || args.meal || '').slice(0, 200);
+                    if (!title) continue;
+                    const meal = {
+                        log_date: date,
+                        meal_time: time,
+                        title,
+                        tags: JSON.stringify(this.fitList(args.tags, 20)),
+                        calories: this.fitNumber(args.calories),
+                        protein: this.fitNumber(args.protein),
+                        carbs: this.fitNumber(args.carbs),
+                        fat: this.fitNumber(args.fat),
+                        estimated: /^(1|true|yes|y|approx|approximate|estimated)$/i.test(String(args.estimated || '').trim()) ? 1 : 0,
+                        note: String(args.note || '').slice(0, 1000)
+                    };
+                    db.saveFitMeal(meal);
+                    notices.push(this.fitT('fit_notice_meal', { date }, `Meal saved to Fit & Care for ${date}.`) + (meal.estimated ? ' ' + this.fitT('fit_notice_meal_estimated', null, 'Macros are Aru\'s estimate.') : ''));
+                    notices.push(...this.fitConflictNotices(meal));
+                    wrote = true;
+                } else if (name === 'WORKOUT') {
+                    const title = String(args.title || args.name || args.workout || '').slice(0, 200);
+                    if (!title) continue;
+                    const status = String(args.status || args.workout || 'done').toLowerCase();
+                    db.saveFitWorkout({
+                        log_date: date,
+                        log_time: time,
+                        title,
+                        exercises: this.fitExercises(args.exercises),
+                        duration_min: this.fitNumber(args.duration || args.duration_min),
+                        volume_kg: this.fitNumber(args.volume || args.volume_kg),
+                        rpe: this.fitScale(args.rpe, 1, 10),
+                        status: ['done', 'planned', 'skipped'].includes(status) ? status : 'done',
+                        note: String(args.note || args.workout_note || '').slice(0, 1000)
+                    });
+                    notices.push(this.fitT('fit_notice_workout', { date }, `Workout saved to Fit & Care for ${date}.`));
+                    wrote = true;
+                } else if (name === 'MED') {
+                    const medName = String(args.name || args.title || args.medication || '').slice(0, 200);
+                    if (!medName) continue;
+                    let protocol = null;
+                    if (typeof db.getFitProtocolByName === 'function') {
+                        protocol = db.getFitProtocolByName(medName);
+                        if (!protocol && typeof db.getFitProtocols === 'function') {
+                            const wanted = medName.toLowerCase();
+                            protocol = (db.getFitProtocols(true) || []).find((entry) => {
+                                const known = String(entry.name || '').toLowerCase();
+                                return known && (known.includes(wanted) || wanted.includes(known));
+                            }) || null;
+                        }
+                    }
+                    const status = String(args.status || 'taken').toLowerCase() === 'skipped' ? 'skipped' : 'taken';
+                    db.saveFitHealthLog({
+                        log_date: date,
+                        log_time: time,
+                        protocol_id: protocol ? protocol.id : null,
+                        type: 'medication',
+                        name: protocol ? protocol.name : medName,
+                        status,
+                        note: String(args.note || '').slice(0, 1000)
+                    });
+                    notices.push(this.fitT('fit_notice_med', { date }, `Medication entry saved to Fit & Care for ${date}.`));
+                    wrote = true;
+                } else if (name === 'HEALTH') {
+                    const type = String(args.type || 'measurement').toLowerCase();
+                    const allowed = ['glucose', 'pressure', 'temperature', 'symptom', 'measurement', 'other'];
+                    const value = this.fitNumber(args.value);
+                    const value2 = this.fitNumber(args.value2);
+                    const eventName = String(args.name || args.title || (value === null ? (args.value || '') : '') || type).slice(0, 200);
+                    db.saveFitHealthLog({
+                        log_date: date,
+                        log_time: time,
+                        type: allowed.includes(type) ? type : 'measurement',
+                        name: eventName,
+                        value,
+                        value2,
+                        unit: String(args.unit || '').slice(0, 20),
+                        status: 'logged',
+                        tags: JSON.stringify(this.fitList(args.tags, 20)),
+                        note: String(args.note || '').slice(0, 1000)
+                    });
+                    notices.push(this.fitT('fit_notice_health', { date }, `Health event saved to Fit & Care for ${date}.`));
+                    wrote = true;
+                } else if (name === 'CYCLE_START') {
+                    if (!cycleTrackingOn) {
+                        if (!cycleOffNotified) {
+                            notices.push(this.fitT('fit_notice_cycle_off', null, 'Cycle tracking is turned off in Fit & Care settings, so nothing was saved.'));
+                            cycleOffNotified = true;
+                        }
+                        continue;
+                    }
+                    db.startFitCycle(date);
+                    notices.push(this.fitT('fit_notice_cycle_start', { date }, `Cycle start saved for ${date}.`));
+                    wrote = true;
+                } else if (name === 'CYCLE_END') {
+                    if (!cycleTrackingOn) {
+                        if (!cycleOffNotified) {
+                            notices.push(this.fitT('fit_notice_cycle_off', null, 'Cycle tracking is turned off in Fit & Care settings, so nothing was saved.'));
+                            cycleOffNotified = true;
+                        }
+                        continue;
+                    }
+                    if (db.endFitCycle(date)) {
+                        notices.push(this.fitT('fit_notice_cycle_end', { date }, `Cycle end saved for ${date}.`));
+                        wrote = true;
+                    }
+                } else if (name === 'CYCLE_LOG') {
+                    if (!cycleTrackingOn) {
+                        if (!cycleOffNotified) {
+                            notices.push(this.fitT('fit_notice_cycle_off', null, 'Cycle tracking is turned off in Fit & Care settings, so nothing was saved.'));
+                            cycleOffNotified = true;
+                        }
+                        continue;
+                    }
+                    const flow = String(args.flow || '').toLowerCase();
+                    if (!args.flow && !args.note) continue;
+                    db.saveFitCycleLog({
+                        log_date: date,
+                        flow: ['light', 'medium', 'heavy', 'none'].includes(flow) ? flow : '',
+                        note: String(args.note || '').slice(0, 1000)
+                    });
+                    notices.push(this.fitT('fit_notice_cycle_log', { date }, `Cycle flow saved for ${date}.`));
+                    wrote = true;
+                } else if (name === 'PLAN_CREATE') {
+                    const title = String(args.title || args.name || '').slice(0, 200);
+                    if (!title) continue;
+                    const goal = String(args.goal || '').toLowerCase();
+                    const weeks = this.fitScale(args.weeks, 1, 52) || 4;
+                    lastPlanId = db.saveFitPlan({
+                        title,
+                        goal: ['strength', 'fat_loss', 'endurance', 'mobility', 'general'].includes(goal) ? goal : 'general',
+                        start_date: this.fitDate(args.start_date, todayKey),
+                        weeks,
+                        status: 'active',
+                        notes: String(args.notes || '').slice(0, 2000)
+                    });
+                    notices.push(this.fitT('fit_notice_plan_created', { title, weeks }, `Training plan "${title}" created (${weeks} weeks) and set as active.`));
+                    wrote = true;
+                } else if (name === 'PLAN_DAY') {
+                    const plans = db.getFitPlans ? (db.getFitPlans() || []) : [];
+                    let plan = null;
+                    if (args.plan) {
+                        plan = plans.find((entry) => String(entry.id) === String(args.plan))
+                            || plans.find((entry) => String(entry.title || '').toLowerCase() === String(args.plan).toLowerCase())
+                            || null;
+                    }
+                    if (!plan && lastPlanId) plan = plans.find((entry) => Number(entry.id) === Number(lastPlanId)) || null;
+                    if (!plan) {
+                        notices.push(this.fitT('fit_notice_plan_missing', null, 'No training plan found — create one with PLAN_CREATE first.'));
+                        continue;
+                    }
+                    const week = Math.min(Number(plan.weeks) || 4, this.fitScale(args.week, 0, 52) || 0);
+                    const weekday = this.fitScale(args.weekday || args.day, 1, 7) || 1;
+                    db.saveFitPlanDay({
+                        plan_id: plan.id,
+                        week_index: week,
+                        weekday,
+                        title: String(args.title || '').slice(0, 200),
+                        focus: String(args.focus || '').slice(0, 200),
+                        exercises: this.fitPlanExercises(args.exercises),
+                        notes: String(args.notes || '').slice(0, 1000)
+                    });
+                    const weekLabel = week === 0 ? this.fitT('fit_plan_template', null, 'Template') : week;
+                    notices.push(this.fitT('fit_notice_plan_day', { plan: plan.title, week: weekLabel, weekday }, `Day added to plan "${plan.title}" (week ${weekLabel}, day ${weekday}).`));
+                    wrote = true;
+                }
+            } catch (e) {
+                console.error(`Triggers: Fit command ${name} failed`, e);
+            }
+        }
+        if (wrote && window.FitCarePlugin && typeof window.FitCarePlugin.refresh === 'function') {
+            try { window.FitCarePlugin.refresh(); } catch (e) { /* plugin not mounted */ }
+        }
+        return (clean.trim() + (notices.length ? `\n\n*${notices.join(' ')}*` : '')).trim();
+    },
+
+    //3.5 QUICK REPLIES (Suggestions): strips the invisible ARU_SUGGESTIONS tag
+    //from the raw model output and returns clickable follow-up labels.
+    //Runs BEFORE memory/artifact/tool processing so the tag never reaches the DB or the DOM.
+    extractSuggestions(llmResponse) {
+        const result = { cleanResponse: llmResponse, suggestions: [] };
+        if (!llmResponse || typeof llmResponse !== 'string') return result;
+
+        const tagRegex = /\[\[\s*ARU_SUGGESTIONS\s*\]\]([\s\S]*?)\[\[\s*\/\s*ARU_SUGGESTIONS\s*\]\]/i;
+        const match = llmResponse.match(tagRegex);
+        if (!match) return result;
+
+        result.cleanResponse = llmResponse.replace(tagRegex, '').trim();
+
+        let items = null;
+        let inner = match[1].trim()
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+        try {
+            const parsed = JSON.parse(inner);
+            if (Array.isArray(parsed)) items = parsed;
+            else if (parsed && Array.isArray(parsed.suggestions)) items = parsed.suggestions;
+        } catch (e) {
+            // Tolerate loose local-model output: salvage quoted strings (single or double) inside the tag
+            items = (inner.match(/"([^"\n]{2,120})"|'([^'\n]{2,120})'/g) || [])
+                .map(s => s.replace(/^["']|["']$/g, ''));
+        }
+
+        if (Array.isArray(items)) {
+            result.suggestions = items
+                .filter(s => typeof s === 'string')
+                .map(s => s.replace(/\s+/g, ' ').trim())
+                .filter(s => s.length > 0 && s.length <= 120)
+                .filter((s, i, arr) => arr.indexOf(s) === i)
+                .slice(0, 3);
+        }
+        return result;
     },
 
     //4. TRIGGER ACTION (Tools)
@@ -553,9 +1066,8 @@ export const Triggers = {
         let cleanResponse = llmResponse;
 
         // Find all tool tags: [[TOOL:name args]]
-        const toolRegex = /\[\[\s*TOOL\s*:\s*(\w+)\s*(.*?)\s*\]\]/gi;
+        const toolRegex = /\[\[\s*TOOL\s*:\s*(\w+)\s*([\s\S]*?)\s*\]\]/gi;
         const matches = [...cleanResponse.matchAll(toolRegex)];
-        if (matches.length === 0) return cleanResponse;
 
         // Track seen tools to avoid duplication of widgets
         const seenTags = new Set();
@@ -594,6 +1106,9 @@ export const Triggers = {
                     const filter = tagMatch ? tagMatch[1] : (langMatch ? langMatch[1] : '');
                     const urls = window.app.getRSSUrls();
                     replacementHTML = await Tools.getNewsCard(urls, filter);
+                } else if (toolName === 'tasks') {
+                    const projMatch = argsStr.replace(/&quot;/g, '"').match(/project="([^"]*)"/);
+                    replacementHTML = await Tools.getTasksCard(projMatch ? projMatch[1] : '');
                 }
             } catch (e) {
                 console.error("Tool Error", e);
@@ -614,7 +1129,7 @@ export const Triggers = {
         }
 
         // Fallback: if LLM didn't output any [[TOOL:...]] tags but the response
-        // clearly asks to "show news" or "show weather", inject the appropriate widget.
+        // clearly asks to "show news", "show weather" or "show tasks", inject the appropriate widget.
         if (replacements.length === 0) {
             try {
                 const lower = cleanResponse.toLowerCase();
@@ -622,6 +1137,13 @@ export const Triggers = {
                 // News cues
                 if (/(покажи|показать|покажите|show).*(новост|news)/.test(lower)) {
                     const widget = await Tools.getNewsCard(urls, '');
+                    cleanResponse += '\n\n' + widget;
+                }
+                // Task board cues (ru/kk/en)
+                const showCue = /(покажи|показать|покажите|список|мои задачи|show|list|my tasks|көрсет|менің тапсырмаларым)/;
+                const taskNoun = /(задач|тапсырма|task|board|доск|тақта)/;
+                if (showCue.test(lower) && taskNoun.test(lower)) {
+                    const widget = await Tools.getTasksCard('');
                     cleanResponse += '\n\n' + widget;
                 }
                 // Weather cues (supports Russian, English, and simple Kazakh heuristics)

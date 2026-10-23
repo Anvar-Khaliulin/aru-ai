@@ -1,0 +1,102 @@
+<!--
+---ARU-LAB.SPACE---ALMATY---2026---
+ARU SKILLS PLUGIN - UI FRAGMENT
+---chat.aru-lab.space---PWA---
+-->
+<link rel="stylesheet" href="plugins/skills/skills.css">
+
+<div id="skills-plugin-root">
+    <div id="skills-layout">
+        <section id="skills-main">
+            <header id="skills-header">
+                <div class="skills-brand">
+                    <div class="skills-logo">
+                        <i data-lucide="blocks" class="w-5 h-5"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <button type="button" id="skills-project-btn" class="skills-title-btn"
+                            data-skills-i18n-title="skills_nav_projects" title="Projects" onclick="SkillsPlugin.openProjectsModal()">
+                            <span id="skills-project-title" data-skills-i18n="plugin_skills_name">Aru Skills</span>
+                            <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <p class="skills-subtitle" id="skills-project-sub"></p>
+                    </div>
+                </div>
+                <div class="skills-header-actions">
+                    <button type="button" class="btn-skills btn-skills-icon" data-skills-i18n-title="skills_nav_library"
+                        title="Skill Library" onclick="SkillsPlugin.openLibraryModal()">
+                        <i data-lucide="library" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" id="skills-rail-toggle" class="btn-skills btn-skills-icon"
+                        data-skills-i18n-title="skills_rail_toggle" title="Relay panel" onclick="SkillsPlugin.toggleRail()">
+                        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </header>
+
+            <main id="skills-thread">
+                <!-- Messages injected by SkillsPlugin.renderThread() -->
+            </main>
+
+            <footer id="skills-composer">
+                <div id="skills-composer-error" class="skills-run-status error hidden"></div>
+                <div id="skills-composer-attachments" class="hidden"></div>
+                <div class="skills-composer-box">
+                    <textarea id="skills-composer-input" rows="1"
+                        oninput="SkillsPlugin.onComposerInput(this)"
+                        onkeydown="SkillsPlugin.onComposerKey(event)"></textarea>
+                    <button type="button" id="skills-send-btn" class="skills-send-btn"
+                        title="Send" onclick="SkillsPlugin.send()">
+                        <i data-lucide="arrow-up" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="skills-composer-bar">
+                    <div class="skills-composer-tools">
+                        <button type="button" class="btn-skills btn-skills-icon" data-skills-i18n-title="skills_attach_file"
+                            title="Attach file" onclick="SkillsPlugin.pickFiles()">
+                            <i data-lucide="paperclip" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" class="btn-skills btn-skills-icon" data-skills-i18n-title="skills_add_link"
+                            title="Add link" onclick="SkillsPlugin.addComposerLink()">
+                            <i data-lucide="link" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" id="skills-search-btn" class="btn-skills btn-skills-icon"
+                            data-skills-i18n-title="skills_web_search" title="Web search" onclick="SkillsPlugin.toggleSearch()">
+                            <i data-lucide="globe" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div id="skills-composer-estimate"></div>
+                </div>
+                <input type="file" id="skills-file-input" class="hidden" multiple
+                    accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.js,.json,.html,.htm,.php"
+                    onchange="SkillsPlugin.onFilesPicked(this)">
+            </footer>
+        </section>
+
+        <aside id="skills-rail">
+            <div id="skills-rail-body">
+                <!-- Rail sections injected by SkillsPlugin.renderRail() -->
+            </div>
+        </aside>
+        <div id="skills-rail-backdrop" class="hidden" onclick="SkillsPlugin.toggleRail(false)"></div>
+    </div>
+
+    <!-- Shared modal: projects, skill library, skill settings -->
+    <div id="skills-modal" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-4">
+        <div class="absolute inset-0" onclick="SkillsPlugin.closeModal()"></div>
+        <div id="skills-modal-card"
+            class="bg-white dark:bg-gray-800 w-full rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center gap-3">
+                <h3 id="skills-modal-title" class="text-lg font-bold text-gray-800 dark:text-gray-100"></h3>
+                <button type="button" onclick="SkillsPlugin.closeModal()"
+                    class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="skills-modal-body" class="p-5"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Skills Plugin Logic -->
+<script src="plugins/skills/skills.js"></script>

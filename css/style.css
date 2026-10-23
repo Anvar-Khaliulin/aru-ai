@@ -189,8 +189,11 @@ a:focus-visible {
 .aru-happy { animation: bounce-slow 2s infinite ease-in-out; }
 .aru-thinking { animation: pulse-soft 2s infinite ease-in-out; }
 .aru-sad { animation: shake-gentle 4s infinite ease-in-out; }
-.animate-fade-in-up { animation: aru-fade-up 180ms ease-out both; }
-.fade-in { animation: aru-fade-up 180ms ease-out both; }
+/* fill-mode backwards (not both): a forwards fill would keep an identity transform on every
+   finished message, leaving it a permanent stacking context and breaking child popover
+   z-order and backdrop blur */
+.animate-fade-in-up { animation: aru-fade-up 180ms ease-out backwards; }
+.fade-in { animation: aru-fade-up 180ms ease-out backwards; }
 
 /* Header and lightweight menus */
 .app-header {
@@ -396,7 +399,7 @@ a:focus-visible {
     box-shadow: none !important;
 }
 
-#messages-container > .flex.flex-row-reverse > div:nth-child(2) {
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 {
     background: var(--aru-accent) !important;
     box-shadow: none !important;
 }
@@ -1035,6 +1038,82 @@ body.chats-dragging .folder-children {
     text-overflow: ellipsis;
 }
 
+.msg-files-badge-wrap {
+    position: relative;
+    align-self: flex-end;
+}
+
+.msg-files-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--aru-text-muted);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.dark .msg-files-badge {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.msg-files-badge:hover,
+.msg-files-badge.is-open {
+    color: var(--aru-accent-strong);
+    border-color: rgba(0, 0, 0, 0.12);
+}
+
+.msg-files-badge.is-open {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.dark .msg-files-badge.is-open {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.msg-files-popover {
+    top: calc(100% + 6px);
+    right: 0;
+    width: max-content;
+    max-width: min(72vw, 280px);
+    max-height: min(42vh, 260px);
+    z-index: 60;
+    padding: 6px 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 10px 30px rgba(24, 24, 27, 0.16);
+}
+
+.dark .msg-files-popover {
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+}
+
+.msg-files-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--aru-radius-sm);
+    font-size: 11.5px;
+    color: var(--aru-text-muted);
+    word-break: break-all;
+}
+
+.msg-files-row:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dark .msg-files-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
 .chapters-pick-banner button {
     flex: 0 0 auto;
     padding: 4px 8px;
@@ -1172,4 +1251,16 @@ body.chapters-picking [data-msg-id] {
 #doc-editor pre code {
     background: transparent;
     padding: 0;
+}
+
+/* KaTeX math inside chat bubbles */
+.prose .katex {
+    font-size: 1.05em;
+}
+
+.prose .katex-display {
+    margin: 0.4em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 0;
 }

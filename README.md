@@ -81,8 +81,13 @@ Supports three flexible ways to connect LLMs:
   - **Aru Docs**: Rich text documents & interactive analytical dashboards (**Aru AnDoc**) powered by HTML + Chart.js.
 - **Web Search**: Integrated Tavily and private SearXNG web search engines.
 - **WebRTC P2P**: Direct peer-to-peer sharing of databases, chats, and artefacts via QR code without intermediary servers.
-- **Kanban Plugin**: Built-in task board deeply integrated into Aru's prompts and heuristic engine.
 - **Multilingual (i18n)**: Full UI localization in Kazakh, English, and Russian.
+---
+## 🧩 Plugins
+
+- **Kanban Task Board**: Built-in task board with projects, columns, and cards, deeply integrated into Aru's prompts and heuristic engine and updatable straight from chat.
+- **Aru Skills**: Build multi-step AI workflows from your own prompts — a *skill* is a system prompt plus the provider and model you choose (Gemini, OpenRouter, or any local OpenAI-compatible endpoint). Skills chain into a **Relay**: each step calls its model and hands the result to the next, the last one answers, and its artefacts open on the Canvas. *Adult mode only.*
+- **Aru Fit & Care**: A private journal for health, nutrition, training, and wellbeing — weight, meals, workouts, medication protocols, cycle, and health events, logged manually or just by telling Aru. Calendar, trend dashboards, training plan templates, CSV export, and JSON backup, all stored in your local database. *Teen and adult modes; self-tracking, not medical advice.*
 ---
 ## 🗂️ Chat Organization & Customization
 

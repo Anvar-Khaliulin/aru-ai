@@ -1,0 +1,67 @@
+<!--
+---ARU-LAB.SPACE---ALMATY---2026---
+Aru Fit & Care plugin - private health, training and wellbeing workspace.
+---chat.aru-lab.space---PWA---
+-->
+<link rel="stylesheet" href="plugins/fit-care/fit-care.css">
+
+<main id="fit-care-plugin-root" aria-label="Aru Fit and Care">
+    <header class="fit-topbar">
+        <div class="fit-brand-block">
+            <span class="fit-brand-mark"><i data-lucide="heart-pulse" class="w-5 h-5"></i></span>
+            <div class="fit-brand-copy">
+                <h1>Aru Fit &amp; Care</h1>
+                <p data-fit-i18n="subtitle">Private health, training and wellbeing journal</p>
+            </div>
+        </div>
+
+        <nav id="fit-nav" class="fit-nav" aria-label="Fit and Care sections">
+            <button type="button" class="fit-nav-btn is-active" data-fit-action="view" data-view="calendar" data-fit-i18n-title="nav_calendar" title="Calendar">
+                <i data-lucide="calendar-days" class="w-4 h-4"></i><span data-fit-i18n="nav_calendar">Calendar</span>
+            </button>
+            <button type="button" class="fit-nav-btn" data-fit-action="view" data-view="dashboard" data-fit-i18n-title="nav_dashboard" title="Dashboard">
+                <i data-lucide="chart-line" class="w-4 h-4"></i><span data-fit-i18n="nav_dashboard">Dashboard</span>
+            </button>
+            <button type="button" class="fit-nav-btn" data-fit-action="view" data-view="plan" data-fit-i18n-title="nav_plan" title="Plan">
+                <i data-lucide="dumbbell" class="w-4 h-4"></i><span data-fit-i18n="nav_plan">Plan</span>
+            </button>
+            <button type="button" class="fit-nav-btn" data-fit-action="view" data-view="health" data-fit-i18n-title="nav_health" title="Health">
+                <i data-lucide="stethoscope" class="w-4 h-4"></i><span data-fit-i18n="nav_health">Health</span>
+            </button>
+            <button type="button" class="fit-nav-btn" data-fit-action="view" data-view="settings" data-fit-i18n-title="nav_settings" title="Settings">
+                <i data-lucide="settings-2" class="w-4 h-4"></i><span data-fit-i18n="nav_settings">Settings</span>
+            </button>
+        </nav>
+
+        <div class="fit-top-actions">
+            <button type="button" class="fit-quick-btn" data-fit-action="quick-log">
+                <i data-lucide="plus" class="w-4 h-4"></i><span data-fit-i18n="quick_log">Log</span>
+            </button>
+            <button type="button" class="fit-icon-btn" data-fit-action="view" data-view="settings"
+                data-fit-i18n-title="nav_settings" title="Settings">
+                <i data-lucide="settings-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="fit-view" class="fit-view" aria-live="polite">
+        <div class="fit-loading">
+            <i data-lucide="loader-2" class="w-7 h-7 animate-spin"></i>
+            <span data-fit-i18n="loading">Loading Fit &amp; Care…</span>
+        </div>
+    </div>
+
+    <div id="fit-modal" class="fit-modal hidden" role="dialog" aria-modal="true">
+        <div class="fit-modal-backdrop" data-fit-action="close-modal"></div>
+        <section id="fit-modal-card" class="fit-modal-card" aria-labelledby="fit-modal-title"></section>
+    </div>
+
+    <input type="file" id="fit-import-file" hidden accept=".json,.csv,application/json,text/csv">
+</main>
+
+<script src="plugins/fit-care/fit-care.js"></script>
+<script src="plugins/fit-care/fit-care-calendar.js"></script>
+<script src="plugins/fit-care/fit-care-dashboard.js"></script>
+<script src="plugins/fit-care/fit-care-plan.js"></script>
+<script src="plugins/fit-care/fit-care-health.js"></script>
+<script src="plugins/fit-care/fit-care-settings.js"></script>
