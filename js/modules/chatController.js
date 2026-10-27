@@ -794,7 +794,7 @@ export const ChatController = {
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, activeTab.isPrivate);
             const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, activeTab.isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: text });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate);
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate, text);
             const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
 
             let modelMsgId = null;
@@ -933,7 +933,7 @@ export const ChatController = {
             const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, isPrivate);
             const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: payload });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, isPrivate);
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, isPrivate, title);
             const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
 
             let newsModelMsgId = null;

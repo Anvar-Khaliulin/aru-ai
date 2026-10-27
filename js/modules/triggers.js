@@ -295,7 +295,99 @@ export const Triggers = {
 
     //3. TRIGGER THINKING (Artifacts)
 
-    processResponseForArtifacts(llmResponse, chatId = null, isPrivate = false) {
+    _parseTagAttrs(raw) {
+        const attrs = {};
+        const attrRegex = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|&quot;([\s\S]*?)&quot;|([^\s\]]+))/g;
+        let match;
+        while ((match = attrRegex.exec(raw || '')) !== null) {
+            attrs[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? match[5] ?? '';
+        }
+        return attrs;
+    },
+
+    _stripCodeFence(code) {
+        const value = String(code || '').trim();
+        const fenced = /^```[a-z0-9_\-+]*\s*\n([\s\S]*?)\n?```$/i.exec(value);
+        if (fenced) return fenced[1].trim();
+        return value
+            .replace(/^```[a-z0-9_\-+]*\s*\n/i, '')
+            .replace(/\n?```\s*$/i, '')
+            .trim();
+    },
+
+    _artifactTypeFrom(raw, code, userText = '') {
+        const type = String(raw || '').toLowerCase().trim();
+        if (['game', 'app', 'analytics', 'doc'].includes(type)) return type;
+
+        const body = String(code || '').toLowerCase();
+        if (/getcontext\(|requestanimationframe|new chart\(|chart\.js|<canvas/.test(body)) {
+            return /chart|dashboard|дашборд/.test(body) ? 'analytics' : 'game';
+        }
+        if (/<html|<!doctype|<div|document\.|getelementbyid/.test(body)) return 'app';
+
+        const query = String(userText || '').toLowerCase();
+        if (/игр|game/.test(query)) return 'game';
+        if (/аналитик|дашборд|analytics|dashboard/.test(query)) return 'analytics';
+        if (/документ|document/.test(query)) return 'doc';
+        return 'app';
+    },
+
+    // Cyrillic words do not honor \b, so intent checks use plain stems.
+    _isArtifactRequest(userText) {
+        const query = String(userText || '').toLowerCase();
+        if (!query) return false;
+        const action = /(созда|сдела|напиш|построй|сгенерир|придума|разработа|хочу|нужн|create|make|build|generate|write|want|need)/;
+        const subject = /(игр|game|приложен|\bapp\b|документ|document|дашборд|dashboard|аналитик|analytics)/;
+        return action.test(query) && subject.test(query);
+    },
+
+    _isDocRequest(userText) {
+        const query = String(userText || '').toLowerCase();
+        if (!query) return false;
+        const action = /(созда|сдела|напиш|подготов|состав|оформ|нужен|нужна|нужно|хочу|create|make|write|draft|prepare|need|want)/;
+        const subject = /(документ|document|\bdoc\b)/;
+        return action.test(query) && subject.test(query);
+    },
+
+    _promoteCodeBlock(code, lang, fullMatch, userText, wantsArtifact) {
+        if (!code || code.trim().length < 100) return null; // Ignore tiny snippets
+
+        const artifactLangs = ['html', 'app', 'game', 'analytics', 'doc'];
+        const lowerLang = String(lang || '').toLowerCase();
+        const trimmed = code.trim();
+        const domDriven = /document\.|getElementById|querySelector|createElement|addEventListener\(|requestAnimationFrame\(|getContext\(|window\./i.test(code);
+
+        // Weaker models sometimes ignore the artifact protocol and answer a
+        // clear "make me a game/app" request with a plain JS block. Promote it
+        // only when the user asked for it and the code actually drives a DOM.
+        const jsLangs = ['js', 'javascript', 'jsx', 'ts', 'tsx'];
+        const promoteJs = wantsArtifact && jsLangs.includes(lowerLang) && trimmed.length >= 600 && domDriven;
+        // A truncated reply can also leave an unclosed fence without a language.
+        const promoteBareHtml = !lang && wantsArtifact && /^(?:<!doctype|<html|<div|<canvas)/i.test(trimmed) && domDriven;
+
+        if (!promoteJs && !promoteBareHtml && (!lang || !artifactLangs.includes(lowerLang))) return null;
+
+        let type;
+        if (['app', 'game', 'analytics', 'doc'].includes(lowerLang)) {
+            type = lowerLang;
+        } else if (lowerLang === 'html') {
+            // High-confidence check for app/game/analytics
+            const isInteractive = code.includes('Canvas') || code.includes('Game') || code.includes('Chart') || code.includes('getContext(');
+            type = isInteractive ? (code.includes('Chart') ? 'analytics' : 'game') : 'app';
+        } else {
+            type = this._artifactTypeFrom('', code, userText);
+        }
+
+        return {
+            type,
+            title: "Auto Generated " + (type.charAt(0).toUpperCase() + type.slice(1)),
+            code: trimmed,
+            fullMatch,
+            autoTitle: true
+        };
+    },
+
+    processResponseForArtifacts(llmResponse, chatId = null, isPrivate = false, userText = '') {
         this.PATTERNS.ARTIFACT.lastIndex = 0;
         const artifactRegex = this.PATTERNS.ARTIFACT;
 
@@ -310,33 +402,100 @@ export const Triggers = {
             artifactsFound.push({ type, title, code: code.trim(), fullMatch });
         }
 
+        // The strict tag regex can miss two common cases: the reply was cut off
+        // by the output token limit (no closing tag), or the attributes were
+        // malformed. Salvage the body between the tags (or up to the end) so the
+        // user gets a card and a canvas instead of raw code in the chat.
+        if (artifactsFound.length === 0) {
+            const openTag = /\[\[\s*ARU_ARTIFACT\b([^\]]*)\]\]/i.exec(llmResponse);
+            if (openTag) {
+                const closeRegex = /\[\[\s*\/ARU_ARTIFACT\s*\]\]/gi;
+                closeRegex.lastIndex = openTag.index + openTag[0].length;
+                const closeTag = closeRegex.exec(llmResponse);
+                const body = llmResponse.slice(
+                    openTag.index + openTag[0].length,
+                    closeTag ? closeTag.index : llmResponse.length
+                );
+                const code = this._stripCodeFence(body);
+                if (code) {
+                    const attrs = this._parseTagAttrs(openTag[1]);
+                    const type = this._artifactTypeFrom(attrs.type, code, userText);
+                    const title = String(attrs.title || '').trim();
+                    artifactsFound.push({
+                        type,
+                        title: title || "Auto Generated " + (type.charAt(0).toUpperCase() + type.slice(1)),
+                        code,
+                        fullMatch: llmResponse.slice(
+                            openTag.index,
+                            closeTag ? closeTag.index + closeTag[0].length : llmResponse.length
+                        ),
+                        autoTitle: !title
+                    });
+                }
+            }
+        }
+
         // HEURISTIC FALLBACK: If no artifacts found, but there's a code block
         if (artifactsFound.length === 0) {
+            const wantsArtifact = this._isArtifactRequest(userText);
             // Updated regex: capture ANY optional language identifier (e.g., python, js, html)
             const codeBlockRegex = /```([a-z0-9_\-+]+)?\s*\n([\s\S]*?)```/gi;
             let cbMatch;
             while ((cbMatch = codeBlockRegex.exec(llmResponse)) !== null) {
                 const [fullMatch, lang, code] = cbMatch;
-                if (!code || code.trim().length < 100) continue; // Ignore tiny snippets
+                const art = this._promoteCodeBlock(code, lang, fullMatch, userText, wantsArtifact);
+                if (art) artifactsFound.push(art);
+            }
 
-                // ONLY auto-promote if the language is explicitly a "heavy" artifact type.
-                // Standard code snippets (js, python, cpp, etc) stay in chat.
-                // 'html' is allowed but only if it looks like a component.
-                const artifactLangs = ['html', 'app', 'game', 'analytics', 'doc'];
-                
-                // If there's NO language tag, or it's NOT an artifact language, skip artifact creation.
-                // This ensures snippets like ```python stay as normal markdown in the chat.
-                if (!lang || !artifactLangs.includes(lang.toLowerCase())) continue;
-
-                let type = 'doc';
-                if (lang.toLowerCase() === 'html' || code.includes('<script') || code.includes('<div')) {
-                    // High-confidence check for app/game/analytics
-                    const isInteractive = code.includes('Canvas') || code.includes('Game') || code.includes('Chart') || code.includes('getContext(');
-                    type = isInteractive ? (code.includes('Chart') ? 'analytics' : 'game') : 'app';
+            // Output truncated in the middle of a fenced block: promote the tail.
+            if (artifactsFound.length === 0) {
+                const fenceMarks = (llmResponse.match(/```/g) || []).length;
+                const openings = [...llmResponse.matchAll(/```([a-z0-9_\-+]*)[ \t]*\n/gi)];
+                if (fenceMarks % 2 === 1 && openings.length > 0) {
+                    const last = openings[openings.length - 1];
+                    const tail = llmResponse.slice(last.index + last[0].length);
+                    const art = this._promoteCodeBlock(
+                        tail,
+                        last[1],
+                        llmResponse.slice(last.index),
+                        userText,
+                        wantsArtifact
+                    );
+                    if (art) artifactsFound.push(art);
                 }
+            }
+        }
 
-                const title = "Auto Generated " + (type.charAt(0).toUpperCase() + type.slice(1));
-                artifactsFound.push({ type, title, code: code.trim(), fullMatch, autoTitle: true });
+        // Progressive fallback for weak/local models that answer with plain text:
+        // a document request becomes a doc artifact, a game/app request answered
+        // with bare HTML becomes an app. Guarded by length and intent so normal
+        // explanations and clarifying questions stay in the chat.
+        if (artifactsFound.length === 0) {
+            const text = String(llmResponse || '').trim();
+            const startsHtml = /^(?:<!doctype|<html|<body|<div|<canvas|<svg)/i.test(text);
+            const hasMarkup = /<script|<canvas|<\/(?:div|body|html)>/i.test(text);
+            const looksLikeApp = startsHtml && hasMarkup && text.length >= 400;
+
+            if (text.length >= 400 && !/```/.test(text) && this._isDocRequest(userText) && !looksLikeApp) {
+                const isQuestion = /^(?:какой|какую|какое|что|чем|how|what|which)[\s\S]{0,80}\?/i.test(text)
+                    && text.length < 1200;
+                if (!isQuestion) {
+                    artifactsFound.push({
+                        type: 'doc',
+                        title: 'Auto Generated Doc',
+                        code: text,
+                        fullMatch: llmResponse,
+                        autoTitle: true
+                    });
+                }
+            } else if (looksLikeApp && this._isArtifactRequest(userText)) {
+                artifactsFound.push({
+                    type: this._artifactTypeFrom('', text, userText),
+                    title: 'Auto Generated App',
+                    code: text,
+                    fullMatch: llmResponse,
+                    autoTitle: true
+                });
             }
         }
 
@@ -1140,33 +1299,48 @@ export const Triggers = {
 
         // Fallback: if LLM didn't output any [[TOOL:...]] tags but the response
         // clearly asks to "show news", "show weather" or "show tasks", inject the appropriate widget.
+        // Cues are matched against prose only: a game's `showScreen()` or a
+        // `tasks` array inside a code block must not spawn a kanban board.
         if (replacements.length === 0) {
             try {
-                const lower = cleanResponse.toLowerCase();
+                const hasArtifact = cleanResponse.includes('openArtifact(');
+                const visibleText = cleanResponse
+                    .replace(/```[\s\S]*?```/g, ' ')
+                    .replace(/<pre[\s\S]*?<\/pre>/gi, ' ')
+                    .replace(/<code[\s\S]*?<\/code>/gi, ' ')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .toLowerCase();
+                const lower = visibleText;
                 const urls = window.app?.getRSSUrls ? window.app.getRSSUrls() : [];
-                // News cues
-                if (/(покажи|показать|покажите|show).*(новост|news)/.test(lower)) {
-                    const widget = await Tools.getNewsCard(urls, '');
-                    cleanResponse += '\n\n' + widget;
-                }
-                // Task board cues (ru/kk/en)
-                const showCue = /(покажи|показать|покажите|список|мои задачи|show|list|my tasks|көрсет|менің тапсырмаларым)/;
-                const taskNoun = /(задач|тапсырма|task|board|доск|тақта)/;
-                if (showCue.test(lower) && taskNoun.test(lower)) {
-                    const widget = await Tools.getTasksCard('');
-                    cleanResponse += '\n\n' + widget;
-                }
-                // Weather cues (supports Russian, English, and simple Kazakh heuristics)
-                if (/(погода|weather|forecast|ауа райы|ауа рай)/.test(lower)) {
-                    let city = 'Almaty';
-                    const ruMatch = lower.match(/погода в ([a-zа-яё\-\s]+)/);
-                    const enMatch = lower.match(/weather in ([a-z\-\s]+)/);
-                    const kkMatch = lower.match(/ауа райы (?:қала|в|в?ы?)?\s*([a-zа-яё\-\s]+)/);
-                    if (ruMatch && ruMatch[1]) city = ruMatch[1].trim();
-                    else if (enMatch && enMatch[1]) city = enMatch[1].trim();
-                    else if (kkMatch && kkMatch[1]) city = kkMatch[1].trim();
-                    const w = await Tools.getWeatherCard(city);
-                    cleanResponse += '\n\n' + w;
+
+                if (hasArtifact) {
+                    // Artifact replies already have their own card; widgets would stack on top.
+                } else {
+                    // News cues
+                    if (/(покажи|показать|покажите|show).*(новост|news)/.test(lower)) {
+                        const widget = await Tools.getNewsCard(urls, '');
+                        cleanResponse += '\n\n' + widget;
+                    }
+                    // Task board cues (ru/kk/en)
+                    const showCue = /(покажи|показать|покажите|список|мои задачи|show|list|my tasks|көрсет|менің тапсырмаларым)/;
+                    const taskNoun = /(задач|тапсырма|task|board|доск|тақта)/;
+                    if (showCue.test(lower) && taskNoun.test(lower)) {
+                        const widget = await Tools.getTasksCard('');
+                        cleanResponse += '\n\n' + widget;
+                    }
+                    // Weather cues (supports Russian, English, and simple Kazakh heuristics)
+                    if (/(погода|weather|forecast|ауа райы|ауа рай)/.test(lower)) {
+                        let city = 'Almaty';
+                        const ruMatch = lower.match(/погода в ([a-zа-яё\-\s]+)/);
+                        const enMatch = lower.match(/weather in ([a-z\-\s]+)/);
+                        const kkMatch = lower.match(/ауа райы (?:қала|в|в?ы?)?\s*([a-zа-яё\-\s]+)/);
+                        if (ruMatch && ruMatch[1]) city = ruMatch[1].trim();
+                        else if (enMatch && enMatch[1]) city = enMatch[1].trim();
+                        else if (kkMatch && kkMatch[1]) city = kkMatch[1].trim();
+                        const w = await Tools.getWeatherCard(city);
+                        cleanResponse += '\n\n' + w;
+                    }
                 }
             } catch (e) {
                 console.warn('Tool fallback injection failed', e);
