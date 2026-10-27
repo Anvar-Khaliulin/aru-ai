@@ -705,6 +705,7 @@ a:focus-visible {
     left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
     margin: 0 !important;
     border-radius: 0 !important;
 }

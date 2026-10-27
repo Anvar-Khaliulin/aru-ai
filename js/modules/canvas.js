@@ -117,7 +117,7 @@ export const CanvasManager = {
 
             const iframe = document.createElement('iframe');
             iframe.className = 'w-full h-full border-none';
-            iframe.sandbox = 'allow-scripts allow-forms allow-modals allow-popups allow-same-origin';
+            iframe.sandbox = 'allow-scripts allow-forms allow-modals allow-popups';
 
             container.appendChild(iframe);
             this.containers[chatId] = { container, iframe };
@@ -141,7 +141,9 @@ export const CanvasManager = {
         let finalCode = code;
         if (type === 'doc') {
             if (typeof marked !== 'undefined') {
-                finalCode = `<div class="prose prose-sm md:prose-base dark:prose-invert max-w-none">${marked.parse(code)}</div>`;
+                const docHtml = marked.parse(code);
+                const safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
+                finalCode = `<div class="prose prose-sm md:prose-base dark:prose-invert max-w-none">${safeHtml}</div>`;
             } else {
                 finalCode = `<pre>${code}</pre>`;
             }
@@ -241,7 +243,8 @@ export const CanvasManager = {
         if (!editor) return;
         const code = this.currentArtifact.code;
         if (typeof marked !== 'undefined') {
-            editor.innerHTML = marked.parse(code);
+            const docHtml = marked.parse(code);
+            editor.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
         } else {
             editor.textContent = code;
         }

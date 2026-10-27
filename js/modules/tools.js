@@ -188,6 +188,11 @@ export const Tools = {
             .replace(/'/g, '&#39;');
     },
 
+    _safeUrl(value) {
+        const raw = String(value == null ? '' : value).trim();
+        return /^https?:\/\//i.test(raw) ? raw : '';
+    },
+
     // --- NEWS RSS ---
     async getNewsCard(rssRawList, filterTag = '') {
         if (!rssRawList || rssRawList.length === 0) {
@@ -250,9 +255,11 @@ export const Tools = {
                     const source = new URL(feed.url).hostname.replace('www.', '');
 
                     // Generates an isolated DOM wrapper component to encapsulate data tags and interactive actions safely
-                    const safeTitle = title.replace(/"/g, '&quot;').replace(/\'/g, '&#39;').replace(/\n/g, ' ');
-                    const safeLink = encodeURIComponent(link);
-                    const safeDesc = cleanDesc.replace(/"/g, '&quot;').replace(/\'/g, '&#39;').replace(/\n/g, ' ');
+                    const safeTitle = Tools._esc(String(title || '').replace(/\n/g, ' '));
+                    const safeLink = encodeURIComponent(link || '');
+                    const safeDesc = Tools._esc(String(cleanDesc || '').replace(/\n/g, ' '));
+                    const safeHref = Tools._esc(Tools._safeUrl(link));
+                    const safeImg = Tools._esc(Tools._safeUrl(imgUrl));
 
                     html += `
                     <div class="flex gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl hover:border-aru-400 hover:shadow-lg transition-all group overflow-hidden" 
@@ -260,21 +267,21 @@ export const Tools = {
                          data-news-link="${safeLink}" 
                          data-news-desc="${safeDesc}" 
                          data-news-full="${safeFull}">
-                        ${imgUrl ? `
+                        ${safeImg ? `
                         <div class="w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="${imgUrl}" class="w-full h-full object-cover transition-transform group-hover:scale-110" onerror="this.remove()">
+                            <img src="${safeImg}" class="w-full h-full object-cover transition-transform group-hover:scale-110" onerror="this.remove()">
                         </div>` : ''}
                         <div class="flex-1 min-w-0">
-                            <h4 class="font-bold text-gray-800 dark:text-gray-100 text-xs mb-1 line-clamp-2 leading-relaxed group-hover:text-aru-600">${title}</h4>
-                            <p class="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">${cleanDesc}</p>
+                            <h4 class="font-bold text-gray-800 dark:text-gray-100 text-xs mb-1 line-clamp-2 leading-relaxed group-hover:text-aru-600">${safeTitle}</h4>
+                            <p class="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">${safeDesc}</p>
                             <div class="flex items-center gap-2 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                                 <span class="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 px-1.5 py-0.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                    <i data-lucide="rss" class="w-2.5 h-2.5"></i> ${source}
+                                    <i data-lucide="rss" class="w-2.5 h-2.5"></i> ${Tools._esc(source)}
                                 </span>
                             </div>
                         </div>
                         <div class="flex-shrink-0 flex flex-col justify-center items-center gap-2">
-                            <a href="${link}" target="_blank" class="p-2 text-gray-400 hover:text-aru-500 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-700" title="${state.translations?.action_open || 'Open'}">
+                            <a href="${safeHref || '#'}" target="_blank" rel="noopener noreferrer" class="p-2 text-gray-400 hover:text-aru-500 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-700" title="${state.translations?.action_open || 'Open'}">
                                 <i data-lucide="external-link" class="w-4 h-4"></i>
                             </a>
                             <button onclick="window.app.discussNewsFromEl(this)" class="p-2 bg-aru-500 hover:bg-aru-600 text-white rounded-lg transition shadow-md hover:scale-105" title="${state.translations?.news_discuss_btn || 'Discuss'}">

@@ -98,6 +98,21 @@ export const UI = {
         if (el) el.remove();
     },
 
+    // The send button doubles as a stop button while a reply is generating.
+    setComposerSending(isSending) {
+        const btn = document.getElementById('send-btn');
+        if (!btn) return;
+        const t = (aruGlobalState && aruGlobalState.translations) || {};
+        const label = isSending
+            ? (t.btn_stop || 'Stop')
+            : (t.btn_send || 'Send');
+        btn.innerHTML = `<i data-lucide="${isSending ? 'square' : 'send'}" class="w-5 h-5"></i>`;
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.dataset.sending = isSending ? 'true' : 'false';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
     appendMessage(msg) {
         if (!this.container) this.container = document.getElementById('messages-container');
 
@@ -277,10 +292,34 @@ export const UI = {
             .join('');
 
         const restore = new RegExp(`@@ARUMATH${nonce}_(\\d+)@@`, 'g');
-        return marked.parse(shielded).replace(restore, (placeholder, index) => {
+        const rendered = marked.parse(shielded).replace(restore, (placeholder, index) => {
             const raw = vault[Number(index)] || '';
             return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         });
+        return this.sanitizeHTML(rendered);
+    },
+
+    // Strips executable markup from rendered markdown. Marked passes raw HTML
+    // through, so any pasted text, RSS snippet or model reply could run script
+    // with access to the user's keys and database.
+    sanitizeHTML(html) {
+        if (typeof DOMPurify === 'undefined') {
+            console.warn('UI: DOMPurify is unavailable, rendered HTML was not sanitized');
+            return html;
+        }
+        if (!this._sanitizerReady) {
+            // The artifact card is built by the app, not by the model. Keep only
+            // that exact handler shape; every other inline event is stripped.
+            DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+                if (data.attrName !== 'onclick') return;
+                const value = String(data.attrValue || '').trim();
+                if (/^window\.app\.openArtifact\("(?:doc|app|game|analytics)",\s*"(?:[^"\\]|\\.)*"\)$/.test(value)) {
+                    data.forceKeepAttr = true;
+                }
+            });
+            this._sanitizerReady = true;
+        }
+        return DOMPurify.sanitize(html);
     },
 
     /**

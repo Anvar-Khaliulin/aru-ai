@@ -10,6 +10,13 @@ import { Tools } from './tools.js';
 import { DB } from './db.js';
 import { UI } from './ui.js';
 
+// JS \b treats Cyrillic as a non-word character, so explicit lookarounds are
+// needed for ru/kk cues ("создай", "Ару") to match at all.
+const wordBoundary = (word) => new RegExp(
+    `(?<![a-zа-яёәіңөұүқғһ0-9])${String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-zа-яёәіңөұүқғһ0-9])`,
+    'i'
+);
+
 export const Triggers = {
 
     // Similarity tolerance configuration for duplicate vector mapping
@@ -61,7 +68,7 @@ export const Triggers = {
             // Check if query starts with or contains creation verbs in a way that suggests a new task
             const isCreationRequest = creationCues.some(cue => {
                 // Check for word boundary to avoid partial matches (e.g. "news" matching "new")
-                const regex = new RegExp(`\\b${cue}\\b`, 'i');
+                const regex = wordBoundary(cue);
                 return regex.test(query);
             });
 
@@ -89,7 +96,7 @@ export const Triggers = {
                 }
                 
                 // If no explicit "open" command, require the query to contain the FULL name as a standalone phrase
-                const nameRegex = new RegExp(`\\b${name}\\b`, 'i');
+                const nameRegex = wordBoundary(name);
                 return nameRegex.test(query);
             });
 
@@ -350,10 +357,13 @@ export const Triggers = {
                 doc: { icon: 'file-text', color: 'bg-emerald-100 text-emerald-600', label: t.lib_label_doc || 'Aru Doc' }
             };
 
-            const item = config[type] || config.doc;
+            const safeType = Object.prototype.hasOwnProperty.call(config, type) ? type : 'doc';
+            const item = config[safeType];
+            const jsType = UI.escapeHTML(JSON.stringify(safeType));
+            const jsTitle = UI.escapeHTML(JSON.stringify(title));
 
             const replacementCard = `
-<div class="my-4 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-between gap-4 shadow-sm group hover:border-aru-400 transition cursor-pointer" onclick="window.app.openArtifact('${type}', '${title.replace(/'/g, "\\'")}')">
+<div class="my-4 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-between gap-4 shadow-sm group hover:border-aru-400 transition cursor-pointer" onclick='window.app.openArtifact(${jsType}, ${jsTitle})'>
         <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-lg ${item.color} flex items-center justify-center transition-transform group-hover:scale-110">
             <i data-lucide="${item.icon}" class="w-6 h-6"></i>
@@ -370,10 +380,10 @@ export const Triggers = {
 
             if (!window.aruArtifactsCache) window.aruArtifactsCache = {};
             const cacheKey = (chatId !== null && chatId !== undefined) ? `${chatId}:${title}` : title;
-            window.aruArtifactsCache[cacheKey] = { type, title, code: code.trim() };
+            window.aruArtifactsCache[cacheKey] = { type: safeType, title, code: code.trim() };
 
             if (!isPrivate && chatId !== null && chatId !== undefined && DB.saveChatArtifact) {
-                DB.saveChatArtifact(chatId, title, type, code.trim());
+                DB.saveChatArtifact(chatId, title, safeType, code.trim());
             }
 
             cleanResponse = cleanResponse.replace(fullMatch, replacementCard);

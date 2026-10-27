@@ -137,12 +137,29 @@ export const Heuristics = {
             .trim();
     },
 
+    // Compiled Unicode-aware copies of the pattern list (JS \b ignores Cyrillic)
+    _patternCache: new WeakMap(),
+
+    _preparePattern(pattern) {
+        let prepared = this._patternCache.get(pattern);
+        if (prepared) return prepared;
+        prepared = pattern;
+        if (/[^\x00-\x7F]/.test(pattern.source)) {
+            const source = pattern.source
+                .replace(/^\\b/, '(?<![a-zа-яёәіңөұүқғһ0-9])')
+                .replace(/\\b$/, '(?![a-zа-яёәіңөұүқғһ0-9])');
+            if (source !== pattern.source) prepared = new RegExp(source, pattern.flags);
+        }
+        this._patternCache.set(pattern, prepared);
+        return prepared;
+    },
+
     _matchesAny(text, patterns = []) {
-        return patterns.some(pattern => pattern.test(text));
+        return patterns.some(pattern => this._preparePattern(pattern).test(text));
     },
 
     _countMatches(text, patterns = []) {
-        return patterns.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
+        return patterns.reduce((count, pattern) => count + (this._preparePattern(pattern).test(text) ? 1 : 0), 0);
     },
 
     _collectEmotionSignals(responseText, userText = '') {

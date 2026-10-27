@@ -60,6 +60,7 @@ async function loadTranslations(lang) {
         );
         state.translations = resolved;
 
+        document.documentElement.lang = lang;
         applyTranslations(document); // Apply to entire document
 
         console.log(`Translations loaded: ${lang}`);
@@ -122,6 +123,7 @@ const app = {
     loadChat: (...args) => ChatController.loadChat(...args),
     deleteChat: (...args) => ChatController.deleteChat(...args),
     sendMessage: (...args) => ChatController.sendMessage(...args),
+    stopGeneration: (...args) => ChatController.stopGeneration(...args),
     discussNewsFromEl: (...args) => ChatController.discussNewsFromEl(...args),
     discussNews: (...args) => ChatController.discussNews(...args),
     searchChats: (...args) => ChatController.searchChats(...args),
@@ -1216,7 +1218,11 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
 
     tokenEstimator: (text) => {
         if (!text) return 0;
-        return Math.ceil(text.length / 4);
+        const value = String(text);
+        // Cyrillic tokenizes closer to 2.5 chars per token than 4, so the
+        // plain length/4 estimate overflows the window on ru/kk chats.
+        const cyrillic = (value.match(/[\u0400-\u04FF]/g) || []).length;
+        return Math.ceil(cyrillic / 2.5 + (value.length - cyrillic) / 4);
     },
 
     /**

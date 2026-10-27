@@ -6,6 +6,9 @@ Handles proxies, CORS, and localhost priority.
 */
 import { aruGlobalState as state } from './aruState.js';
 
+// Without a limit a stalled connection keeps the chat "typing" forever.
+const DEFAULT_TIMEOUT_MS = 120000;
+
 export const Network = {
     /**
      * Enhanced fetch with proxy, localhost support, and context-based routing.
@@ -23,6 +26,8 @@ export const Network = {
      * @returns {Promise<Response>}
      */
     async fetch(url, options = {}, context = 'general') {
+        const { timeoutMs, ...requestOptions } = options;
+        const timeout = Number(timeoutMs) > 0 ? Number(timeoutMs) : DEFAULT_TIMEOUT_MS;
         const settings = state.userSettings || {};
         const strategy = settings.proxy_strategy || 'auto'; // 'none', 'auto', 'custom'
         const customProxy = (settings.proxy_custom_url || '').trim();
@@ -35,35 +40,35 @@ export const Network = {
         // 1. Direct Routes (Always direct if cors_safe or localhost with priority)
         if (context === 'cors_safe' || (localhostPriority && isLocal)) {
             console.log(`Network: Direct route for ${this._redactUrl(url)} (Context: ${context}, Local: ${isLocal})`);
-            return this._fetchDirect(url, this._withAddressSpace(options, isLocal, isLoopback));
+            return this._fetchDirect(url, this._withAddressSpace(requestOptions, isLocal, isLoopback), timeout);
         }
 
         // 2. Strategy: Direct
         if (strategy === 'none') {
-            return this._fetchDirect(url, this._withAddressSpace(options, isLocal, isLoopback));
+            return this._fetchDirect(url, this._withAddressSpace(requestOptions, isLocal, isLoopback), timeout);
         }
 
         // 3. Strategy: Custom (trusted proxy chosen by the user)
         if (strategy === 'custom' && customProxy) {
             console.log(`Network: Using custom proxy for ${url}`);
-            return this._fetchWrapped(this._buildProxyUrl(customProxy, url), options);
+            return this._fetchWrapped(this._buildProxyUrl(customProxy, url), requestOptions, timeout);
         }
 
         // 4. Context 'local_api' under auto strategy: try direct first so that
         // credentials never leak through public proxies. Fall back to public
         // proxies ONLY when the request has no Authorization header.
         if (context === 'local_api') {
-            const hasCredentials = !!(options.headers && (options.headers['Authorization'] || options.headers.Authorization));
+            const hasCredentials = !!(requestOptions.headers && (requestOptions.headers['Authorization'] || requestOptions.headers.Authorization));
             try {
                 console.log(`Network: Direct route for API ${this._redactUrl(url)}`);
-                return await fetch(url, this._withAddressSpace(options, isLocal, isLoopback));
+                return await this._fetchDirect(url, this._withAddressSpace(requestOptions, isLocal, isLoopback), timeout);
             } catch (e) {
                 if (e instanceof TypeError) {
                     if (hasCredentials) {
                         throw new Error(`Direct request to ${url} failed (CORS or network). For your safety, Aru never sends API keys through public proxies. Options: enable CORS on the server, run the app on the same machine/network, or configure a trusted custom proxy in Settings → Network.`);
                     }
                     console.warn('Network: local_api direct request failed, falling back to public proxies (request has no credentials)');
-                    return this._fetchAutoProxy(url, options);
+                    return this._fetchAutoProxy(url, requestOptions);
                 }
                 throw e;
             }
@@ -72,7 +77,7 @@ export const Network = {
         // 5. Strategy: Auto (Public Proxies with logic and fallbacks especially for pure HTML feeds)
         // For API data or RSS, try corsproxy.io first as it's cleaner, then fallback to AllOrigins
         console.log(`Network: Using auto proxy for ${this._redactUrl(url)}`);
-        return this._fetchAutoProxy(url, options);
+        return this._fetchAutoProxy(url, requestOptions);
     },
 
     _hostname(url) {
@@ -123,10 +128,16 @@ export const Network = {
             : proxyTemplate + encodeURIComponent(url);
     },
 
-    async _fetchDirect(url, options) {
+    async _fetchDirect(url, options, timeoutMs = DEFAULT_TIMEOUT_MS) {
         try {
-            return await fetch(url, options);
+            return await this._fetchWithTimeout(url, options, timeoutMs);
         } catch (e) {
+            if (e && e.name === 'AbortError') {
+                // A user-initiated stop keeps its AbortError; only our own timer
+                // is converted into a readable message.
+                if (options && options.signal && options.signal.aborted) throw e;
+                throw new Error('Request timed out. The server is not responding.');
+            }
             if (e instanceof TypeError) {
                 if (window.location.protocol === 'https:' && url.startsWith('http:')) {
                     throw new Error("Mixed Content: Browser blocked HTTP request from HTTPS. Allow 'Insecure content' in site settings or use local version of the app.");
@@ -137,7 +148,7 @@ export const Network = {
         }
     },
 
-    _fetchWithTimeout(url, options, ms) {
+    _fetchWithTimeout(url, options = {}, ms = DEFAULT_TIMEOUT_MS) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), ms);
         if (options && options.signal) {
@@ -180,10 +191,8 @@ export const Network = {
     /**
      * Internal fetch wrapper that handles proxy-specific response formats (like AllOrigins JSON wrapping)
      */
-    async _fetchWrapped(proxyUrl, options, timeout) {
-        const res = timeout
-            ? await this._fetchWithTimeout(proxyUrl, options, timeout)
-            : await fetch(proxyUrl, options);
+    async _fetchWrapped(proxyUrl, options, timeout = DEFAULT_TIMEOUT_MS) {
+        const res = await this._fetchWithTimeout(proxyUrl, options, timeout);
         if (!res.ok) return res;
 
         // If it's AllOrigins, we need to unwrap the JSON

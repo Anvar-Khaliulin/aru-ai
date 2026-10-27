@@ -375,6 +375,9 @@ export const ChatController = {
         // Sync Attachments UI
         UI.renderAttachments(tab.attachments || []);
 
+        // A tab can still be generating in the background after a switch
+        UI.setComposerSending(!!tab.isSending);
+
         UI.scrollToBottom();
 
         if (window.innerWidth < 768) {
@@ -659,7 +662,13 @@ export const ChatController = {
         const targetChatId = state.currentChatId;
         const activeTab = state.tabs.find(t => t.chatId == targetChatId);
 
-        if (!activeTab || activeTab.isSending) return;
+        if (!activeTab) return;
+
+        // Clicking the send button during generation stops it instead of sending.
+        if (activeTab.isSending) {
+            ChatController.stopGeneration();
+            return;
+        }
 
         const input = document.getElementById('prompt-input');
         const text = input.value.trim();
@@ -667,7 +676,10 @@ export const ChatController = {
 
         if (!text && attachments.length === 0) return;
 
+        const controller = new AbortController();
+        activeTab.abortController = controller;
         activeTab.isSending = true;
+        UI.setComposerSending(true);
         ChatController.renderTabs(); // Show loading in tab
 
         // Clear input and tab attachments
@@ -719,7 +731,7 @@ export const ChatController = {
             if (activeTab.isSearchEnabled) {
                 console.log("Grounding: Web Search active, querying...");
                 try {
-                    const snippets = await Search.query(text);
+                    const snippets = await Search.query(text, { signal: controller.signal });
                     if (snippets) {
                         const smartMode = (state.userSettings.search_smart ?? 'true') !== 'false';
                         if (smartMode) {
@@ -733,6 +745,7 @@ export const ChatController = {
                         console.log("Grounding: Results injected into context");
                     }
                 } catch (e) {
+                    if (controller.signal.aborted) throw e;
                     console.error("Grounding: Search failed", e);
                     UI.showToast(`${state.translations.search_error_toast || 'Web search failed, answering from knowledge'}: ${e.message}`, 'cloud-off');
                 }
@@ -769,7 +782,7 @@ export const ChatController = {
                 contextLimit
             );
 
-            let raw = await ChatController.app.llm.sendMessage(history, toSend);
+            let raw = await ChatController.app.llm.sendMessage(history, toSend, { signal: controller.signal });
             if (raw == null) {
                 raw = Safety.getRefusal('output');
             } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
@@ -812,15 +825,31 @@ export const ChatController = {
                 }
             }
         } catch (err) {
+            const aborted = controller.signal.aborted;
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                if (aborted) {
+                    UI.showToast(state.translations?.btn_stop || 'Generation stopped', 'square');
+                } else {
+                    UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                }
             }
-            console.error(err);
+            if (aborted) console.info('Generation stopped by the user');
+            else console.error(err);
         } finally {
             activeTab.isSending = false;
+            activeTab.abortController = null;
+            // Another tab may still be generating; mirror the active tab only.
+            const currentTab = state.tabs.find(t => t.chatId == state.currentChatId);
+            UI.setComposerSending(!!(currentTab && currentTab.isSending));
             ChatController.renderTabs();
         }
+    },
+
+    stopGeneration: () => {
+        const tab = state.tabs.find(t => t.chatId == state.currentChatId)
+            || state.tabs.find(t => t.isSending);
+        if (tab && tab.abortController) tab.abortController.abort();
     },
 
     discussNewsFromEl: (el) => {
@@ -851,14 +880,23 @@ export const ChatController = {
 
         const activeTab = state.tabs.find(t => t.chatId == targetChatId);
         if (!activeTab || activeTab.isSending) return;
+        const controller = new AbortController();
+        activeTab.abortController = controller;
 
         const cleanFull = (fullText || desc || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const visibleText = `#### [${title}](${link})\n\n${cleanFull}`;
         const payload = `[[NEWS_FULL]]\n${cleanFull}\n[[/NEWS_FULL]]\n${title}`;
-        const newsMsgId = DB.saveMessage(targetChatId, 'user', payload);
+        const isPrivate = !!activeTab.isPrivate;
+        let newsMsgId = null;
+        if (isPrivate) {
+            activeTab.messages.push({ role: 'user', content: payload });
+        } else {
+            newsMsgId = DB.saveMessage(targetChatId, 'user', payload);
+        }
         if (targetChatId === state.currentChatId) UI.appendMessage({ role: 'user', content: visibleText, id: newsMsgId });
 
         activeTab.isSending = true;
+        UI.setComposerSending(true);
         ChatController.renderTabs();
 
         try {
@@ -875,7 +913,7 @@ export const ChatController = {
                 toSend = `[CURRENT_CANVAS_ARTIFACT type="${art.type}" title="${art.title}"]\n${art.code}\n[/CURRENT_CANVAS_ARTIFACT]\n\nUser: ${toSend}`;
             }
 
-            const allMessages = DB.getMessages(targetChatId);
+            const allMessages = isPrivate ? activeTab.messages : DB.getMessages(targetChatId);
             const contextLimit = parseInt(state.userSettings.token_limit) || 8192;
             const history = ChatController.app.buildContextHistory(
                 allMessages.slice(0, -1),
@@ -883,7 +921,7 @@ export const ChatController = {
                 ChatController.app.tokenEstimator(toSend),
                 contextLimit
             );
-            let raw = await ChatController.app.llm.sendMessage(history, toSend);
+            let raw = await ChatController.app.llm.sendMessage(history, toSend, { signal: controller.signal });
             if (raw == null) {
                 raw = Safety.getRefusal('output');
             } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
@@ -891,26 +929,41 @@ export const ChatController = {
                 raw = Safety.getRefusal('output');
             }
             const extracted = Triggers.extractSuggestions(raw);
-            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse);
-            const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, false);
-            const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, false);
+            const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse, isPrivate);
+            const responseAfterTasks = await Triggers.processResponseForTasks(responseAfterMemoryCheck, isPrivate);
+            const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: payload });
-            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate);
+            const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, isPrivate);
             const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
 
-            const newsModelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
+            let newsModelMsgId = null;
+            if (isPrivate) {
+                activeTab.messages.push({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true });
+            } else {
+                newsModelMsgId = DB.saveMessage(targetChatId, 'model', finalHtml, emotion, 1);
+            }
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
                 UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: newsModelMsgId, suggestions: extracted.suggestions });
             }
         } catch (err) {
+            const aborted = controller.signal.aborted;
             if (targetChatId === state.currentChatId) {
                 UI.hideTyping();
-                UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                if (aborted) {
+                    UI.showToast(state.translations?.btn_stop || 'Generation stopped', 'square');
+                } else {
+                    UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                }
             }
-            console.error(err);
+            if (aborted) console.info('Generation stopped by the user');
+            else console.error(err);
         } finally {
             activeTab.isSending = false;
+            activeTab.abortController = null;
+            // Another tab may still be generating; mirror the active tab only.
+            const currentTab = state.tabs.find(t => t.chatId == state.currentChatId);
+            UI.setComposerSending(!!(currentTab && currentTab.isSending));
             ChatController.renderTabs();
         }
     },

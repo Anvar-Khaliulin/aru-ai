@@ -5,6 +5,9 @@ Large Language Model client facilitating API communications with Gemini, OpenRou
 */
 import { Network } from './network.js';
 
+// Long local generations are legitimate; the Stop button covers the rest.
+const LLM_TIMEOUT_MS = 180000;
+
 export class LLMClient {
     constructor() {
         this.llmType = 'gemini'; // 'gemini', 'openrouter', 'custom'
@@ -43,15 +46,15 @@ export class LLMClient {
         return this.temperature;
     }
 
-    async sendMessage(history, currentMessage) {
+    async sendMessage(history, currentMessage, options = {}) {
         if (this.llmType === 'gemini') {
-            return this.sendGemini(history, currentMessage);
+            return this.sendGemini(history, currentMessage, options);
         } else {
-            return this.sendOpenAI(history, currentMessage);
+            return this.sendOpenAI(history, currentMessage, options);
         }
     }
 
-    async sendGemini(history, currentMessage) {
+    async sendGemini(history, currentMessage, options = {}) {
         if (!this.apiKey) throw new Error('Gemini API Key missing');
 
         const model = this.modelName || 'gemini-1.5-flash';
@@ -90,7 +93,9 @@ export class LLMClient {
         const res = await Network.fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: options.signal,
+            timeoutMs: LLM_TIMEOUT_MS
         }, 'cors_safe');
 
         if (!res.ok) {
@@ -114,7 +119,7 @@ export class LLMClient {
         return candidate.content.parts[0].text;
     }
 
-    async sendOpenAI(history, currentMessage) {
+    async sendOpenAI(history, currentMessage, options = {}) {
         const url = this.baseUrl || (this.llmType === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : '');
         if (!url) throw new Error('LLM Base URL missing');
         if (!this.modelName) throw new Error('LLM Model Name missing (check settings)');
@@ -149,7 +154,9 @@ export class LLMClient {
         const res = await Network.fetch(url, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: options.signal,
+            timeoutMs: LLM_TIMEOUT_MS
         }, 'local_api');
 
         if (!res.ok) {

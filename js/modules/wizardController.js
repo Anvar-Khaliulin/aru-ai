@@ -7,6 +7,9 @@ import { aruGlobalState as state } from './aruState.js';
 import { DB } from './db.js';
 import { Auth } from './auth.js';
 import { RemoteStorage, RemoteAdapters } from './remoteStorage.js';
+import { UI } from './ui.js';
+
+const esc = (value) => UI.escapeHTML(String(value ?? ''));
 
 export const WizardController = {
     app: null,
@@ -266,13 +269,13 @@ export const WizardController = {
             return `
             <div class="space-y-3">
                 <div><label class="${labelCls}">${t.remote_label_webdav_url || 'Сервер WebDAV'}</label>
-                    <input id="rc-webdav-url" type="text" value="${d.webdav_url || ''}" placeholder="https://cloud.example.com/remote.php/dav/files/me" class="${inputCls}"></div>
+                    <input id="rc-webdav-url" type="text" value="${esc(d.webdav_url || '')}" placeholder="https://cloud.example.com/remote.php/dav/files/me" class="${inputCls}"></div>
                 <div><label class="${labelCls}">${t.remote_label_webdav_user || 'Имя пользователя'}</label>
-                    <input id="rc-webdav-user" type="text" value="${d.webdav_user || ''}" class="${inputCls}"></div>
+                    <input id="rc-webdav-user" type="text" value="${esc(d.webdav_user || '')}" class="${inputCls}"></div>
                 <div><label class="${labelCls}">${t.remote_label_webdav_pass || 'Пароль / пароль приложения'}</label>
-                    <input id="rc-webdav-pass" type="password" value="${d.webdav_pass || ''}" class="${inputCls}"></div>
+                    <input id="rc-webdav-pass" type="password" value="${esc(d.webdav_pass || '')}" class="${inputCls}"></div>
                 <div><label class="${labelCls}">${t.remote_label_webdav_path || 'Папка (необязательно)'}</label>
-                    <input id="rc-webdav-path" type="text" value="${d.webdav_path || 'Aru'}" class="${inputCls}"></div>
+                    <input id="rc-webdav-path" type="text" value="${esc(d.webdav_path || 'Aru')}" class="${inputCls}"></div>
                 <button onclick="WizardController.connectRemote('webdav')" class="w-full py-4 bg-aru-500 hover:bg-aru-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-aru-500/20 flex items-center justify-center gap-2">
                     <i data-lucide="plug" class="w-4 h-4"></i> ${t.remote_btn_connect || 'Подключиться'}
                 </button>
@@ -288,7 +291,7 @@ export const WizardController = {
                 </div>
             </div>
             <div><label class="${labelCls}">${t.remote_label_client_id || 'Google Client ID'}</label>
-                <input id="rc-gdrive-client" type="text" value="${d.gdrive_client_id || ''}" placeholder="xxxx.apps.googleusercontent.com" class="${inputCls}"></div>
+                <input id="rc-gdrive-client" type="text" value="${esc(d.gdrive_client_id || '')}" placeholder="xxxx.apps.googleusercontent.com" class="${inputCls}"></div>
             <button onclick="WizardController.connectRemote('gdrive')" class="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
                 <i data-lucide="key-round" class="w-4 h-4"></i> ${t.remote_btn_google || 'Авторизоваться в Google'}
             </button>
@@ -473,11 +476,11 @@ export const WizardController = {
                 <p class="text-sm text-gray-500 mb-6">${t.wiz_step1_desc || 'Давайте создадим вашу защищенную базу данных Ару.'}</p>
                 <div>
                     <label class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_dbname || 'Имя базы'}</label>
-                    <input type="text" id="wiz-dbname" value="${data.dbname}" placeholder="${t.placeholder_dbname || 'Напр. Мои Мысли'}" class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl focus:border-aru-500 outline-none dark:text-white transition-all shadow-sm">
+                    <input type="text" id="wiz-dbname" value="${esc(data.dbname || '')}" placeholder="${t.placeholder_dbname || 'Напр. Мои Мысли'}" class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl focus:border-aru-500 outline-none dark:text-white transition-all shadow-sm">
                 </div>
                 <div>
                     <label class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_password || 'Мастер-пароль'}</label>
-                    <input type="password" id="wiz-password" value="${data.password}" placeholder="${t.placeholder_password || 'Минимум 6 символов'}" class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl focus:border-aru-500 outline-none dark:text-white transition-all shadow-sm">
+                    <input type="password" id="wiz-password" value="${esc(data.password || '')}" placeholder="${t.placeholder_password || 'Минимум 6 символов'}" class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl focus:border-aru-500 outline-none dark:text-white transition-all shadow-sm">
                 </div>
                 ${Auth.isWebAuthnSupported() ? `
                 <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-1">
@@ -545,11 +548,11 @@ export const WizardController = {
                     ${data.ai_type === 'gemini' ? `
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_gemini_key || 'Gemini API Key'}</label>
-                            <input type="password" id="wiz-gemini-key" value="${data.gemini_key || ''}" placeholder="${t.placeholder_password || 'Key'}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="password" id="wiz-gemini-key" value="${esc(data.gemini_key || '')}" placeholder="${t.placeholder_password || 'Key'}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_gemini_model || 'Gemini Model'}</label>
-                            <input type="text" id="wiz-gemini-model" value="${data.gemini_model || ''}" placeholder="gemini-2.0-flash" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-gemini-model" value="${esc(data.gemini_model || '')}" placeholder="gemini-2.0-flash" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                     ` : ''}
 
@@ -559,15 +562,15 @@ export const WizardController = {
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_openrouter_key || 'OpenRouter API Key'}</label>
-                            <input type="password" id="wiz-openrouter-key" value="${data.openrouter_key}" placeholder="sk-or-..." class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="password" id="wiz-openrouter-key" value="${esc(data.openrouter_key || '')}" placeholder="sk-or-..." class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_openrouter_model || 'Model Name'}</label>
-                            <input type="text" id="wiz-openrouter-model" value="${data.openrouter_model}" placeholder="" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-openrouter-model" value="${esc(data.openrouter_model || '')}" placeholder="" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_openrouter_url || 'Base URL'}</label>
-                            <input type="text" id="wiz-openrouter-url" value="${data.openrouter_url}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-openrouter-url" value="${esc(data.openrouter_url || '')}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                     ` : ''}
 
@@ -577,15 +580,15 @@ export const WizardController = {
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_custom_url || 'Base URL'}</label>
-                            <input type="text" id="wiz-custom-url" value="${data.custom_url}" placeholder="http://localhost:1234/v1/chat/completions" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-custom-url" value="${esc(data.custom_url || '')}" placeholder="http://localhost:1234/v1/chat/completions" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_custom_model || 'Model Name'}</label>
-                            <input type="text" id="wiz-custom-model" value="${data.custom_model}" placeholder="llama-3" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-custom-model" value="${esc(data.custom_model || '')}" placeholder="llama-3" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_custom_key || 'API Key'}</label>
-                            <input type="password" id="wiz-custom-key" value="${data.custom_key || ''}" placeholder="${t.hint_custom_key_optional || 'Usually not required'}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="password" id="wiz-custom-key" value="${esc(data.custom_key || '')}" placeholder="${t.hint_custom_key_optional || 'Usually not required'}" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                     ` : ''}
                 </div>
@@ -648,22 +651,22 @@ export const WizardController = {
                         </div>
                     </div>
                     <div><label class="${labelCls}">${t.remote_label_client_id || 'Google Client ID'}</label>
-                        <input type="text" id="wiz-gdrive-client" value="${data.gdrive_client_id || ''}" placeholder="xxxx.apps.googleusercontent.com" class="${inputCls}"></div>
+                        <input type="text" id="wiz-gdrive-client" value="${esc(data.gdrive_client_id || '')}" placeholder="xxxx.apps.googleusercontent.com" class="${inputCls}"></div>
                 </div>` : ''}
 
                 ${data.storage === 'webdav' ? `
                 <div class="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl border border-purple-100 dark:border-purple-800 space-y-3">
                     <p class="text-[10px] text-purple-600 dark:text-purple-400 leading-relaxed">${t.remote_webdav_hint || 'Nextcloud, ownCloud, Synology или любой WebDAV. В браузере (PWA) сервер должен разрешать CORS (PROPFIND, MKCOL, Depth), либо используйте обратный прокси (/webdav).'}</p>
                     <div><label class="${labelCls}">${t.remote_label_webdav_url || 'Сервер WebDAV'}</label>
-                        <input type="text" id="wiz-webdav-url" value="${data.webdav_url || ''}" placeholder="https://cloud.example.com/remote.php/dav/files/me" class="${inputCls}"></div>
+                        <input type="text" id="wiz-webdav-url" value="${esc(data.webdav_url || '')}" placeholder="https://cloud.example.com/remote.php/dav/files/me" class="${inputCls}"></div>
                     <div class="grid grid-cols-2 gap-3">
                         <div><label class="${labelCls}">${t.remote_label_webdav_user || 'Имя пользователя'}</label>
-                            <input type="text" id="wiz-webdav-user" value="${data.webdav_user || ''}" class="${inputCls}"></div>
+                            <input type="text" id="wiz-webdav-user" value="${esc(data.webdav_user || '')}" class="${inputCls}"></div>
                         <div><label class="${labelCls}">${t.remote_label_webdav_pass || 'Пароль'}</label>
-                            <input type="password" id="wiz-webdav-pass" value="${data.webdav_pass || ''}" class="${inputCls}"></div>
+                            <input type="password" id="wiz-webdav-pass" value="${esc(data.webdav_pass || '')}" class="${inputCls}"></div>
                     </div>
                     <div><label class="${labelCls}">${t.remote_label_webdav_path || 'Папка (необязательно)'}</label>
-                        <input type="text" id="wiz-webdav-path" value="${data.webdav_path || 'Aru'}" class="${inputCls}"></div>
+                        <input type="text" id="wiz-webdav-path" value="${esc(data.webdav_path || 'Aru')}" class="${inputCls}"></div>
                 </div>` : ''}
             </div>`;
         }
@@ -1025,26 +1028,31 @@ export const WizardController = {
                 return;
             }
 
-            // Important: wait for import to finish
-            await DB.importFromFile(fileInput.files[0]);
-
-            // After import, DB is in DB.db but not yet necessarily saved to storage until WizardController.app.startSession or manual save
-            // We verify the hash from the newly loaded DB instance
-            const res = DB.exec("SELECT value FROM settings WHERE key='db_password'");
-            if (!res.length || !res[0].values.length) {
+            // Verify the password against the candidate file first: importing
+            // replaces the live DB immediately, so a wrong password or broken
+            // file must not touch the current data.
+            const storedHash = await DB.readPasswordHashFromFile(fileInput.files[0]);
+            if (!storedHash) {
                 const t = state.translations || {};
                 alert(t.alert_corrupt_db || 'Eror: File is not a base or broken');
                 return;
             }
-            const storedHash = res[0].values[0][0];
 
             const isValid = await Auth.verifyPassword(pwd, storedHash);
-            if (isValid) {
-                WizardController.app.startSession();
-            } else {
+            if (!isValid) {
                 const t = state.translations || {};
                 alert(t.alert_wrong_password || 'Неверный пароль');
+                return;
             }
+
+            const previousDb = DB.db;
+            try {
+                await DB.importFromFile(fileInput.files[0]);
+            } catch (importErr) {
+                DB.db = previousDb;
+                throw importErr;
+            }
+            WizardController.app.startSession();
         } catch (err) {
             console.error(err);
             alert('Open Error: ' + err.message);

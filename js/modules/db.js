@@ -3,11 +3,21 @@
 Local database client powered by SQL.js and IndexedDB for persistent storage of chat and vector data.
 ---chat.aru-lab.space---PWA---
 */
+// Never leave the device through P2P transfer; the receiver enters their own.
+const TRANSFER_SECRET_SETTINGS = new Set([
+    'db_password',
+    'gemini_key',
+    'openrouter_key',
+    'custom_key',
+    'tavily_key'
+]);
+
 export const DB = {
     db: null,
     SQL: null,
     dbPath: 'aru_db_v1', // Key for IndexedDB (default)
     fileHandle: null, // Handle for File System Access API
+
 
     async init() {
         console.log("DB: Initializing...");
@@ -2692,9 +2702,22 @@ export const DB = {
     },
 
     // Import from file input (Drag & Drop or Manual Import Modal)
+    // Reads only the password hash from a candidate DB file, so the current
+    // database is not replaced until the password has been verified.
+    async readPasswordHashFromFile(file) {
+        if (!this.SQL) await this.init();
+        const data = new Uint8Array(await file.arrayBuffer());
+        const probe = new this.SQL.Database(data);
+        try {
+            const res = probe.exec("SELECT value FROM settings WHERE key='db_password'");
+            return (res.length && res[0].values.length) ? res[0].values[0][0] : null;
+        } finally {
+            probe.close();
+        }
+    },
+
     async importFromFile(file) {
-        return new Promise((resolve, reject) => {
-            const r = new FileReader();
+        return new Promise((resolve, reject) => {            const r = new FileReader();
             r.onload = async () => {
                 try {
                     if (!this.SQL) await this.init();
@@ -2723,7 +2746,7 @@ export const DB = {
      * @param {string[]} types - Array of types: 'chats', 'settings', 'artifacts', 'tasks', 'full_db'
      * @param {Object} filters - Dictionary of item IDs to transfer map {chats: [], artifacts: []}
      */
-    getExportData(types, filters = {}) {
+    getExportData(types, filters = {}, options = {}) {
         if (!this.db) return null;
         const result = { version: '1.0', timestamp: Date.now(), data: {} };
 
@@ -2761,7 +2784,12 @@ export const DB = {
         }
 
         if (types.includes('settings')) {
-            result.data.settings = this.query("SELECT * FROM settings");
+            let settingsRows = this.query("SELECT * FROM settings");
+            // P2P transfer never carries credentials to another device.
+            if (options.stripSecrets) {
+                settingsRows = settingsRows.filter(row => !TRANSFER_SECRET_SETTINGS.has(row.key));
+            }
+            result.data.settings = settingsRows;
             result.data.personality = this.query("SELECT * FROM personality_state");
             result.data.memory = this.query("SELECT * FROM memory_facts");
         }
@@ -2900,6 +2928,9 @@ export const DB = {
             const dataStr = new TextDecoder().decode(dataU8);
             const imported = JSON.parse(dataStr);
             const data = imported.data;
+            // The DB password is a local UI gate; an imported backup must not
+            // silently lock the user out of their own device.
+            const localPasswordRow = this.query("SELECT value FROM settings WHERE key='db_password'")[0];
 
             if (mode === 'overwrite') {
                 if (data.chats) { 
@@ -2925,6 +2956,7 @@ export const DB = {
                 if (data.settings) { 
                     this.run("DELETE FROM settings"); this.run("DELETE FROM personality_state"); this.run("DELETE FROM memory_facts"); 
                     for (const s of data.settings) this.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
+                    if (localPasswordRow) this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['db_password', localPasswordRow.value], false);
                     for (const p of data.personality) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
                     for (const m of data.memory) this.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content, m.category, m.embedding, m.created_at]);
                 }
@@ -2981,7 +3013,10 @@ export const DB = {
                     }
                 }
                 if (data.settings) {
-                    for (const s of data.settings) this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
+                    for (const s of data.settings) {
+                        if (s.key === 'db_password') continue;
+                        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
+                    }
                     for (const p of data.personality) this.run("INSERT OR REPLACE INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
                     for (const m of data.memory) this.run("INSERT INTO memory_facts (content, category, embedding, created_at) VALUES (?, ?, ?, ?)", [m.content, m.category, m.embedding, m.created_at]);
                 }

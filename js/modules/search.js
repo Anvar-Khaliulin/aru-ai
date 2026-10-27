@@ -12,7 +12,7 @@ export const Search = {
      * @param {string} text - The user query to search for.
      * @returns {Promise<string|null>} - A string of gathered information or error message.
      */
-    async query(text) {
+    async query(text, options = {}) {
         if (!text || text.trim().length < 2) return null;
 
         const provider = state.userSettings.search_provider || 'none';
@@ -24,9 +24,9 @@ export const Search = {
         // Errors propagate to the caller (chatController) so grounding
         // can degrade gracefully to a knowledge-based answer
         if (provider === 'tavily') {
-            return await this.queryTavily(text);
+            return await this.queryTavily(text, options);
         } else if (provider === 'searxng') {
-            return await this.querySearXNG(text);
+            return await this.querySearXNG(text, options);
         }
 
         return null;
@@ -35,7 +35,7 @@ export const Search = {
     /**
      * Queries the Tavily API.
      */
-    async queryTavily(query) {
+    async queryTavily(query, options = {}) {
         const apiKey = state.userSettings.tavily_key;
         if (!apiKey) throw new Error('Tavily API Key is missing in settings.');
 
@@ -48,7 +48,9 @@ export const Search = {
                 query: query,
                 search_depth: 'basic',
                 max_results: 5
-            })
+            }),
+            signal: options.signal,
+            timeoutMs: 30000
         }, 'cors_safe');
 
         if (!response.ok) {
@@ -65,7 +67,7 @@ export const Search = {
     /**
      * Queries a SearXNG instance with global Network strategy.
      */
-    async querySearXNG(query) {
+    async querySearXNG(query, options = {}) {
         let instanceUrl = (state.userSettings.searxng_url || '').trim();
         if (!instanceUrl) throw new Error('SearXNG Instance URL is missing in settings.');
 
@@ -80,7 +82,10 @@ export const Search = {
         const targetUrl = `${instanceUrl}/search?q=${encodeURIComponent(query)}&format=json`;
 
         console.log(`Search: Querying SearXNG via Network module...`);
-        const response = await Network.fetch(targetUrl, {}, 'local_api');
+        const response = await Network.fetch(targetUrl, {
+            signal: options.signal,
+            timeoutMs: 30000
+        }, 'local_api');
 
         if (!response.ok) {
             if (response.status === 403 || response.status === 404) {

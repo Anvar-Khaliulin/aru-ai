@@ -79,7 +79,7 @@ export const TransferController = {
                                 </div>
                                 <div class="p-2.5 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-50 dark:border-gray-800 flex items-center shadow-sm">
                                     <label class="flex items-center gap-2 cursor-pointer w-full">
-                                        <input type="checkbox" id="chk-settings" name="transfer-data" value="settings" checked class="w-3.5 h-3.5 rounded accent-orange-500" onchange="TransferController.onMainCheckboxChange('settings')">
+                                        <input type="checkbox" id="chk-settings" name="transfer-data" value="settings" class="w-3.5 h-3.5 rounded accent-orange-500" onchange="TransferController.onMainCheckboxChange('settings')">
                                         <span class="text-[10px] font-bold text-gray-600 dark:text-gray-400">${t.data_settings || 'Config'}</span>
                                     </label>
                                 </div>
@@ -147,6 +147,16 @@ export const TransferController = {
                                     <button onclick="TransferController.connectManual()" class="px-4 py-1.5 bg-gray-900 text-white dark:bg-gray-800 rounded-lg font-black text-[9px]">GO</button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Incoming Transfer Confirmation -->
+                    <div id="transfer-confirm-box" class="hidden p-4 border-t border-orange-100 dark:border-orange-900/40 bg-orange-50/70 dark:bg-orange-950/20 animate-slide-up">
+                        <div class="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-1">${t.transfer_incoming_title || 'Incoming transfer'}</div>
+                        <div id="transfer-confirm-text" class="text-[11px] font-bold text-gray-700 dark:text-gray-200 mb-3 break-words"></div>
+                        <div class="flex gap-2">
+                            <button onclick="TransferController.acceptIncoming()" class="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all">${t.btn_accept || 'Accept'}</button>
+                            <button onclick="TransferController.declineIncoming()" class="flex-1 py-2 bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all">${t.btn_decline || 'Decline'}</button>
                         </div>
                     </div>
 
@@ -585,9 +595,46 @@ export const TransferController = {
         this.totalSize = 0;
         this.receivedSize = 0;
         this.chunks = [];
-        document.getElementById('transfer-progress-box').classList.remove('hidden');
-        document.getElementById('transfer-status-text').innerText = t.transfer_receiving_from ? t.transfer_receiving_from + payload.device : "Receiving Data...";
-        this.conn.send({ type: 'ready' });
+
+        const typeLabels = {
+            full_db: t.data_all_db || 'Full System Image',
+            chats: t.data_chats || 'Chats',
+            settings: t.data_settings || 'Config',
+            artifacts: t.data_artifacts || 'Files',
+            tasks: t.data_tasks || 'Tasks'
+        };
+        const types = Array.isArray(payload.dataTypes) ? payload.dataTypes : [];
+        const typeText = types.map(type => typeLabels[type] || type).join(', ') || '—';
+        const device = String(payload.device || 'Aru').slice(0, 60);
+
+        const confirmBox = document.getElementById('transfer-confirm-box');
+        const confirmText = document.getElementById('transfer-confirm-text');
+        const progressBox = document.getElementById('transfer-progress-box');
+        if (progressBox) progressBox.classList.add('hidden');
+
+        // Explicit consent: a peer id alone must not be enough to push data.
+        if (confirmBox && confirmText) {
+            confirmText.textContent = `${device}: ${typeText}`;
+            confirmBox.classList.remove('hidden');
+        }
+    },
+
+    acceptIncoming() {
+        const t = state.translations || {};
+        const confirmBox = document.getElementById('transfer-confirm-box');
+        const progressBox = document.getElementById('transfer-progress-box');
+        const statusEl = document.getElementById('transfer-status-text');
+        if (confirmBox) confirmBox.classList.add('hidden');
+        if (progressBox) progressBox.classList.remove('hidden');
+        if (statusEl) statusEl.innerText = t.transfer_status_connected || 'Connection established';
+        if (this.conn) this.conn.send({ type: 'ready' });
+    },
+
+    declineIncoming() {
+        this.receivedData = null;
+        this.totalSize = 0;
+        this.chunks = [];
+        this.closeModal();
     },
 
     async startTransfer(dataTypes) {
@@ -597,7 +644,7 @@ export const TransferController = {
         // Wait a small tick so UI updates before heavy sync DB extraction
         await new Promise(r => setTimeout(r, 50)); 
         
-        const rawData = DB.getExportData(dataTypes, this.selectedItems);
+        const rawData = DB.getExportData(dataTypes, this.selectedItems, { stripSecrets: dataTypes.includes('settings') });
         if (!rawData) return;
 
         let u8Buffer;
@@ -632,25 +679,42 @@ export const TransferController = {
 
         document.getElementById('transfer-status-text').innerText = t.transfer_status_sending || "Streaming data...";
 
-        for (let i = 0; i < numChunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(this.totalSize, start + CHUNK_SIZE);
-            this.conn.send({ type: 'chunk', payload: { index: i, data: u8Buffer.slice(start, end) } });
-            await this.waitForAck(i);
-            this.updateProgress(end);
+        try {
+            for (let i = 0; i < numChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(this.totalSize, start + CHUNK_SIZE);
+                this.conn.send({ type: 'chunk', payload: { index: i, data: u8Buffer.slice(start, end) } });
+                await this.waitForAck(i);
+                this.updateProgress(end);
+            }
+        } catch (e) {
+            console.error('Transfer interrupted:', e);
+            const statusEl = document.getElementById('transfer-status-text');
+            if (statusEl) statusEl.innerText = e.message || (t.transfer_status_incomplete || 'Transfer interrupted');
+            if (this.conn) this.conn.close();
+            return;
         }
 
         this.conn.send({ type: 'transfer-complete' });
         document.getElementById('transfer-status-text').innerText = t.transfer_status_finished || "Transfer complete!";
     },
 
-    waitForAck(index) {
-        return new Promise((resolve) => {
+    waitForAck(index, timeoutMs = 20000) {
+        return new Promise((resolve, reject) => {
             const handler = (data) => {
-                if (data.type === 'ack' && data.payload.index === index) {
-                    this.conn.off('data', handler);
+                if (data.type === 'ack' && data.payload && data.payload.index === index) {
+                    cleanup();
                     resolve();
                 }
+            };
+            const timer = setTimeout(() => {
+                cleanup();
+                const t = state.translations || {};
+                reject(new Error(t.transfer_error_peer_timeout || 'Peer stopped responding. Transfer cancelled.'));
+            }, timeoutMs);
+            const cleanup = () => {
+                clearTimeout(timer);
+                if (this.conn) this.conn.off('data', handler);
             };
             this.conn.on('data', handler);
         });

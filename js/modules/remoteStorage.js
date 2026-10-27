@@ -585,7 +585,11 @@ export const RemoteStorage = {
 
     async pushNow(bytes) {
         if (!this.isUnlocked() || !this.adapter) return;
-        this._pushChain = this._pushChain.then(async () => {
+        // Recover from a previous failed push: without this the stored chain
+        // stays rejected and every later sync attempt is skipped forever.
+        this._pushChain = this._pushChain.catch((e) => {
+            console.warn('RemoteStorage: previous push failed, retrying', e);
+        }).then(async () => {
             this._notifyStatus('cloud-syncing');
             await this.adapter.save(bytes);
             this._saveMeta({ lastPushAt: Date.now() });

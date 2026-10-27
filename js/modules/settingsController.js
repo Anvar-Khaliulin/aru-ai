@@ -7,6 +7,9 @@ import { aruGlobalState as state } from './aruState.js';
 import { DB } from './db.js';
 import { RemoteStorage, RemoteAdapters } from './remoteStorage.js';
 import { Auth } from './auth.js';
+import { UI } from './ui.js';
+
+const esc = (value) => UI.escapeHTML(String(value ?? ''));
 
 export const SettingsController = {
     app: null,
@@ -288,11 +291,11 @@ export const SettingsController = {
                                     <div class="space-y-3">
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_gemini_key || 'Gemini Key'}</label>
-                                            <input type="password" id="inp-gemini-key" value="${s.gemini_key || ''}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="password" id="inp-gemini-key" value="${esc(s.gemini_key || '')}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_gemini_model || 'Gemini Model'}</label>
-                                            <input type="text" id="inp-gemini-model" value="${s.gemini_model || 'gemini-1.5-flash'}" placeholder="gemini-1.5-flash" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-gemini-model" value="${esc(s.gemini_model || 'gemini-1.5-flash')}" placeholder="gemini-1.5-flash" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                     </div>
                                 </div>
@@ -306,15 +309,15 @@ export const SettingsController = {
                                     <div class="space-y-3">
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_openrouter_key || 'Key'}</label>
-                                            <input type="password" id="inp-openrouter-key" value="${s.openrouter_key || ''}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="password" id="inp-openrouter-key" value="${esc(s.openrouter_key || '')}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_openrouter_model || 'Model'}</label>
-                                            <input type="text" id="inp-openrouter-model" value="${s.openrouter_model || ''}" placeholder="google/gemini-2.0-flash-exp:free" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-openrouter-model" value="${esc(s.openrouter_model || '')}" placeholder="google/gemini-2.0-flash-exp:free" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_openrouter_url || 'Base URL'}</label>
-                                            <input type="text" id="inp-openrouter-url" value="${s.openrouter_url || 'https://openrouter.ai/api/v1/chat/completions'}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-openrouter-url" value="${esc(s.openrouter_url || 'https://openrouter.ai/api/v1/chat/completions')}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                     </div>
                                 </div>
@@ -335,15 +338,15 @@ export const SettingsController = {
                                     <div class="space-y-3">
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_custom_url || 'Base URL'}</label>
-                                            <input type="text" id="inp-custom-url" oninput="SettingsController.validateCustomUrl(this.value)" value="${s.custom_url || ''}" placeholder="http://localhost:1234/v1" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-custom-url" oninput="SettingsController.validateCustomUrl(this.value)" value="${esc(s.custom_url || '')}" placeholder="http://localhost:1234/v1" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_custom_model || 'Model Name'}</label>
-                                            <input type="text" id="inp-custom-model" value="${s.custom_model || ''}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-custom-model" value="${esc(s.custom_model || '')}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_custom_key || 'API Key'}</label>
-                                            <input type="password" id="inp-custom-key" value="${s.custom_key || ''}" placeholder="${t.hint_custom_key_optional || 'Optional'}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="password" id="inp-custom-key" value="${esc(s.custom_key || '')}" placeholder="${t.hint_custom_key_optional || 'Optional'}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                     </div>
                                 </div>
@@ -358,7 +361,7 @@ export const SettingsController = {
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_user_name || 'Ваше Имя'}</label>
-                                        <input type="text" id="inp-user-name" value="${s.user_name || 'User'}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <input type="text" id="inp-user-name" value="${esc(s.user_name || 'User')}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
                                     </div>
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_user_mode || 'Возрастной режим'}</label>
@@ -380,19 +383,19 @@ export const SettingsController = {
                                 <div class="grid grid-cols-2 gap-4">
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_context_limit || 'Контекст'}</label>
-                                        <input type="number" id="inp-token-limit" value="${s.token_limit || 8192}" oninput="this.dataset.userEdited='true'" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <input type="number" id="inp-token-limit" value="${esc(s.token_limit || 8192)}" oninput="this.dataset.userEdited='true'" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
                                         <p class="text-[9px] text-gray-400 mt-1.5 leading-snug">${t.hint_token_limit || 'Сколько последних сообщений беседы Ару помнит. В API не передаётся: облачным моделям можно ставить 32 000+, для локальных — равным num_ctx сервера.'}</p>
                                     </div>
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_ai_tokens || 'Ответ'}</label>
-                                        <input type="number" id="inp-max-output" value="${s.max_output_tokens || 2048}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <input type="number" id="inp-max-output" value="${esc(s.max_output_tokens || 2048)}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
                                         <p class="text-[9px] text-gray-400 mt-1.5 leading-snug">${t.hint_max_output || 'Максимальная длина одного ответа Ару. Передаётся в API модели как жёсткий лимит.'}</p>
                                     </div>
                                 </div>
                                 
                                 <div class="space-y-2">
-                                    <div class="flex justify-between items-center"><label class="text-[10px] font-bold text-gray-500 uppercase">${t.settings_ai_temp || 'Температура'}</label><span class="text-[10px] font-mono font-bold text-aru-500 mt-1" id="val-ai-temp">${s.ai_temp || 0.9}</span></div>
-                                    <input type="range" id="inp-ai-temp" min="0" max="2" step="0.1" value="${s.ai_temp || 0.9}" class="w-full accent-aru-500" oninput="document.getElementById('val-ai-temp').innerText = this.value">
+                                    <div class="flex justify-between items-center"><label class="text-[10px] font-bold text-gray-500 uppercase">${t.settings_ai_temp || 'Температура'}</label><span class="text-[10px] font-mono font-bold text-aru-500 mt-1" id="val-ai-temp">${esc(s.ai_temp || 0.9)}</span></div>
+                                    <input type="range" id="inp-ai-temp" min="0" max="2" step="0.1" value="${esc(s.ai_temp || 0.9)}" class="w-full accent-aru-500" oninput="document.getElementById('val-ai-temp').innerText = this.value">
                                 </div>
 
                                 <div class="flex flex-wrap items-center gap-4 pt-2">
@@ -443,7 +446,7 @@ export const SettingsController = {
                             <h4 class="text-sm font-bold mb-2 flex items-center gap-2"><i data-lucide="rss" class="w-4 h-4 text-aru-500"></i> ${t.settings_tab_rss || 'Новости (RSS)'}</h4>
                             <p class="text-xs text-gray-500 mb-4">${t.settings_rss_urls_hint || 'Ару будет использовать эти ссылки для поиска новостей.'}</p>
                             <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">${t.settings_rss_urls_label || 'RSS ленты (одна на строку)'}</label>
-                            <textarea id="inp-rss-urls" rows="6" class="w-full p-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl text-xs outline-none focus:border-aru-500 dark:text-gray-200" placeholder="${t.settings_rss_urls_placeholder || 'https://example.com/rss.xml #tag'}">${s.rss_urls || ''}</textarea>
+                            <textarea id="inp-rss-urls" rows="6" class="w-full p-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl text-xs outline-none focus:border-aru-500 dark:text-gray-200" placeholder="${t.settings_rss_urls_placeholder || 'https://example.com/rss.xml #tag'}">${esc(s.rss_urls || '')}</textarea>
                         </div>
                     </div>
 
@@ -472,7 +475,7 @@ export const SettingsController = {
                                     <div id="wrap-proxy-custom-url" class="${(s.proxy_strategy || 'auto') === 'custom' ? '' : 'hidden'}">
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_custom_proxy_url || 'URL кастомного прокси'}</label>
-                                        <input type="text" id="inp-proxy-custom-url" value="${s.proxy_custom_url || ''}" placeholder="https://myproxy.com/?url=" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                        <input type="text" id="inp-proxy-custom-url" value="${esc(s.proxy_custom_url || '')}" placeholder="https://myproxy.com/?url=" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                                         <p class="text-[9px] text-gray-400 mt-1">${t.hint_custom_proxy || 'Используйте %URL% для подстановки адреса.'}</p>
                                     </div>
                                     </div>
@@ -503,7 +506,7 @@ export const SettingsController = {
                                         </div>
                                         <div>
                                             <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_tavily_key || 'Tavily API Key'}</label>
-                                            <input type="password" id="inp-tavily-key" value="${s.tavily_key || ''}" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                            <input type="password" id="inp-tavily-key" value="${esc(s.tavily_key || '')}" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                                         </div>
                                     </div>
                                     <div id="params-searxng" class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 space-y-4 ${s.search_provider === 'searxng' ? '' : 'hidden'}">
@@ -513,7 +516,7 @@ export const SettingsController = {
                                         </div>
                                         <div>
                                             <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_searxng_url || 'Instance URL'}</label>
-                                            <input type="text" id="inp-searxng-url" value="${s.searxng_url || ''}" placeholder="https://searx.be" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                            <input type="text" id="inp-searxng-url" value="${esc(s.searxng_url || '')}" placeholder="https://searx.be" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                                         </div>
                                     </div>
                                 </div>
@@ -529,7 +532,7 @@ export const SettingsController = {
                                             <option value="default" ${!s.stun_server || s.stun_server.includes('google') ? 'selected' : ''}>${t.label_stun_default || 'Google (По умолчанию)'}</option>
                                             <option value="custom" ${s.stun_server && !s.stun_server.includes('google') ? 'selected' : ''}>${t.label_stun_custom || 'Свой STUN сервер'}</option>
                                         </select>
-                                        <input type="text" id="inp-stun-custom" value="${s.stun_server || ''}" placeholder="stun:myserver.com:3478" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.stun_server || s.stun_server.includes('google') ? 'hidden' : ''}">
+                                        <input type="text" id="inp-stun-custom" value="${esc(s.stun_server || '')}" placeholder="stun:myserver.com:3478" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.stun_server || s.stun_server.includes('google') ? 'hidden' : ''}">
                                     </div>
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.label_signaling_server || 'Signaling Server'}</label>
@@ -537,7 +540,7 @@ export const SettingsController = {
                                             <option value="default" ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'selected' : ''}>${t.label_signaling_default || 'PeerJS Cloud (По умолчанию)'}</option>
                                             <option value="custom" ${s.signaling_server && s.signaling_server !== 'peerjs-default' ? 'selected' : ''}>${t.label_signaling_custom || 'Свой сервер'}</option>
                                         </select>
-                                        <input type="text" id="inp-signaling-custom" value="${s.signaling_server || ''}" placeholder="my-signaling-id" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'hidden' : ''}">
+                                        <input type="text" id="inp-signaling-custom" value="${esc(s.signaling_server || '')}" placeholder="my-signaling-id" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'hidden' : ''}">
                                         <p class="text-[9px] text-gray-400 mt-1">${t.hint_signaling_server || 'PeerJS Cloud (peerjs-default) or custom server.'}</p>
                                     </div>
                                 </div>
@@ -901,7 +904,7 @@ export const SettingsController = {
                     </div>
                     <div>
                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.storage_label_poll || 'Проверка изменений (минут, 0 - выкл.)'}</label>
-                        <input type="number" min="0" id="inp-remote-poll" value="${s.remote_poll || '0'}" class="w-full p-2 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                        <input type="number" min="0" id="inp-remote-poll" value="${esc(s.remote_poll || '0')}" class="w-full p-2 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                     </div>
                     <p class="text-[10px] text-gray-400">${t.storage_conflict_hint || 'Блокировки базы между устройствами нет: побеждает версия, сохранённая позже. При сомнениях скачивайте удалённую копию отдельным файлом.'}</p>
                 </div>
