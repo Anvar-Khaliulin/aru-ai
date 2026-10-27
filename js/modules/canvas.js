@@ -165,12 +165,37 @@ export const CanvasManager = {
             #app, #root, #game-container { max-width: 100%; width: 100%; }
         ` : '';
 
+        // Sandboxed iframes get an opaque origin, so native localStorage/sessionStorage
+        // throw SecurityError. Generated artifacts often persist small state there;
+        // without a fallback the whole artifact script aborts before it renders.
+        const storageShim = `<script>(function(){
+            function makeStore(){
+                var data = {};
+                return {
+                    getItem: function(k){ k = String(k); return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+                    setItem: function(k, v){ data[String(k)] = String(v); },
+                    removeItem: function(k){ delete data[String(k)]; },
+                    clear: function(){ data = {}; },
+                    key: function(i){ var keys = Object.keys(data); return i >= 0 && i < keys.length ? keys[i] : null; },
+                    get length(){ return Object.keys(data).length; }
+                };
+            }
+            var localStore = makeStore(), sessionStore = makeStore();
+            try { window.localStorage.getItem('__aru_probe__'); } catch (e) {
+                try { Object.defineProperty(window, 'localStorage', { configurable: true, get: function(){ return localStore; } }); } catch (e2) {}
+            }
+            try { window.sessionStorage.getItem('__aru_probe__'); } catch (e) {
+                try { Object.defineProperty(window, 'sessionStorage', { configurable: true, get: function(){ return sessionStore; } }); } catch (e2) {}
+            }
+        })();</script>`;
+
         const sandboxHTML = `
             <!DOCTYPE html>
             <html lang="en" class="${isDark ? 'dark' : ''}">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                ${storageShim}
                 <script src="https://cdn.tailwindcss.com"></script>
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
