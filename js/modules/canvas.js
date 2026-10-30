@@ -137,7 +137,11 @@ export const CanvasManager = {
 
         iframe.dataset.lastCode = code;
         iframe.dataset.lastTheme = theme;
+        this.renderInto(iframe, { type, title, code });
+    },
 
+    renderInto(iframe, { type, title, code }) {
+        const isDark = document.documentElement.classList.contains('dark');
         let finalCode = code;
         if (type === 'doc') {
             if (typeof marked !== 'undefined') {

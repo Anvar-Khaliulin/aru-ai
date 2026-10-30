@@ -741,6 +741,16 @@ export const DB = {
                 this.run(`CREATE INDEX IF NOT EXISTS idx_fit_chat_date ON fit_chat_messages(log_date)`, [], false);
                 changed = true;
             }
+            if (!this.tableExists('desktop_notes')) {
+                this.run(`CREATE TABLE desktop_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )`, [], false);
+                changed = true;
+            }
             if (changed) console.log('DB: schema migrated (folders/favorites/chapters/skills/fit-care ready)');
         } catch (e) {
             console.warn('DB.migrateSchema failed', e);
@@ -2335,6 +2345,24 @@ export const DB = {
             messagesSent: count("SELECT COUNT(*) AS c FROM messages WHERE role = 'user'"),
             messagesReceived: count("SELECT COUNT(*) AS c FROM messages WHERE role = 'model'")
         };
+    },
+
+    getDesktopNotes() {
+        return this.query('SELECT * FROM desktop_notes ORDER BY updated_at DESC, id DESC');
+    },
+
+    saveDesktopNote(id, title, content) {
+        const now = new Date().toISOString();
+        if (id !== null && id !== undefined) {
+            this.run('UPDATE desktop_notes SET title = ?, content = ?, updated_at = ? WHERE id = ?', [title, content, now, id]);
+            return id;
+        }
+        this.run('INSERT INTO desktop_notes (title, content, created_at, updated_at) VALUES (?, ?, ?, ?)', [title, content, now, now]);
+        return this._lastInsertId('desktop_notes');
+    },
+
+    deleteDesktopNote(id) {
+        this.run('DELETE FROM desktop_notes WHERE id = ?', [id]);
     },
 
     // --- Settings & Modules ---

@@ -1,0 +1,1455 @@
+/*
+---ARU-LAB.SPACE---ALMATY---2026---
+Desktop shell styles: wallpaper layers, taskbar, start menu, windows, personalization.
+---chat.aru-lab.space---PWA---
+*/
+
+/* ---------- Shell ---------- */
+
+#aru-desktop {
+    --wd-scale: 1;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: calc(100% / var(--wd-scale));
+    height: calc(100% / var(--wd-scale));
+    transform: scale(var(--wd-scale));
+    transform-origin: top left;
+    z-index: 45;
+    overflow: hidden;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    color: #0f172a;
+    background: #0f172a;
+    -webkit-font-smoothing: antialiased;
+}
+
+#aru-desktop.hidden {
+    display: none;
+}
+
+.wd-wallpaper {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background-color: #0f172a;
+    pointer-events: none;
+}
+
+.wd-wp-base,
+.wd-wp-image,
+.wd-wp-tint,
+.wd-wp-pattern,
+.wd-wp-noise,
+.wd-wp-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.wd-wp-image {
+    opacity: 0;
+    background-position: center;
+    background-repeat: no-repeat;
+    transform-origin: center;
+}
+
+.wd-wp-pattern {
+    opacity: 0;
+}
+
+.wd-wp-noise {
+    opacity: 0;
+}
+
+.wd-wp-vignette {
+    opacity: 0;
+}
+
+.wd-desktop-area {
+    position: absolute;
+    inset: 0 0 52px 0;
+    overflow: hidden;
+}
+
+.wd-windows {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/* ---------- Desktop icons ---------- */
+
+.wd-icons {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.wd-icon {
+    width: 88px;
+    padding: 8px 4px 7px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: #fff;
+    text-align: center;
+    cursor: pointer;
+    background: transparent;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+.wd-icon:hover,
+.wd-icon:focus-visible {
+    background: rgba(255, 255, 255, .16);
+    border-color: rgba(255, 255, 255, .22);
+    outline: none;
+}
+
+.wd-icon-tile {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgba(15, 23, 42, .32);
+    border: 1px solid rgba(255, 255, 255, .22);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .22);
+}
+
+.wd-icon span {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 1px 3px rgba(15, 23, 42, .65);
+}
+
+/* ---------- Taskbar ---------- */
+
+.wd-taskbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 52px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: #334155;
+    background: rgba(255, 255, 255, .72);
+    border-top: 1px solid rgba(15, 23, 42, .08);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    box-shadow: 0 -8px 30px rgba(15, 23, 42, .08);
+}
+
+.dark .wd-taskbar {
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, .74);
+    border-top-color: rgba(255, 255, 255, .08);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, .3);
+}
+
+.wd-start-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 11px;
+    border: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+.wd-start-btn:hover {
+    background: rgba(15, 23, 42, .07);
+}
+
+.wd-start-btn.active {
+    background: rgba(249, 115, 22, .16);
+    color: #ea580c;
+}
+
+.dark .wd-start-btn:hover {
+    background: rgba(255, 255, 255, .09);
+}
+
+.dark .wd-start-btn.active {
+    background: rgba(249, 115, 22, .24);
+    color: #fdba74;
+}
+
+.wd-taskbar-wins {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.wd-task-btn {
+    height: 38px;
+    max-width: 190px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: .82;
+    transition: background-color .15s ease, opacity .15s ease;
+}
+
+.wd-task-btn:hover {
+    background: rgba(15, 23, 42, .07);
+    opacity: 1;
+}
+
+.dark .wd-task-btn:hover {
+    background: rgba(255, 255, 255, .09);
+}
+
+.wd-task-btn.active {
+    background: rgba(249, 115, 22, .14);
+    color: #c2410c;
+    opacity: 1;
+    box-shadow: inset 0 -2px 0 #f97316;
+}
+
+.dark .wd-task-btn.active {
+    background: rgba(249, 115, 22, .22);
+    color: #fdba74;
+}
+
+.wd-task-btn span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wd-taskbar-spacer {
+    flex: 1;
+    min-width: 8px;
+}
+
+.wd-tray {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.wd-tray-btn {
+    height: 38px;
+    min-width: 38px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: inherit;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color .15s ease;
+}
+
+.wd-tray-btn:hover,
+.wd-tray-btn.active {
+    background: rgba(15, 23, 42, .07);
+}
+
+.dark .wd-tray-btn:hover,
+.dark .wd-tray-btn.active {
+    background: rgba(255, 255, 255, .09);
+}
+
+.wd-tray-lang-label {
+    letter-spacing: .04em;
+}
+
+.wd-clock {
+    height: 40px;
+    padding: 0 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    line-height: 1.08;
+}
+
+.wd-clock-time {
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.wd-clock-date {
+    font-size: 9.5px;
+    font-weight: 500;
+    opacity: .62;
+}
+
+/* ---------- Start menu ---------- */
+
+.wd-start-menu,
+.wd-lang-menu {
+    position: absolute;
+    z-index: 45;
+    border-radius: 18px;
+    border: 1px solid rgba(15, 23, 42, .1);
+    background: rgba(255, 255, 255, .93);
+    color: #0f172a;
+    box-shadow: 0 26px 70px rgba(15, 23, 42, .34);
+    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    animation: wd-pop .16s ease-out;
+}
+
+.dark .wd-start-menu,
+.dark .wd-lang-menu {
+    border-color: rgba(255, 255, 255, .1);
+    background: rgba(15, 23, 42, .94);
+    color: #e2e8f0;
+    box-shadow: 0 26px 70px rgba(0, 0, 0, .55);
+}
+
+.wd-start-menu {
+    left: 10px;
+    bottom: 60px;
+    width: 252px;
+    max-width: calc(100% - 20px);
+    max-height: calc(100% - 78px);
+    padding: 10px;
+    transform-origin: bottom left;
+    overflow: auto;
+}
+
+.wd-start-head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 4px 4px 12px;
+}
+
+.wd-start-avatar {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    background: rgba(148, 163, 184, .14);
+    border: 1px solid rgba(148, 163, 184, .2);
+}
+
+.dark .wd-start-avatar {
+    background: rgba(249, 115, 22, .18);
+    border-color: rgba(249, 115, 22, .35);
+}
+
+.wd-start-user {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.wd-start-mode {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #64748b;
+}
+
+.dark .wd-start-mode {
+    color: #94a3b8;
+}
+
+.wd-start-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wd-start-app {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    border-radius: 8px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .15s ease;
+}
+
+.wd-start-app:hover,
+.wd-start-app:focus-visible {
+    background: rgba(15, 23, 42, .07);
+    outline: none;
+}
+
+.dark .wd-start-app:hover,
+.dark .wd-start-app:focus-visible {
+    background: rgba(255, 255, 255, .08);
+}
+
+.wd-start-app-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, .17);
+}
+
+.wd-start-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px solid rgba(15, 23, 42, .08);
+}
+
+.dark .wd-start-footer {
+    border-top-color: rgba(255, 255, 255, .09);
+}
+
+.wd-start-footer .wd-btn {
+    flex: 1;
+}
+
+/* ---------- Language menu ---------- */
+
+.wd-lang-menu {
+    right: 10px;
+    bottom: 60px;
+    width: 176px;
+    padding: 6px;
+    transform-origin: bottom right;
+}
+
+.wd-lang-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.wd-lang-item:hover {
+    background: rgba(249, 115, 22, .11);
+    color: #c2410c;
+}
+
+.dark .wd-lang-item:hover {
+    color: #fdba74;
+}
+
+.wd-lang-item .wd-lang-code {
+    width: 26px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+    letter-spacing: .05em;
+}
+
+.wd-lang-item.active .wd-lang-code {
+    color: #f97316;
+}
+
+.wd-lang-item .wd-lang-check {
+    margin-left: auto;
+    color: #f97316;
+}
+
+/* ---------- Context menu ---------- */
+
+.wd-context-menu {
+    position: absolute;
+    z-index: 50;
+    min-width: 252px;
+    padding: 6px;
+    border-radius: 13px;
+    border: 1px solid rgba(15, 23, 42, .12);
+    background: rgba(255, 255, 255, .96);
+    color: #0f172a;
+    box-shadow: 0 22px 60px rgba(15, 23, 42, .32);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    animation: wd-pop .12s ease-out;
+}
+
+.dark .wd-context-menu {
+    border-color: rgba(255, 255, 255, .1);
+    background: rgba(15, 23, 42, .96);
+    color: #e2e8f0;
+}
+
+.wd-menu-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+.wd-menu-item:hover,
+.wd-menu-item:focus-visible {
+    background: rgba(249, 115, 22, .12);
+    color: #c2410c;
+    outline: none;
+}
+
+.dark .wd-menu-item:hover,
+.dark .wd-menu-item:focus-visible {
+    color: #fdba74;
+}
+
+.wd-menu-item .wd-menu-check {
+    margin-left: auto;
+    color: #f97316;
+}
+
+.wd-menu-sep {
+    height: 1px;
+    margin: 5px 7px;
+    background: rgba(15, 23, 42, .08);
+}
+
+.dark .wd-menu-sep {
+    background: rgba(255, 255, 255, .09);
+}
+
+.wd-menu-heading {
+    padding: 7px 10px 3px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+/* ---------- Windows ---------- */
+
+.wd-window {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    min-width: 320px;
+    min-height: 190px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    color: #0f172a;
+    border: 1px solid rgba(15, 23, 42, .14);
+    /* Layered macOS-style shadow: hairline ring, contact shadow, soft falloff.
+       Keeps stacked windows readable against flat single-colour wallpapers.
+       !important is required because style.css resets every box-shadow. */
+    box-shadow:
+        0 0 0 .5px rgba(15, 23, 42, .07),
+        0 2px 6px rgba(15, 23, 42, .1),
+        0 12px 28px -8px rgba(15, 23, 42, .22) !important;
+    animation: wd-window-in .18s ease-out;
+}
+
+.dark .wd-window {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, .14);
+    /* A dark shadow alone disappears on a dark wallpaper, so the window edge
+       also gets a light hairline the way macOS separates stacked dark windows. */
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, .08),
+        0 0 0 .5px rgba(0, 0, 0, .7),
+        0 3px 10px rgba(0, 0, 0, .5),
+        0 18px 40px -10px rgba(0, 0, 0, .72) !important;
+}
+
+.wd-window.focused {
+    box-shadow:
+        0 0 0 1px rgba(249, 115, 22, .32),
+        0 4px 12px rgba(15, 23, 42, .14),
+        0 26px 60px -14px rgba(15, 23, 42, .34) !important;
+}
+
+.dark .wd-window.focused {
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, .1),
+        0 0 0 1px rgba(249, 115, 22, .45),
+        0 4px 14px rgba(0, 0, 0, .55),
+        0 30px 68px -14px rgba(0, 0, 0, .8) !important;
+}
+
+.wd-window.maximized,
+.dark .wd-window.maximized {
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none !important;
+}
+
+.wd-window.minimized {
+    display: none;
+}
+
+.wd-window-titlebar {
+    height: 38px;
+    flex: 0 0 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px 0 12px;
+    background: rgba(248, 250, 252, .96);
+    border-bottom: 1px solid rgba(15, 23, 42, .07);
+    user-select: none;
+    touch-action: none;
+}
+
+.dark .wd-window-titlebar {
+    background: #111827;
+    border-bottom-color: rgba(255, 255, 255, .08);
+}
+
+.wd-window-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f97316;
+}
+
+.wd-window-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.dark .wd-window-title {
+    color: #e2e8f0;
+}
+
+.wd-window-controls {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.wd-win-btn {
+    width: 30px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color .12s ease, color .12s ease;
+}
+
+.wd-win-btn:hover {
+    background: rgba(15, 23, 42, .08);
+    color: #0f172a;
+}
+
+.dark .wd-win-btn {
+    color: #94a3b8;
+}
+
+.dark .wd-win-btn:hover {
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+}
+
+.wd-win-btn[data-wd-win="close"]:hover {
+    background: #ef4444;
+    color: #fff;
+}
+
+.wd-window-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+}
+
+.dark .wd-window-body {
+    background: #0f172a;
+}
+
+.wd-window-resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    z-index: 6;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 0 50%, rgba(100, 116, 139, .55) 50% 62%, transparent 62%);
+}
+
+.wd-window.maximized .wd-window-resize {
+    display: none;
+}
+
+/* Modal content moved into a window: neutralize the original full-screen layer */
+.wd-modal-root {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* ---------- Buttons and form controls ---------- */
+
+.wd-btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.wd-btn-primary {
+    background: #f97316;
+    color: #fff;
+    box-shadow: 0 6px 16px rgba(249, 115, 22, .3);
+}
+
+.wd-btn-primary:hover {
+    background: #ea580c;
+}
+
+.wd-btn-ghost {
+    background: rgba(15, 23, 42, .05);
+    color: inherit;
+}
+
+.wd-btn-ghost:hover {
+    background: rgba(15, 23, 42, .1);
+}
+
+.dark .wd-btn-ghost {
+    background: rgba(255, 255, 255, .08);
+}
+
+.dark .wd-btn-ghost:hover {
+    background: rgba(255, 255, 255, .14);
+}
+
+.wd-btn-danger {
+    background: rgba(239, 68, 68, .1);
+    color: #dc2626;
+}
+
+.wd-btn-danger:hover {
+    background: rgba(239, 68, 68, .18);
+}
+
+.dark .wd-btn-danger {
+    color: #fca5a5;
+}
+
+/* ---------- Personalization ---------- */
+
+.wd-pers {
+    height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.dark .wd-pers {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.wd-pers-preview-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.wd-pers-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, .14);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .15);
+}
+
+.dark .wd-pers-preview {
+    border-color: rgba(255, 255, 255, .14);
+}
+
+.wd-pers-preview-label {
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.wd-pers-presets {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.wd-preset {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 9px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, .14);
+}
+
+.wd-preset:hover {
+    border-color: rgba(249, 115, 22, .5);
+}
+
+.wd-preset.active {
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, .2);
+}
+
+.wd-preset .wd-wallpaper {
+    pointer-events: none;
+}
+
+.wd-preset-name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 12px 6px 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    text-align: left;
+    text-shadow: 0 1px 3px rgba(15, 23, 42, .8);
+    background: linear-gradient(to top, rgba(15, 23, 42, .55), transparent);
+}
+
+.wd-pers-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.wd-card {
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, .09);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.dark .wd-card {
+    background: #111827;
+    border-color: rgba(255, 255, 255, .09);
+}
+
+.wd-card.wide {
+    grid-column: 1 / -1;
+}
+
+.wd-card-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.wd-field {
+    margin-bottom: 9px;
+}
+
+.wd-field:last-child {
+    margin-bottom: 0;
+}
+
+.wd-label {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+
+.wd-input,
+.wd-select {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 9px;
+    border: 1px solid rgba(15, 23, 42, .14);
+    background: #fff;
+    color: #0f172a;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.dark .wd-input,
+.dark .wd-select {
+    background: #0b1220;
+    border-color: rgba(255, 255, 255, .14);
+    color: #e2e8f0;
+}
+
+.wd-input:focus,
+.wd-select:focus {
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, .15);
+}
+
+.wd-color {
+    width: 100%;
+    height: 34px;
+    padding: 2px;
+    border-radius: 9px;
+    border: 1px solid rgba(15, 23, 42, .14);
+    background: #fff;
+    cursor: pointer;
+}
+
+.dark .wd-color {
+    border-color: rgba(255, 255, 255, .14);
+    background: #0b1220;
+}
+
+.wd-row {
+    display: flex;
+    gap: 8px;
+}
+
+.wd-row > * {
+    flex: 1;
+    min-width: 0;
+}
+
+.wd-range {
+    width: 100%;
+    accent-color: #f97316;
+}
+
+.wd-range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wd-range-row output {
+    min-width: 36px;
+    text-align: right;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+
+.dark .wd-range-row output {
+    color: #94a3b8;
+}
+
+.wd-hint {
+    font-size: 10px;
+    line-height: 1.45;
+    color: #94a3b8;
+    margin-top: 5px;
+}
+
+.wd-json {
+    width: 100%;
+    min-height: 190px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    background: #0b1220;
+    color: #e2e8f0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+}
+
+.wd-json:focus {
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, .15);
+}
+
+.wd-json-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.wd-json-actions .wd-btn {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
+}
+
+.wd-pers-actions {
+    position: sticky;
+    bottom: -16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 0 2px;
+    background: linear-gradient(to top, #f8fafc 62%, rgba(248, 250, 252, 0));
+    z-index: 2;
+}
+
+.dark .wd-pers-actions {
+    background: linear-gradient(to top, #0f172a 62%, rgba(15, 23, 42, 0));
+}
+
+/* ---------- Calendar ---------- */
+
+.wd-cal {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: #fff;
+    color: #0f172a;
+}
+
+.dark .wd-cal {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.wd-cal-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.wd-cal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.wd-cal-nav {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+}
+
+.wd-cal-nav:hover {
+    background: rgba(15, 23, 42, .07);
+}
+
+.dark .wd-cal-nav:hover {
+    background: rgba(255, 255, 255, .09);
+}
+
+.wd-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+}
+
+.wd-cal-dow {
+    text-align: center;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    padding-bottom: 2px;
+}
+
+.wd-cal-cell {
+    aspect-ratio: 1;
+    border: 0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+
+.wd-cal-cell:hover {
+    background: rgba(249, 115, 22, .12);
+}
+
+.wd-cal-cell.other {
+    opacity: .28;
+}
+
+.wd-cal-cell.today {
+    background: #f97316;
+    color: #fff;
+    font-weight: 700;
+}
+
+.wd-cal-cell.selected {
+    box-shadow: inset 0 0 0 2px rgba(249, 115, 22, .7);
+}
+
+.wd-cal-foot {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(15, 23, 42, .08);
+    font-size: 11px;
+    color: #64748b;
+}
+
+.dark .wd-cal-foot {
+    border-top-color: rgba(255, 255, 255, .09);
+    color: #94a3b8;
+}
+
+/* ---------- Scrollbars inside windows ---------- */
+
+.wd-window-body *::-webkit-scrollbar,
+.wd-pers::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.wd-window-body *::-webkit-scrollbar-thumb,
+.wd-pers::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, .45);
+    border-radius: 4px;
+}
+
+/* ---------- Animations ---------- */
+
+@keyframes wd-pop {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes wd-window-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 720px) {
+    .wd-pers-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .wd-pers-presets {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .wd-icons {
+        display: none;
+    }
+}
+
+body.aru-desktop-mode > #app {
+    display: none;
+}
+
+/* The window layer spans the whole desktop area, so it must stay click-through
+   for the icons underneath; only the windows themselves take pointer events. */
+.wd-windows {
+    z-index: 3;
+    pointer-events: none;
+}
+
+.wd-windows > * {
+    pointer-events: auto;
+}
+
+.wd-modal-content {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+.wd-settings-layout {
+    display: grid !important;
+    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.wd-settings-nav {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    flex-direction: column;
+    padding: 12px !important;
+    gap: 4px;
+    overflow-y: auto;
+    border-right: 1px solid rgba(148, 163, 184, .2);
+    border-bottom: 0;
+    background: rgba(148, 163, 184, .08);
+}
+
+.wd-settings-nav .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px !important;
+    border: 0 !important;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 12px;
+}
+
+.wd-settings-nav .tab-btn.border-aru-500 {
+    background: rgba(249, 115, 22, .12);
+}
+
+.wd-settings-content {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+.wd-settings-footer {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.wd-calendar-popover {
+    position: absolute;
+    right: 10px;
+    bottom: 62px;
+    width: 354px;
+    max-width: calc(100% - 20px);
+    height: 424px;
+    max-height: calc(100% - 80px);
+    z-index: 45;
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 16px;
+    overflow: auto;
+    box-shadow: 0 22px 60px rgba(15, 23, 42, .3);
+}
+
+.wd-cal-cell {
+    aspect-ratio: auto;
+    height: 34px;
+}
+
+.wd-artifact-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.wd-chat-list #sidebar {
+    position: static !important;
+    width: 100% !important;
+    height: 100%;
+    transform: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+}
+
+.wd-chat-list #sidebar > div:first-child {
+    padding: 12px;
+}
+
+.wd-chat-list #sidebar > div:first-child > .grid {
+    display: flex;
+}
+
+.wd-chat-list #sidebar > div:first-child > .grid button {
+    width: 36px;
+    height: 36px;
+}
+
+.wd-chat-list button[onclick="app.openPlugins()"],
+.wd-chat-list button[onclick="app.openTabSwitcher()"] {
+    display: none !important;
+}
+
+.wd-chat-body #screen-chat,
+.wd-chat-body .wd-chat-snapshot {
+    display: flex;
+    position: relative;
+    height: 100%;
+    width: 100%;
+    min-height: 0;
+    gap: 0 !important;
+    padding: 0 !important;
+}
+
+.wd-chat-body #tabs-navigation,
+.wd-chat-body .tab-navigation,
+.wd-chat-body #sidebar-backdrop {
+    display: none !important;
+}
+
+.wd-chat-body .chat-workspace,
+.wd-chat-body .canvas-workspace {
+    border-radius: 0 !important;
+}
+
+.wd-chat-body .canvas-workspace {
+    position: relative !important;
+    flex: 0 0 var(--wd-canvas-width, 45%);
+    width: var(--wd-canvas-width, 45%) !important;
+    min-width: 160px;
+    height: 100% !important;
+    transition: none !important;
+    box-shadow: none;
+}
+
+.wd-canvas-divider {
+    width: 7px;
+    flex: 0 0 7px;
+    cursor: col-resize;
+    touch-action: none;
+    background: rgba(148, 163, 184, .12);
+}
+
+.wd-canvas-divider:hover,
+.wd-canvas-divider:focus-visible {
+    background: rgba(249, 115, 22, .3);
+    outline: none;
+}
+
+.wd-canvas-divider:has(+ .canvas-workspace.hidden) {
+    display: none;
+}
+
+.wd-resizing-canvas iframe {
+    pointer-events: none;
+}
+
+.wd-chat-snapshot {
+    pointer-events: none;
+    user-select: none;
+}
+
+.wd-snapshot-artifact {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 18px;
+    background: rgba(148, 163, 184, .12);
+    color: #94a3b8;
+    text-align: center;
+}

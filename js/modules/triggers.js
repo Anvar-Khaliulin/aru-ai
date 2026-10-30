@@ -54,7 +54,7 @@ export const Triggers = {
         }
     },
 
-    async processRecallModules(userQuery) {
+    async processRecallModules(userQuery, tab = state.tabs[state.activeTabIndex]) {
         try {
             const query = userQuery.toLowerCase().trim();
 
@@ -102,8 +102,14 @@ export const Triggers = {
 
             if (match) {
                 console.log("Module Recall: Found match", match.name);
-                // Commits execution pipeline launching interactive operational canvas endpoints
-                setTimeout(() => CanvasManager.renderArtifact(match.type, match.name, match.content), 500);
+                setTimeout(() => {
+                    if (!state.tabs.includes(tab)) return;
+                    tab.artifact = { type: match.type, title: match.name, code: match.content };
+                    tab.isCanvasOpen = true;
+                    if (state.tabs[state.activeTabIndex] === tab) {
+                        CanvasManager.renderArtifact(match.type, match.name, match.content);
+                    }
+                }, 500);
                 return `SUCCESS: Artifact already found and opened on Canvas (Type: ${match.type}, Title: "${match.name}"). DO NOT generate a new version of this artifact. Just confirm to the user that it is open.`;
             }
             return null;
@@ -555,11 +561,15 @@ export const Triggers = {
 
         if (artifactsFound.length > 0) {
             const last = artifactsFound[artifactsFound.length - 1];
+            const tab = chatId === null ? state.tabs[state.activeTabIndex]
+                : state.tabs.find((item) => item.chatId === chatId);
             setTimeout(() => {
-                CanvasManager.renderArtifact(last.type, last.title, last.code);
-                const st = window.aruState;
-                const tab = st && st.tabs[st.activeTabIndex];
-                if (tab) tab.artifact = { type: last.type, title: last.title, code: last.code };
+                if (!state.tabs.includes(tab)) return;
+                tab.artifact = { type: last.type, title: last.title, code: last.code };
+                tab.isCanvasOpen = true;
+                if (state.tabs[state.activeTabIndex] === tab) {
+                    CanvasManager.renderArtifact(last.type, last.title, last.code);
+                }
             }, 500);
         }
 

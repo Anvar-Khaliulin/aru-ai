@@ -3,7 +3,7 @@
 Progressive Web App Service Worker for offline caching and resource management.
 ---chat.aru-lab.space---PWA---
 */
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.5';
 const CACHE_PREFIX = 'aru-ai';
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`;
 const CDN_CACHE_PREFIX = `${CACHE_PREFIX}-cdn`;
@@ -48,6 +48,8 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './rules.html',
   './css/style.css',
+  './css/desktop.css',
+  './css/desktop-notes.css',
   './data/info_en.html',
   './data/info_kz.html',
   './data/info_ru.html',
@@ -57,6 +59,8 @@ const ASSETS_TO_CACHE = [
   './js/modules/canvas.js',
   './js/modules/chatController.js',
   './js/modules/db.js',
+  './js/modules/desktop.js',
+  './js/modules/desktopNotes.js',
   './js/modules/files.js',
   './js/modules/heuristics.js',
   './js/modules/library.js',
@@ -74,6 +78,7 @@ const ASSETS_TO_CACHE = [
   './js/modules/wizardController.js',
   './js/vendor/purify.min.js',
   './lang/en.json',
+  './lang/desktop.json',
   './lang/kk.json',
   './lang/plugins.json',
   './lang/ru.json',

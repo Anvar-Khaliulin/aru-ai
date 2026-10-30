@@ -139,6 +139,7 @@ export const ChatController = {
     },
 
     renderTabs: () => {
+        window.dispatchEvent(new CustomEvent('aru-tabs-changed'));
         const bar = document.getElementById('tabs-bar');
         const navigation = document.getElementById('tabs-navigation');
         if (!bar) return;
@@ -302,6 +303,7 @@ export const ChatController = {
         if (previousTab && previousTab.type === 'plugin' && previousIndex !== index) {
             PluginManager.handleLifecycle(previousTab.pluginId, 'deactivate', { tab: previousTab });
         }
+        window.dispatchEvent(new CustomEvent('aru-tab-activating', { detail: { tab: state.tabs[index] } }));
 
         state.activeTabIndex = index;
         const tab = state.tabs[index];
@@ -316,6 +318,8 @@ export const ChatController = {
         const pluginViewport = document.getElementById('plugin-viewport');
 
         if (tab.type === 'plugin') {
+            CanvasManager.clearCanvas();
+            document.getElementById('canvas-panel').classList.add('hidden');
             if (msgContainer) msgContainer.classList.add('hidden');
             if (placeholder) placeholder.classList.add('hidden');
             if (document.getElementById('chat-input-area')) document.getElementById('chat-input-area').classList.add('hidden');
@@ -324,11 +328,13 @@ export const ChatController = {
                 pluginViewport.classList.remove('hidden');
                 if (pluginViewport.dataset.pluginId !== tab.pluginId) {
                     const plugin = PluginManager.getPluginDefinition(tab.pluginId);
-                    if (plugin) await PluginManager.loadPluginContent(plugin, pluginViewport);
+                    if (plugin && !await PluginManager.loadPluginContent(plugin, pluginViewport, tab)) return;
                 }
             }
+            if (state.tabs[state.activeTabIndex] !== tab) return;
             PluginManager.handleLifecycle(tab.pluginId, 'activate', { tab, container: pluginViewport });
             Chapters.refreshVisibility();
+            window.dispatchEvent(new CustomEvent('aru-tab-activated', { detail: { tab } }));
             return; // Exit early for plugins
         } else {
             if (msgContainer) msgContainer.classList.remove('hidden');
@@ -359,8 +365,9 @@ export const ChatController = {
             CanvasManager.switchChat(tab.chatId);
             // Optionally update UI for artifact view (tabs, title)
             const tabsEl = document.getElementById('canvas-tabs');
-            const showTabs = (tab.artifact.type === 'app' || tab.artifact.type === 'game' || tab.artifact.type === 'analytics');
+            const showTabs = ['app', 'game', 'analytics', 'doc'].includes(tab.artifact.type);
             if (tabsEl) tabsEl.classList.toggle('hidden', !showTabs);
+            document.getElementById('btn-canvas-edit').classList.toggle('hidden', tab.artifact.type !== 'doc');
             document.getElementById('canvas-title-text').textContent = tab.artifact.title;
         } else {
             CanvasManager.switchChat(tab.chatId); // This will clear/hide if no container exists
@@ -390,12 +397,16 @@ export const ChatController = {
         }
 
         Chapters.refreshVisibility();
+        window.dispatchEvent(new CustomEvent('aru-tab-activated', { detail: { tab } }));
     },
 
     closeTab: (index, event) => {
         if (event) event.stopPropagation();
         const closedTab = state.tabs[index];
+        const wasActive = index === state.activeTabIndex;
+        if (closedTab?.abortController) closedTab.abortController.abort();
         if (closedTab) CanvasManager.destroyContainer(closedTab.chatId);
+        if (index === state.activeTabIndex) CanvasManager.currentArtifact = null;
         if (closedTab && closedTab.type === 'plugin') {
             PluginManager.handleLifecycle(closedTab.pluginId, 'close', { tab: closedTab, isActive: index === state.activeTabIndex });
         }
@@ -409,13 +420,21 @@ export const ChatController = {
             const placeholder = document.getElementById('chat-placeholder');
             if (placeholder) placeholder.classList.remove('hidden');
             CanvasManager.clearCanvas();
-            ChatController.renderTabs(); // Sync tab bar UI
+            const pluginViewport = document.getElementById('plugin-viewport');
+            if (pluginViewport) {
+                pluginViewport.replaceChildren();
+                pluginViewport.classList.add('hidden');
+                delete pluginViewport.dataset.pluginId;
+            }
+            document.getElementById('messages-container').classList.remove('hidden');
+            document.getElementById('chat-input-area').classList.remove('hidden');
+            document.getElementById('btn-tools-trigger').classList.remove('hidden');
+            ChatController.renderTabs();
             Chapters.refreshVisibility();
         } else {
-            if (state.activeTabIndex >= index) {
-                state.activeTabIndex = Math.max(0, state.activeTabIndex - 1);
-            }
-            ChatController.switchTab(state.activeTabIndex);
+            const nextIndex = state.activeTabIndex >= index ? Math.max(0, state.activeTabIndex - 1) : state.activeTabIndex;
+            state.activeTabIndex = wasActive ? -1 : nextIndex;
+            ChatController.switchTab(nextIndex);
         }
         if (!document.getElementById('tab-switcher').classList.contains('hidden')) {
             ChatController.renderTabCards();
@@ -752,7 +771,7 @@ export const ChatController = {
             }
 
             const context = await Triggers.getRelevantContext(text);
-            const recall = await Triggers.processRecallModules(text);
+            const recall = await Triggers.processRecallModules(text, activeTab);
             let toSend = text;
             if (context) toSend = `[SYSTEM_MEMORY_CONTEXT]\n${context}\n[/SYSTEM_MEMORY_CONTEXT]\n\nUser: ${text}`;
             if (searchContext) toSend = `${searchContext}\n\n${toSend}`;

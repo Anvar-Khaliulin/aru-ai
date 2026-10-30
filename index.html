@@ -124,6 +124,8 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/desktop.css">
+    <link rel="stylesheet" href="css/desktop-notes.css">
     <script type="application/ld+json">
         {
             "@context": "https://schema.org",
@@ -253,6 +255,16 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                                 <i data-lucide="moon" class="w-4 h-4 hidden dark:block"></i>
                             </div>
                             <span data-i18n="label_theme">Theme</span>
+                        </button>
+
+                        <!-- Desktop mode (desktop devices only) -->
+                        <button id="desktop-mode-toggle" onclick="DesktopMode.enter(); app.toggleConfigMenu()"
+                            class="hidden md:flex w-full items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-aru-50 dark:bg-aru-900/20 text-aru-600 dark:text-aru-300 flex items-center justify-center">
+                                <i data-lucide="monitor" class="w-4 h-4"></i>
+                            </div>
+                            <span data-dt="desktop_mode">Рабочий стол</span>
                         </button>
 
                         <button onclick="app.openSettings(); app.toggleConfigMenu()"

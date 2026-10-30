@@ -203,31 +203,22 @@ export const PluginManager = {
 
         state.tabs.push(newTab);
         const newTabIndex = state.tabs.length - 1;
+        if (!document.getElementById('plugin-viewport')) {
+            const container = document.createElement('div');
+            container.id = 'plugin-viewport';
+            container.className = 'flex-1 min-h-0 min-w-0 overflow-hidden relative z-10';
+            document.getElementById('messages-container').before(container);
+        }
 
-        // Render UI
         window.app.renderTabs();
         window.app.switchTab(newTabIndex);
-
-        // Hide messages container and welcome placeholder
-        document.getElementById('messages-container').classList.add('hidden');
-        document.getElementById('chat-placeholder').classList.add('hidden');
-
-        // Create or show plugin container
-        let pluginContainer = document.getElementById('plugin-viewport');
-        if (!pluginContainer) {
-            pluginContainer = document.createElement('div');
-            pluginContainer.id = 'plugin-viewport';
-            document.getElementById('messages-container').parentNode.insertBefore(pluginContainer, document.getElementById('messages-container'));
-        }
-        pluginContainer.className = 'flex-1 min-h-0 min-w-0 overflow-hidden relative z-10';
-        pluginContainer.classList.remove('hidden');
-
-        // Load the plugin entry
-        this.loadPluginContent(plugin, pluginContainer);
     },
 
-    async loadPluginContent(plugin, container) {
-        container.dataset.pluginId = plugin.id;
+    async loadPluginContent(plugin, container, tab) {
+        const request = Symbol();
+        container.pluginLoadRequest = request;
+        delete container.dataset.pluginId;
+        const isCurrent = () => container.pluginLoadRequest === request && state.tabs[state.activeTabIndex] === tab;
         container.innerHTML = `<div class="h-full flex flex-col items-center justify-center gap-4 text-gray-400">
             <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-purple-500"></i>
             <span class="text-sm font-medium">Loading ${this.getTranslation(plugin.nameKey)}...</span>
@@ -237,8 +228,8 @@ export const PluginManager = {
         try {
             const resp = await fetch(`plugins/${plugin.id}/${plugin.id}.html`);
             const html = await resp.text();
+            if (!isCurrent()) return false;
 
-            // Inject raw HTML (including <link> and <style> tags)
             container.innerHTML = html;
 
             if (window.lucide) window.lucide.createIcons();
@@ -263,11 +254,14 @@ export const PluginManager = {
             }));
 
             await Promise.all(scriptLoads);
-            this.handleLifecycle(plugin.id, 'activate', { container });
-
+            if (!isCurrent()) return false;
+            container.dataset.pluginId = plugin.id;
+            return true;
         } catch (e) {
+            if (!isCurrent()) return false;
             console.error("Plugin Manager: Load failed", e);
             container.innerHTML = `<div class="p-8 text-center text-red-500 font-bold">Failed to load plugin: ${plugin.id}</div>`;
+            return false;
         }
     }
 };

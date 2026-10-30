@@ -18,6 +18,7 @@ import { PluginManager } from './modules/pluginManager.js';
 import { TransferController } from './modules/transferController.js';
 import { RemoteStorage } from './modules/remoteStorage.js';
 import { Chapters } from './modules/chapters.js';
+import { DesktopMode } from './modules/desktop.js';
 
 const llm = new LLMClient();
 
@@ -258,6 +259,7 @@ const app = {
             sessionStorage.removeItem('aru_pending_gdrive');
         }
         await PluginManager.init();
+        await DesktopMode.init(app);
         TransferController.init();
         app.updateLangUI();
         lucide.createIcons(); // Re-run for translations
@@ -517,6 +519,7 @@ const app = {
         semanticCore.init((p) => UI.updateModelProgress(p));
         app.updateSystemPrompt();
         app.updateSearchUI();
+        window.dispatchEvent(new CustomEvent('aru-session-started'));
     },
 
     getRSSUrls: () => {
@@ -773,6 +776,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         for (const file of files) {
             try {
                 const content = await FileProcessor.parseFile(file);
+                if (!state.tabs.includes(activeTab)) return;
                 activeTab.attachments.push({
                     name: file.name,
                     content: content,
@@ -782,7 +786,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 alert(`Load error ${file.name}: ${e.message}`);
             }
         }
-        UI.renderAttachments(activeTab.attachments);
+        if (state.tabs[state.activeTabIndex] === activeTab) UI.renderAttachments(activeTab.attachments);
     },
 
     handleFileUpload: async (input) => {

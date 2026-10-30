@@ -5,6 +5,7 @@ Artifact library controller managing the display and interaction of saved applic
 */
 import { CanvasManager } from './canvas.js';
 import { DB } from './db.js';
+import { UI } from './ui.js';
 import { ChatController } from './chatController.js';
 import { aruGlobalState as state } from './aruState.js';
 
@@ -220,7 +221,8 @@ export const Library = {
         grid.innerHTML = modules.map(m => {
             const item = config[m.type] || config.doc;
             const rawTags = m.tags || (m.type === 'app' ? 'Web Application' : (m.type === 'game' ? 'Game' : 'Script/Doc'));
-            
+            const standalone = window.DesktopMode?.active ? `<button onclick="event.stopPropagation(); DesktopMode.openArtifact(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white rounded-lg transition" title="${UI.escapeHTML(window.DesktopMode.t('artifact_window'))}"><i data-lucide="external-link" class="w-4 h-4"></i></button>` : '';
+
             if (this.state.viewMode === 'list') {
                 const shortName = m.name.length > 30 ? m.name.substring(0, 30) + '...' : m.name;
                 const tagsArray = rawTags.split(',').map(t => t.trim()).filter(Boolean);
@@ -239,6 +241,7 @@ export const Library = {
                         <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg">${item.label}</span>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
+                        ${standalone}
                         <button onclick="event.stopPropagation(); window.Library.launch(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white rounded-lg transition shadow-sm" title="${t.btn_open || 'Open'}">
                             <i data-lucide="play" class="w-4 h-4"></i>
                         </button>
@@ -263,9 +266,10 @@ export const Library = {
                         <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight" title="${m.name}">${shortName}</h4>
                         <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed font-medium italic" title="${rawTags}">${shortTags}</p>
                     </div>
-                    
+
                     <div class="mt-auto flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-3 opacity-100 md:opacity-0 transition-all duration-300 translate-y-0 md:translate-y-2 group-hover:opacity-100 group-hover:translate-y-0">
                         <button onclick="window.Library.launch(${m.id})" class="flex-1 min-w-0 h-10 px-3 bg-aru-500 hover:bg-aru-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition shadow-lg shadow-aru-500/20">${t.btn_open || 'Open'}</button>
+                        ${standalone}
                         <button onclick="event.stopPropagation(); window.Library.deleteItem(${m.id})" class="w-10 h-10 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-red-500 border border-gray-100 dark:border-gray-600 rounded-xl transition shadow-sm" title="${t.btn_delete || 'Delete'}">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
