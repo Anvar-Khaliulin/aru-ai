@@ -1057,8 +1057,8 @@ export const DesktopMode = {
 
     async requestFullscreen() {
         if (document.fullscreenElement) return;
+        // iOS home-screen apps have no element fullscreen API; desktop PWAs do.
         if (navigator.standalone) return;
-        if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return;
         try {
             const el = document.documentElement;
             if (el.requestFullscreen) await el.requestFullscreen();
