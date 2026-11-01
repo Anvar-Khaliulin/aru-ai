@@ -332,7 +332,7 @@ export const WizardController = {
         try {
             if (provider === 'gdrive') {
                 const clientId = document.getElementById('rc-gdrive-client')?.value.trim();
-                if (!clientId) return alert(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта');
+                if (!clientId) return UI.showToast(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта', 'alert-circle');
                 d.gdrive_client_id = clientId;
                 const tokens = await RemoteAdapters.gdrive.authorize(clientId);
                 const profile = {
@@ -351,13 +351,13 @@ export const WizardController = {
             const username = document.getElementById('rc-webdav-user').value.trim();
             const password = document.getElementById('rc-webdav-pass').value;
             const davPath = document.getElementById('rc-webdav-path').value.trim();
-            if (!url || !username || !password) return alert(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль');
+            if (!url || !username || !password) return UI.showToast(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль', 'alert-circle');
             Object.assign(d, { webdav_url: url, webdav_user: username, webdav_pass: password, webdav_path: davPath });
             await RemoteStorage.adoptPending({ type: 'webdav', url, username, password, davPath, fileName: 'aru_database.sqlite', createdAt: Date.now() });
             await WizardController._renderRemotePicker();
         } catch (e) {
             console.error('connectRemote failed', e);
-            alert(e.message);
+            await UI.alert(e.message);
         }
     },
 
@@ -371,7 +371,7 @@ export const WizardController = {
             files = await RemoteStorage.listRemoteFiles();
         } catch (e) {
             console.error('listRemoteFiles failed', e);
-            alert((t.remote_error_list || 'Не удалось получить список файлов') + ': ' + e.message);
+            UI.alert((t.remote_error_list || 'Не удалось получить список файлов') + ': ' + e.message);
             body.innerHTML = WizardController._renderRemoteConnectBody();
             lucide.createIcons();
             return;
@@ -406,7 +406,7 @@ export const WizardController = {
             await RemoteStorage.useRemoteFile(id, name);
             if (mode === 'link') {
                 // Settings link flow: the local DB is logged-in data — ask before replacing it
-                if (!confirm((t.remote_link_take_confirm || 'Заменить локальную базу данными этого файла?') + '\n' + name)) return;
+                if (!(await UI.confirm((t.remote_link_take_confirm || 'Заменить локальную базу данными этого файла?') + '\n' + name))) return;
                 const bytes = await RemoteStorage.pullBytes();
                 await DB.applyRemoteBytes(bytes);
                 await WizardController.app.refreshRemoteSync();
@@ -418,7 +418,7 @@ export const WizardController = {
             const bytes = await RemoteStorage.pullBytes();
             const ok = await DB.smartLoadFromBytes(bytes);
             if (!ok) {
-                alert(t.remote_alert_local_newer || 'Локальная копия новее удалённой. Загрузка отменена для защиты данных.');
+                await UI.alert(t.remote_alert_local_newer || 'Локальная копия новее удалённой. Загрузка отменена для защиты данных.');
                 return;
             }
             // Keep the profile in memory; persisted encrypted once the DB password is verified at login
@@ -426,7 +426,7 @@ export const WizardController = {
             WizardController.app.openModal('login');
         } catch (e) {
             console.error('openRemoteFile failed', e);
-            alert((t.remote_error_open || 'Не удалось открыть файл') + ': ' + e.message);
+            await UI.alert((t.remote_error_open || 'Не удалось открыть файл') + ': ' + e.message);
         }
     },
 
@@ -434,7 +434,7 @@ export const WizardController = {
         const t = state.translations || {};
         try {
             const defName = 'aru_database_' + new Date().toISOString().slice(0, 10) + '.sqlite';
-            const name = prompt(t.remote_upload_name_prompt || 'Имя нового файла на сервере:', defName);
+            const name = await UI.prompt(t.remote_upload_name_prompt || 'Имя нового файла на сервере:', defName);
             if (!name) return;
             await RemoteStorage.createRemoteFile(name.trim());
             await RemoteStorage.pushNow(DB.db.export());
@@ -444,7 +444,7 @@ export const WizardController = {
             WizardController.app.switchTab('storage');
         } catch (e) {
             console.error('uploadLocalAsNewRemote failed', e);
-            alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
+            await UI.alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
         }
     },
 
@@ -748,22 +748,22 @@ export const WizardController = {
             d.password = document.getElementById('wiz-password').value;
             const bioCheck = document.getElementById('wiz-allow-biometrics');
             if (bioCheck) d.allow_biometrics = bioCheck.checked;
-            if (!d.dbname || d.password.length < 6) return alert("Введите имя базы и пароль (мин 6 симв)");
+            if (!d.dbname || d.password.length < 6) return UI.showToast("Введите имя базы и пароль (мин 6 симв)", 'alert-circle');
         } else if (d.stage === 3) {
             if (d.ai_type === 'gemini') {
                 d.gemini_key = document.getElementById('wiz-gemini-key').value;
                 d.gemini_model = document.getElementById('wiz-gemini-model').value || 'gemini-2.5-flash';
-                if (!d.gemini_key) return alert("Введите Gemini API Ключ");
+                if (!d.gemini_key) return UI.showToast("Введите Gemini API Ключ", 'alert-circle');
             } else if (d.ai_type === 'openrouter') {
                 d.openrouter_key = document.getElementById('wiz-openrouter-key').value;
                 d.openrouter_model = document.getElementById('wiz-openrouter-model').value;
                 d.openrouter_url = document.getElementById('wiz-openrouter-url').value;
-                if (!d.openrouter_key || !d.openrouter_model) return alert("Заполните API ключ и название модели");
+                if (!d.openrouter_key || !d.openrouter_model) return UI.showToast("Заполните API ключ и название модели", 'alert-circle');
             } else if (d.ai_type === 'custom') {
                 d.custom_key = document.getElementById('wiz-custom-key').value;
                 d.custom_model = document.getElementById('wiz-custom-model').value;
                 d.custom_url = document.getElementById('wiz-custom-url').value;
-                if (!d.custom_url || !d.custom_model) return alert("Заполните Base URL и название модели");
+                if (!d.custom_url || !d.custom_model) return UI.showToast("Заполните Base URL и название модели", 'alert-circle');
             }
         }
         d.stage++;
@@ -784,7 +784,7 @@ export const WizardController = {
             if (keyEl) {
                 d.gemini_key = keyEl.value;
                 d.gemini_model = document.getElementById('wiz-gemini-model').value || 'gemini-2.5-flash';
-                if (!d.gemini_key) return alert("Введите Gemini API Ключ");
+                if (!d.gemini_key) return UI.showToast("Введите Gemini API Ключ", 'alert-circle');
             }
         } else if (d.ai_type === 'openrouter') {
             const keyEl = document.getElementById('wiz-openrouter-key');
@@ -792,7 +792,7 @@ export const WizardController = {
                 d.openrouter_key = keyEl.value;
                 d.openrouter_model = document.getElementById('wiz-openrouter-model').value;
                 d.openrouter_url = document.getElementById('wiz-openrouter-url').value;
-                if (!d.openrouter_key || !d.openrouter_model) return alert("Заполните API ключ и название модели");
+                if (!d.openrouter_key || !d.openrouter_model) return UI.showToast("Заполните API ключ и название модели", 'alert-circle');
             }
         } else if (d.ai_type === 'custom') {
             const urlEl = document.getElementById('wiz-custom-url');
@@ -800,7 +800,7 @@ export const WizardController = {
                 d.custom_key = document.getElementById('wiz-custom-key').value;
                 d.custom_model = document.getElementById('wiz-custom-model').value;
                 d.custom_url = urlEl.value;
-                if (!d.custom_url || !d.custom_model) return alert("Заполните Base URL и название модели");
+                if (!d.custom_url || !d.custom_model) return UI.showToast("Заполните Base URL и название модели", 'alert-circle');
             }
         }
 
@@ -810,7 +810,7 @@ export const WizardController = {
         if (storage === 'gdrive') {
             const el = document.getElementById('wiz-gdrive-client');
             if (el) d.gdrive_client_id = el.value.trim();
-            if (!d.gdrive_client_id) return alert(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта');
+            if (!d.gdrive_client_id) return UI.showToast(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта', 'alert-circle');
         } else if (storage === 'webdav') {
             const g = (id) => document.getElementById(id)?.value ?? '';
             d.webdav_url = g('wiz-webdav-url').trim();
@@ -818,7 +818,7 @@ export const WizardController = {
             d.webdav_pass = g('wiz-webdav-pass');
             d.webdav_path = g('wiz-webdav-path').trim();
             if (!d.webdav_url || !d.webdav_user || !d.webdav_pass) {
-                return alert(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль WebDAV');
+                return UI.showToast(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль WebDAV', 'alert-circle');
             }
         }
 
@@ -891,7 +891,7 @@ export const WizardController = {
             WizardController.app.startSession();
         } catch (e) {
             console.error(e);
-            alert("Error: " + e.message);
+            await UI.alert("Error: " + e.message);
         }
     },
 
@@ -914,7 +914,7 @@ export const WizardController = {
         } catch (e) {
             // Local DB is already created; cloud link can be retried from Settings → Storage
             console.error('finishGoogleCreate cloud setup failed', e);
-            alert((t.remote_error_setup || 'База создана локально, но настройка Google Drive не удалась. Повторите позже в Настройках → Хранилище.') + '\n' + e.message);
+            await UI.alert((t.remote_error_setup || 'База создана локально, но настройка Google Drive не удалась. Повторите позже в Настройках → Хранилище.') + '\n' + e.message);
         }
         await DB.save();
         WizardController.app.startSession();
@@ -937,7 +937,7 @@ export const WizardController = {
             await RemoteStorage.pushNow(DB.db.export());
         } catch (e) {
             console.error('setupWebdavCreate failed', e);
-            alert((t.remote_error_setup || 'База создана локально, но настройка WebDAV не удалась. Проверьте параметры в Настройках → Хранилище.') + '\n' + e.message);
+            await UI.alert((t.remote_error_setup || 'База создана локально, но настройка WebDAV не удалась. Проверьте параметры в Настройках → Хранилище.') + '\n' + e.message);
         }
     },
 
@@ -950,7 +950,7 @@ export const WizardController = {
         } catch (e) {
             console.error('Biometric authentication error', e);
             if (e.name !== 'NotAllowedError') {
-                alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
+                await UI.alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
             }
         }
     },
@@ -960,7 +960,7 @@ export const WizardController = {
             const granted = await DB.checkFilePermission();
             if (!granted) {
                 const t = state.translations || {};
-                alert(t.alert_write_permission || "Для работы требуется разрешение на запись в файл базы данных.");
+                await UI.alert(t.alert_write_permission || "Для работы требуется разрешение на запись в файл базы данных.");
                 return;
             }
         }
@@ -968,14 +968,14 @@ export const WizardController = {
         const res = DB.exec("SELECT value FROM settings WHERE key='db_password'");
         if (!res.length || !res[0].values.length) {
             const t = state.translations || {};
-            alert(t.alert_db_not_found || 'Error: Password not found');
+            await UI.alert(t.alert_db_not_found || 'Error: Password not found');
             return;
         }
         const storedHash = res[0].values[0][0];
         const isValid = await Auth.verifyPassword(pwd, storedHash);
         if (!isValid) {
             const t = state.translations || {};
-            alert(t.alert_wrong_password || 'Wrong password');
+            await UI.alert(t.alert_wrong_password || 'Wrong password');
             return;
         }
 
@@ -1024,7 +1024,7 @@ export const WizardController = {
         try {
             if (!fileInput.files.length) {
                 const t = state.translations || {};
-                alert(t.alert_select_file || "Пожалуйста, сначала выберите файл базы.");
+                UI.showToast(t.alert_select_file || "Пожалуйста, сначала выберите файл базы.", 'alert-circle');
                 return;
             }
 
@@ -1034,14 +1034,14 @@ export const WizardController = {
             const storedHash = await DB.readPasswordHashFromFile(fileInput.files[0]);
             if (!storedHash) {
                 const t = state.translations || {};
-                alert(t.alert_corrupt_db || 'Eror: File is not a base or broken');
+                await UI.alert(t.alert_corrupt_db || 'Eror: File is not a base or broken');
                 return;
             }
 
             const isValid = await Auth.verifyPassword(pwd, storedHash);
             if (!isValid) {
                 const t = state.translations || {};
-                alert(t.alert_wrong_password || 'Неверный пароль');
+                await UI.alert(t.alert_wrong_password || 'Неверный пароль');
                 return;
             }
 
@@ -1055,13 +1055,13 @@ export const WizardController = {
             WizardController.app.startSession();
         } catch (err) {
             console.error(err);
-            alert('Open Error: ' + err.message);
+            await UI.alert('Open Error: ' + err.message);
         }
     },
 
     resetDB: async () => {
         const t = state.translations || {};
-        if (!confirm(t.confirm_reset_db || "Внимание! Это удалит текущую базу из браузера безвозвратно. Продолжить?")) return;
+        if (!(await UI.confirm(t.confirm_reset_db || "Внимание! Это удалит текущую базу из браузера безвозвратно. Продолжить?"))) return;
         // Full delete: keep as explicit destructive action (Delete DB file from storage)
         await localforage.removeItem(DB.dbPath);
         // Also remove file handle metadata if exists
@@ -1072,7 +1072,7 @@ export const WizardController = {
     // Graceful disconnect: do not delete DB data, just remove file handle and unauthorize session
     disconnectDB: async () => {
         const t = state.translations || {};
-        if (!confirm(t.confirm_disconnect_db || "Текущее подключение будет разорвано. Выберите базу для подключения. Продолжить?")) return;
+        if (!(await UI.confirm(t.confirm_disconnect_db || "Текущее подключение будет разорвано. Выберите базу для подключения. Продолжить?"))) return;
         try {
             // Clear file handle in DB and storage, but keep DB data in IndexedDB
             if (DB && typeof DB.setFileHandle === 'function') await DB.setFileHandle(null);

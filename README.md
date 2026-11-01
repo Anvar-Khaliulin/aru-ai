@@ -19,7 +19,7 @@
   </a>
   <!-- Release -->
   <a href="https://github.com/Anvar-Khaliulin/aru-ai/releases">
-    <img src="https://img.shields.io/badge/Release-v1.0.6-green.svg?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/Release-v1.0.7-green.svg?style=flat-square" alt="Version">
   </a>
   <!-- Stack -->
   <img src="https://img.shields.io/badge/Built_With-Vanilla_JS-yellow.svg?style=flat-square&logo=javascript" alt="Vanilla JS">
@@ -47,6 +47,12 @@ Aru AI is **100% free and open-source**. There are no ads, subscriptions, paywal
 - **100% Free & Open Source**: No ads, no subscriptions, no paywalls, and no commercial restrictions (**GNU GPLv3** license).
 - **Pure JavaScript**: Built with vanilla JS without heavy frameworks. Total application size is just 20–32 MB.
 - **Run Anywhere**: Runs smoothly on any device — from high-end PCs to decade-old smartphones or tablets. Also available as an offline-capable **PWA**.
+---
+## 🖥️ Desktop Mode
+
+- Turns the interface into a full desktop workspace: draggable windows, taskbar, widgets, and notes.
+- Available on desktop and tablet; opens in fullscreen automatically, and the tray button returns to windowed mode.
+- Built-in dialogs (confirmations, prompts, unsaved-changes warnings) work inside the app and no longer drop fullscreen.
 ---
 ## 🧠 AI Engine & Providers
 

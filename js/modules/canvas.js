@@ -4,6 +4,7 @@ Canvas manager responsible for rendering generated artifacts like games, apps, a
 ---chat.aru-lab.space---PWA---
 */
 import { DB } from './db.js';
+import { UI } from './ui.js';
 
 export const CanvasManager = {
     containers: {}, // chatId -> { container, iframe }
@@ -469,7 +470,7 @@ export const CanvasManager = {
             await html2pdf().set(opt).from(element).save();
         } catch (e) {
             console.error('PDF Generation Error:', e);
-            alert('Error generating PDF: ' + e.message);
+            await UI.alert('Error generating PDF: ' + e.message);
         }
     },
 
@@ -486,9 +487,9 @@ export const CanvasManager = {
         let type = this.currentArtifact.type;
 
         if (DB.moduleExists(type, title)) {
-            const overwrite = confirm(t.confirm_overwrite_artifact || 'Artifact with this name already exists. Overwrite?');
+            const overwrite = await UI.confirm(t.confirm_overwrite_artifact || 'Artifact with this name already exists. Overwrite?');
             if (!overwrite) {
-                const newTitle = prompt(t.prompt_rename_chat || 'Enter new title:', title + ' (Copy)');
+                const newTitle = await UI.prompt(t.prompt_rename_chat || 'Enter new title:', title + ' (Copy)');
                 if (!newTitle || !newTitle.trim()) return;
                 title = newTitle.trim();
                 this.currentArtifact.title = title;
@@ -496,15 +497,15 @@ export const CanvasManager = {
             }
         }
 
-        const tags = prompt(t.canvas_save_prompt || 'Enter comma separated tags:', 'general');
+        const tags = await UI.prompt(t.canvas_save_prompt || 'Enter comma separated tags:', 'general');
         if (!tags) return;
 
         try {
             DB.saveModule(type, title, this.currentArtifact.code, tags);
-            alert(t.toast_saved || 'Saved successfully');
+            UI.showToast(t.toast_saved || 'Saved successfully', 'check-circle');
         } catch (e) {
             console.error(e);
-            alert(t.lib_error || 'Save sequence encountered an error');
+            await UI.alert(t.lib_error || 'Save sequence encountered an error');
         }
     }
 };

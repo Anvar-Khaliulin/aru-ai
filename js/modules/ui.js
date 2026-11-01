@@ -14,6 +14,135 @@ export const UI = {
         else document.getElementById('modal-container').innerHTML = '';
     },
 
+    // Native alert/confirm/prompt block the whole tab and drop desktop fullscreen,
+    // so app code uses these in-page replacements. They are async by design:
+    // confirm/prompt cannot return a value synchronously.
+    _dialogQueue: Promise.resolve(),
+
+    _enqueueDialog(open) {
+        const result = this._dialogQueue.then(open);
+        this._dialogQueue = result.then(() => {}, () => {});
+        return result;
+    },
+
+    alert(message, options = {}) {
+        return this._enqueueDialog(() => this._openDialog({ ...options, mode: 'alert', message }));
+    },
+
+    confirm(message, options = {}) {
+        return this._enqueueDialog(() => this._openDialog({ ...options, mode: 'confirm', message }));
+    },
+
+    prompt(message, defaultValue = '', options = {}) {
+        return this._enqueueDialog(() => this._openDialog({ ...options, mode: 'prompt', message, value: defaultValue }));
+    },
+
+    // Dialogs live outside #modal-container: desktop mode adopts every node added
+    // there into a window and closes the previously adopted one, which would
+    // discard the settings modal that opened the dialog in the first place.
+    _dialogHost() {
+        let host = document.getElementById('aru-dialog-host');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'aru-dialog-host';
+            document.body.appendChild(host);
+        }
+        return host;
+    },
+
+    _openDialog({ mode, message, value = '', okText, cancelText }) {
+        const t = aruGlobalState.translations || {};
+        return new Promise((resolve) => {
+            const root = document.createElement('div');
+            root.className = 'aru-dialog-root fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in';
+
+            const box = document.createElement('div');
+            box.className = 'aru-dialog bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 p-5';
+            box.setAttribute('role', 'dialog');
+            box.setAttribute('aria-modal', 'true');
+
+            const text = document.createElement('div');
+            text.className = 'text-sm font-bold text-gray-800 dark:text-gray-100 whitespace-pre-line break-words';
+            text.textContent = String(message ?? '');
+            box.appendChild(text);
+
+            let input = null;
+            if (mode === 'prompt') {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.value = String(value ?? '');
+                input.className = 'mt-3 w-full p-2.5 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-sm outline-none focus:border-orange-500 dark:text-gray-100';
+                box.appendChild(input);
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'flex justify-end gap-2 mt-5';
+
+            let cancelBtn = null;
+            if (mode !== 'alert') {
+                cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'px-4 py-2 text-[11px] font-black uppercase tracking-widest rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition';
+                cancelBtn.textContent = cancelText || t.btn_cancel || 'Cancel';
+                actions.appendChild(cancelBtn);
+            }
+
+            const okBtn = document.createElement('button');
+            okBtn.type = 'button';
+            okBtn.className = 'px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-black uppercase tracking-widest rounded-xl transition shadow-lg shadow-orange-500/20';
+            okBtn.textContent = okText || t.btn_confirm || 'OK';
+            actions.appendChild(okBtn);
+            box.appendChild(actions);
+            root.appendChild(box);
+
+            const container = this._dialogHost() || document.body;
+            container.appendChild(root);
+
+            let settled = false;
+            let observer = null;
+            const cancelValue = mode === 'prompt' ? null : false;
+
+            function finish(result) {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('keydown', onKey, true);
+                if (observer) observer.disconnect();
+                if (root.parentNode) root.parentNode.removeChild(root);
+                resolve(result);
+            }
+
+            function submit() {
+                finish(mode === 'alert' ? undefined : mode === 'prompt' ? input.value : true);
+            }
+
+            function onKey(event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    finish(cancelValue);
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    submit();
+                }
+            }
+            document.addEventListener('keydown', onKey, true);
+
+            // Desktop mode turns modals into windows; closing that window removes the
+            // node without calling our handlers, so settle on detachment as cancel.
+            observer = new MutationObserver(() => {
+                if (!root.isConnected) finish(cancelValue);
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+
+            okBtn.addEventListener('click', submit);
+            if (cancelBtn) cancelBtn.addEventListener('click', () => finish(cancelValue));
+            root.addEventListener('mousedown', (event) => { if (event.target === root) finish(cancelValue); });
+
+            setTimeout(() => (input || okBtn).focus(), 30);
+        });
+    },
+
     showToast(message, icon = 'info') {
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1.5 px-3 rounded-full opacity-0 transition-opacity duration-500 z-50 flex items-center gap-2 max-w-[90vw] shadow-lg';

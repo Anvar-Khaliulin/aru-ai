@@ -403,7 +403,7 @@ const app = {
             } catch (e) {
                 console.error('OAuth resume failed', e);
                 sessionStorage.removeItem('aru_wizard_resume');
-                alert(e.message);
+                await UI.alert(e.message);
                 if (status === 'loaded') app.openModal('login'); else app.openModal('create');
             }
         }
@@ -756,7 +756,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
     processFiles: async (files) => {
         const activeTab = state.tabs[state.activeTabIndex];
         if (!activeTab) {
-            alert(state.translations?.alert_no_chat || "Сначала создайте или выберите чат.");
+            UI.showToast(state.translations?.alert_no_chat || "Сначала создайте или выберите чат.", 'alert-circle');
             return;
         }
 
@@ -765,12 +765,12 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         const maxFiles = 10;
         const remaining = maxFiles - activeTab.attachments.length;
         if (remaining <= 0) {
-            alert(state.translations?.alert_max_files || "Можно прикрепить не более 10 файлов одновременно.");
+            UI.showToast(state.translations?.alert_max_files || "Можно прикрепить не более 10 файлов одновременно.", 'alert-circle');
             return;
         }
         if (files.length > remaining) {
             files = files.slice(0, remaining);
-            alert(state.translations?.alert_max_files || "Можно прикрепить не более 10 файлов одновременно.");
+            UI.showToast(state.translations?.alert_max_files || "Можно прикрепить не более 10 файлов одновременно.", 'alert-circle');
         }
 
         for (const file of files) {
@@ -783,7 +783,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                     type: file.type
                 });
             } catch (e) {
-                alert(`Load error ${file.name}: ${e.message}`);
+                UI.showToast(`Load error ${file.name}: ${e.message}`, 'alert-circle');
             }
         }
         if (state.tabs[state.activeTabIndex] === activeTab) UI.renderAttachments(activeTab.attachments);
@@ -923,7 +923,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 modalContainer.innerHTML = ''; // Close modal
                 callback(pwd); // Run action (password available for unlock/save flows)
             } else {
-                alert(t.alert_wrong_password || "Неверный пароль");
+                await UI.alert(t.alert_wrong_password || "Неверный пароль");
                 input.value = '';
                 input.focus();
             }
@@ -944,7 +944,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 } catch (e) {
                     console.error('Biometric confirmation failed', e);
                     if (e.name !== 'NotAllowedError') {
-                        alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
+                        await UI.alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
                     }
                 }
             };
@@ -1354,7 +1354,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
             await WizardController._renderRemotePicker('link');
         } catch (e) {
             console.error('completeRemoteLink failed', e);
-            alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
+            await UI.alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
         }
     },
 

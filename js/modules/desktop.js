@@ -839,8 +839,10 @@ export const DesktopMode = {
         this.updateFullscreenBtn();
     },
 
-    exit() {
-        if (!this.active || (this.notes && !this.notes.canClose())) return;
+    async exit() {
+        if (!this.active) return;
+        if (this.notes && !(await this.notes.canClose())) return;
+        if (!this.active) return;
         this.closeMenus();
         this.paintWallpaper(this.wallpaperLayer(), this.wallpaper);
         this.persApplied = true;
@@ -1034,7 +1036,7 @@ export const DesktopMode = {
         let win = this.windows.get('notes');
         if (!win) {
             win = this.createWindow({ id: 'notes', titleKey: 'notes', icon: 'notebook-pen', width: 850, height: 640,
-                canClose: () => this.notes.canClose(), onClose: () => { this.notes.destroy(); this.notes = null; } });
+                canClose: () => (this.notes ? this.notes.canClose() : true), onClose: () => { this.notes.destroy(); this.notes = null; } });
             this.notes = new DesktopNotes(win.body, { t: (key) => this.t(key), locale: () => this.locale() });
         }
         this.focusWindow(win.id);
@@ -1547,9 +1549,11 @@ export const DesktopMode = {
         refreshIcons();
     },
 
-    closeWindow(id) {
+    async closeWindow(id) {
         const win = this.windows.get(id);
-        if (!win || (win.canClose && !win.canClose())) return;
+        if (!win) return;
+        if (win.canClose && !(await win.canClose())) return;
+        if (this.windows.get(id) !== win) return;
         if (win.tab) {
             this.app.closeTab(state.tabs.indexOf(win.tab));
             return;

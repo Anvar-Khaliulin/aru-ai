@@ -4,6 +4,7 @@ In-chat Sections & Chapters navigator: transparent overlay panel, message anchor
 ---chat.aru-lab.space---PWA---
 */
 import { aruGlobalState as state } from './aruState.js';
+import { UI } from './ui.js';
 import { DB } from './db.js';
 
 export const Chapters = {
@@ -195,7 +196,7 @@ export const Chapters = {
         }
     },
 
-    _handleAction(act, rowType, id) {
+    async _handleAction(act, rowType, id) {
         if (act === 'add-chapter') {
             const tab = Chapters._activeTab();
             if (!tab) return;
@@ -212,7 +213,7 @@ export const Chapters = {
             const question = rowType === 'section'
                 ? Chapters._t('chapters_delete_section_confirm', 'Удалить раздел и все его главы?')
                 : Chapters._t('chapters_delete_chapter_confirm', 'Удалить главу?');
-            if (!confirm(question)) return;
+            if (!(await UI.confirm(question))) return;
             if (rowType === 'section') DB.deleteSection(id);
             else DB.deleteChapter(id);
             Chapters.render();

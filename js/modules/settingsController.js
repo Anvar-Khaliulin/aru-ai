@@ -75,7 +75,7 @@ export const SettingsController = {
 
     deleteMemory: async (id, el) => {
         const t = state.translations || {};
-        if (!confirm(t.confirm_forget_fact || 'Забыть этот факт?')) return;
+        if (!(await UI.confirm(t.confirm_forget_fact || 'Забыть этот факт?'))) return;
         DB.deleteFact(id);
         const row = el.closest('tr');
         if (row) row.remove();
@@ -89,7 +89,7 @@ export const SettingsController = {
         const row = el.closest('tr');
         const contentEl = row.querySelector('.fact-content');
         const oldContent = contentEl.textContent || '';
-        const newContent = prompt(t.prompt_edit_fact || 'Edit memory fact:', oldContent);
+        const newContent = await UI.prompt(t.prompt_edit_fact || 'Edit memory fact:', oldContent);
         if (newContent !== null && newContent.trim() && newContent !== oldContent) {
             DB.updateFact(id, newContent.trim());
             contentEl.textContent = newContent.trim();
@@ -154,7 +154,7 @@ export const SettingsController = {
                 el.classList.add('border-red-400');
                 el.focus();
             }
-            alert(t.network_custom_proxy_invalid || 'Enter a valid proxy URL (must start with https:// or http://)');
+            UI.showToast(t.network_custom_proxy_invalid || 'Enter a valid proxy URL (must start with https:// or http://)', 'alert-circle');
             return;
         }
         document.getElementById('inp-proxy-custom-url')?.classList.remove('border-red-400');
@@ -937,7 +937,7 @@ export const SettingsController = {
     storageAuthorizeGdrive: async () => {
         const t = state.translations || {};
         const clientId = document.getElementById('st-gdrive-client')?.value.trim();
-        if (!clientId) return alert(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта');
+        if (!clientId) return UI.showToast(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта', 'alert-circle');
         try {
             const tokens = await RemoteAdapters.gdrive.authorize(clientId);
             const profile = {
@@ -955,12 +955,12 @@ export const SettingsController = {
                     await SettingsController.app.completeRemoteLink();
                     SettingsController.renderStorageTab();
                 } catch (e) {
-                    alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
+                    await UI.alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
                 }
             });
         } catch (e) {
             console.error('Google authorization error:', e);
-            alert((t.remote_error_setup || 'Ошибка авторизации Google') + ': ' + e.message);
+            await UI.alert((t.remote_error_setup || 'Ошибка авторизации Google') + ': ' + e.message);
         }
     },
 
@@ -970,7 +970,7 @@ export const SettingsController = {
         const username = document.getElementById('st-webdav-user')?.value.trim();
         const password = document.getElementById('st-webdav-pass')?.value;
         const davPath = document.getElementById('st-webdav-path')?.value.trim();
-        if (!url || !username || !password) return alert(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль');
+        if (!url || !username || !password) return UI.showToast(t.remote_alert_webdav_fields || 'Заполните URL, имя пользователя и пароль', 'alert-circle');
         const profile = { type: 'webdav', url, username, password, davPath, fileName: 'aru_database.sqlite', createdAt: Date.now() };
         SettingsController.app.promptPassword(async (pwd) => {
             try {
@@ -979,7 +979,7 @@ export const SettingsController = {
                 await SettingsController.app.completeRemoteLink();
                 SettingsController.renderStorageTab();
             } catch (e) {
-                alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
+                await UI.alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
             }
         });
     },
@@ -992,7 +992,7 @@ export const SettingsController = {
                 await SettingsController.app.refreshRemoteSync();
             } catch (e) {
                 console.warn('storageUnlock failed', e);
-                alert(t.storage_unlock_failed || 'Не удалось разблокировать хранилище. Используется тот же пароль, что и у базы данных.');
+                await UI.alert(t.storage_unlock_failed || 'Не удалось разблокировать хранилище. Используется тот же пароль, что и у базы данных.');
             }
             SettingsController.renderStorageTab();
         });
@@ -1002,7 +1002,7 @@ export const SettingsController = {
         try {
             await RemoteStorage.pushNow(DB.db.export());
         } catch (e) {
-            alert(e.message);
+            await UI.alert(e.message);
         }
         SettingsController.renderStorageTab();
     },
@@ -1030,17 +1030,17 @@ export const SettingsController = {
                     a.click();
                 }
             } else {
-                alert(t.storage_check_ok || 'Удалённая копия актуальна, расхождений нет.');
+                UI.showToast(t.storage_check_ok || 'Удалённая копия актуальна, расхождений нет.', 'check-circle');
             }
         } catch (e) {
-            alert(e.message);
+            await UI.alert(e.message);
         }
         SettingsController.renderStorageTab();
     },
 
     storageDisconnect: async () => {
         const t = state.translations || {};
-        if (!confirm(t.storage_disconnect_confirm || 'Отключить облачное хранилище? Локальная база останется на этом устройстве, файл на сервере не удаляется.')) return;
+        if (!(await UI.confirm(t.storage_disconnect_confirm || 'Отключить облачное хранилище? Локальная база останется на этом устройстве, файл на сервере не удаляется.'))) return;
         await RemoteStorage.disconnect();
         SettingsController.app.updateSyncStatus('synced');
         SettingsController.renderStorageTab();
@@ -1054,13 +1054,13 @@ export const SettingsController = {
                 try {
                     await Auth.registerBiometrics(pwd, dbKey, state.userSettings?.user_name || 'Aru User');
                     DB.saveSetting('biometrics_enabled', 'true');
-                    alert(t.toast_biometrics_enabled || 'Биометрия успешно подключена!');
+                    UI.showToast(t.toast_biometrics_enabled || 'Биометрия успешно подключена!', 'check-circle');
                 } catch (e) {
                     console.error('Error enabling biometrics', e);
                     const toggle = document.getElementById('inp-biometrics-toggle');
                     if (toggle) toggle.checked = false;
                     if (e.name !== 'NotAllowedError') {
-                        alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
+                        await UI.alert((t.alert_biometrics_failed || 'Ошибка биометрии: ') + e.message);
                     }
                 }
                 SettingsController.switchTab('security');
@@ -1068,7 +1068,7 @@ export const SettingsController = {
         } else {
             Auth.removeBiometrics(dbKey);
             DB.saveSetting('biometrics_enabled', 'false');
-            alert(t.toast_biometrics_disabled || 'Биометрия отключена на этом устройстве.');
+            UI.showToast(t.toast_biometrics_disabled || 'Биометрия отключена на этом устройстве.', 'shield-off');
             SettingsController.switchTab('security');
         }
     },
@@ -1085,25 +1085,25 @@ export const SettingsController = {
         const next = newEl.value;
 
         if (!current || !next || !confirmEl.value) {
-            alert(t.alert_password_fields_required || 'Заполните все поля пароля.');
+            UI.showToast(t.alert_password_fields_required || 'Заполните все поля пароля.', 'alert-circle');
             return;
         }
         if (next !== confirmEl.value) {
-            alert(t.alert_password_mismatch || 'Новый пароль и подтверждение не совпадают.');
+            UI.showToast(t.alert_password_mismatch || 'Новый пароль и подтверждение не совпадают.', 'alert-circle');
             return;
         }
         if (next.length < 6) {
-            alert(t.alert_password_short || 'Пароль слишком короткий - минимум 6 символов.');
+            UI.showToast(t.alert_password_short || 'Пароль слишком короткий - минимум 6 символов.', 'alert-circle');
             return;
         }
         if (next === current) {
-            alert(t.alert_password_same || 'Новый пароль совпадает с текущим.');
+            UI.showToast(t.alert_password_same || 'Новый пароль совпадает с текущим.', 'alert-circle');
             return;
         }
 
         const valid = await Auth.verifyPassword(current, state.userSettings.db_password);
         if (!valid) {
-            alert(t.alert_wrong_password || 'Неверный пароль');
+            await UI.alert(t.alert_wrong_password || 'Неверный пароль');
             currentEl.value = '';
             currentEl.focus();
             return;
@@ -1113,7 +1113,7 @@ export const SettingsController = {
         const RS = window.RemoteStorage;
         const cloudConfigured = RS ? await RS.isConfigured() : false;
         if (cloudConfigured && !RS.isUnlocked()) {
-            if (!confirm(t.alert_password_cloud_locked || 'Облачное хранилище подключено, но заблокировано. После смены пароля разблокировать его не получится - придётся подключить заново. Продолжить?')) return;
+            if (!(await UI.confirm(t.alert_password_cloud_locked || 'Облачное хранилище подключено, но заблокировано. После смены пароля разблокировать его не получится - придётся подключить заново. Продолжить?'))) return;
         }
 
         try {
@@ -1127,7 +1127,7 @@ export const SettingsController = {
                     await RS.saveProfile(RS.profile, next);
                 } catch (e) {
                     console.error('Failed to re-encrypt remote profile', e);
-                    alert(t.alert_password_remote_failed || 'Пароль изменён, но облачный профиль не удалось перешифровать. Переподключите хранилище.');
+                    await UI.alert(t.alert_password_remote_failed || 'Пароль изменён, но облачный профиль не удалось перешифровать. Переподключите хранилище.');
                 }
             }
 
@@ -1139,17 +1139,17 @@ export const SettingsController = {
                     if (e.name !== 'NotAllowedError') console.error('Biometrics re-registration failed', e);
                     Auth.removeBiometrics(dbKey);
                     DB.saveSetting('biometrics_enabled', 'false');
-                    alert(t.alert_password_bio_reset || 'Биометрию не удалось перерегистрировать - она отключена. Включите её заново.');
+                    await UI.alert(t.alert_password_bio_reset || 'Биометрию не удалось перерегистрировать - она отключена. Включите её заново.');
                 }
             }
 
-            alert(t.toast_password_changed || 'Пароль базы успешно изменён.');
+            UI.showToast(t.toast_password_changed || 'Пароль базы успешно изменён.', 'check-circle');
             currentEl.value = '';
             newEl.value = '';
             confirmEl.value = '';
         } catch (e) {
             console.error('changeDbPassword failed', e);
-            alert((t.alert_password_change_failed || 'Не удалось изменить пароль: ') + e.message);
+            await UI.alert((t.alert_password_change_failed || 'Не удалось изменить пароль: ') + e.message);
         }
     },
 

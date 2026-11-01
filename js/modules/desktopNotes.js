@@ -1,4 +1,5 @@
 import { DB } from './db.js';
+import { UI } from './ui.js';
 
 const HTML_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a'];
 const FORMATS = [
@@ -123,12 +124,12 @@ export class DesktopNotes {
                 }
             });
         });
-        this._on(this.root, 'click', (event) => {
+        this._on(this.root, 'click', async (event) => {
             const button = event.target.closest('button');
             if (!button || this.busy) return;
             switch (button.dataset.action) {
                 case 'new':
-                    if (this.canClose()) this._openNote(null);
+                    if (await this.canClose()) this._openNote(null);
                     break;
                 case 'save': this._requestSave(); break;
                 case 'rename': this._openTitleForm(); break;
@@ -145,7 +146,7 @@ export class DesktopNotes {
                     break;
                 case 'select': {
                     const note = this.notes.find((item) => String(item.id) === button.dataset.id);
-                    if (note && note.id !== this.selectedId && this.canClose()) this._openNote(note);
+                    if (note && note.id !== this.selectedId && await this.canClose()) this._openNote(note);
                     break;
                 }
             }
@@ -325,10 +326,11 @@ export class DesktopNotes {
         return this.editor.innerHTML !== this.baselineHTML || this.titleInput.value !== this.baselineTitle;
     }
 
-    canClose() {
+    async canClose() {
         if (this.destroyed) return true;
         if (this.busy) return false;
-        return !this.dirty || this.window.confirm(this.t('notes_unsaved'));
+        if (!this.dirty) return true;
+        return await UI.confirm(this.t('notes_unsaved'));
     }
 
     _rememberSelection() {
@@ -392,7 +394,7 @@ export class DesktopNotes {
         if (this.busy || this.destroyed || this.selectedId === null) return;
         const current = this.notes.find((note) => note.id === this.selectedId);
         const name = (current?.title || '').trim() || this.t('note_untitled');
-        if (!this.window.confirm(this.t('note_delete_confirm').replace('{title}', name))) return;
+        if (!(await UI.confirm(this.t('note_delete_confirm').replace('{title}', name)))) return;
         const removedId = this.selectedId;
         this._setBusy(true);
         try {

@@ -456,7 +456,7 @@ export const TransferController = {
             requestAnimationFrame(() => this.scanTick());
         }).catch(err => {
             console.error("Camera access denied:", err);
-            alert(t.alert_camera_denied || "Camera access denied.");
+            UI.alert(t.alert_camera_denied || "Camera access denied.");
         });
     },
 
@@ -759,7 +759,7 @@ export const TransferController = {
             console.error("finalizeTransfer failed:", e);
             const statusEl = document.getElementById('transfer-status-text');
             if (statusEl) statusEl.innerText = t.transfer_status_incomplete || "Transfer interrupted";
-            alert(t.transfer_error_incomplete || "Transfer incomplete: data was not fully received. Please try again.");
+            await UI.alert(t.transfer_error_incomplete || "Transfer incomplete: data was not fully received. Please try again.");
         }
     },
 
@@ -832,7 +832,7 @@ export const TransferController = {
             }
         } catch (e) {
             console.error(e);
-            alert((t.alert_transfer_apply_error || "Error applying data: ") + e.message);
+            await UI.alert((t.alert_transfer_apply_error || "Error applying data: ") + e.message);
             this.closeModal();
         }
     }

@@ -3,6 +3,7 @@
 Local database client powered by SQL.js and IndexedDB for persistent storage of chat and vector data.
 ---chat.aru-lab.space---PWA---
 */
+import { UI } from './ui.js';
 // Never leave the device through P2P transfer; the receiver enters their own.
 const TRANSFER_SECRET_SETTINGS = new Set([
     'db_password',
@@ -108,7 +109,7 @@ export const DB = {
                     // Secures a localized snapshot backup of the compromised database architecture
                     await localforage.setItem(this.dbPath + '_corrupt_backup', savedData);
                     const t = window.aruState?.translations || {};
-                    alert(t.alert_corrupt_db_backup || "Attention: Database is corrupt. A backup has been created (corrupt_backup) and a new database will be initialized.");
+                    await UI.alert(t.alert_corrupt_db_backup || "Attention: Database is corrupt. A backup has been created (corrupt_backup) and a new database will be initialized.");
 
                     try { window.dispatchEvent(new CustomEvent('aru-db-initialized', { detail: { status: 'empty' } })); } catch (e) {}
                     return 'empty';
@@ -2574,7 +2575,7 @@ export const DB = {
                 const t = window.aruState?.translations || {};
                 const msg = t.confirm_overwrite_stale || "⚠️ LOCAL DATA IS NEWER!\n\nYour browser cache has newer messages than the selected file.\nLoad file and LOSE local changes?\n\n(Cancel = Keep local data and sync it TO file)";
 
-                const loadFile = confirm(msg);
+                const loadFile = await UI.confirm(msg);
 
                 if (!loadFile) {
                     // Keep local, but attach handle and SAVE current to it
@@ -2603,7 +2604,7 @@ export const DB = {
         } catch (e) {
             console.error("DB: smartLoad failed", e);
             const t = window.aruState?.translations || {};
-            alert((t.alert_load_file_error || "Error loading file: ") + e.message);
+            await UI.alert((t.alert_load_file_error || "Error loading file: ") + e.message);
             return false;
         }
     },
@@ -2702,7 +2703,7 @@ export const DB = {
             } else if (mode === 'local') {
                 await RemoteStorage.pushNow(this.db.export());
             } else {
-                const ok = confirm(t.remote_newer_confirm || 'The remote database copy was changed from another device. Download it now? (Cancel = keep local and upload)');
+                const ok = await UI.confirm(t.remote_newer_confirm || 'The remote database copy was changed from another device. Download it now? (Cancel = keep local and upload)');
                 if (ok) {
                     await this.applyRemoteBytes(await RemoteStorage.pullBytes());
                 } else {

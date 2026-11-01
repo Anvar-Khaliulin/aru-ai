@@ -136,8 +136,8 @@ window.TaskPlugin = {
         }
     },
 
-    addProject() {
-        const name = prompt(this.getT('task_new_project') + ":");
+    async addProject() {
+        const name = await window.UI.prompt(this.getT('task_new_project') + ":");
         if (!name) return;
 
         const project = {
@@ -286,11 +286,11 @@ window.TaskPlugin = {
         console.log(`Task ${taskId} moved from ${fromColId} to ${toColId}`);
     },
 
-    addColumn() {
+    async addColumn() {
         const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
         if (!project) return;
 
-        const title = prompt(this.getT('task_new_column') + ":");
+        const title = await window.UI.prompt(this.getT('task_new_column') + ":");
         if (!title) return;
 
         project.columns.push({
@@ -359,7 +359,7 @@ window.TaskPlugin = {
         const titleEl = document.getElementById('task-edit-title');
         if (!titleEl) return;
         const title = titleEl.value.trim();
-        if (!title) return alert(this.getT('task_title_required', 'Title is required'));
+        if (!title) return window.UI.showToast(this.getT('task_title_required', 'Title is required'), 'alert-circle');
         const desc = document.getElementById('task-edit-desc').value;
         const deadline = document.getElementById('task-edit-deadline').value;
 
@@ -388,8 +388,8 @@ window.TaskPlugin = {
         this.saveState();
     },
 
-    deleteTask(colId, taskId) {
-        if (!confirm(this.getT('task_confirm_delete', 'Delete this task?'))) return;
+    async deleteTask(colId, taskId) {
+        if (!(await window.UI.confirm(this.getT('task_confirm_delete', 'Delete this task?')))) return;
         const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
         if (!project) return;
         const col = project.columns.find(c => c.id === colId);
@@ -401,8 +401,8 @@ window.TaskPlugin = {
         this.saveState();
     },
 
-    deleteColumn(colId) {
-        if (!confirm(this.getT('task_confirm_delete_column', 'Delete column with all tasks?'))) return;
+    async deleteColumn(colId) {
+        if (!(await window.UI.confirm(this.getT('task_confirm_delete_column', 'Delete column with all tasks?')))) return;
         const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
         if (!project) return;
         project.columns = project.columns.filter(c => c.id !== colId);
@@ -410,8 +410,8 @@ window.TaskPlugin = {
         this.saveState();
     },
 
-    deleteProject(id) {
-        if (!confirm(this.getT('task_confirm_delete_project', 'Delete project with all tasks?'))) return;
+    async deleteProject(id) {
+        if (!(await window.UI.confirm(this.getT('task_confirm_delete_project', 'Delete project with all tasks?')))) return;
         this.state.projects = this.state.projects.filter(p => p.id !== id);
         if (this.state.activeProjectId === id) {
             this.state.activeProjectId = this.state.projects.length > 0 ? this.state.projects[0].id : null;

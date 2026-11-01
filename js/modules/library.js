@@ -301,14 +301,14 @@ export const Library = {
         const appState = window.aruState || {};
         const t = appState.translations || {};
 
-        if (!confirm(t.confirm_delete || 'Delete this module from library?')) return;
+        if (!(await UI.confirm(t.confirm_delete || 'Delete this module from library?'))) return;
 
         try {
             DB.deleteModule(id);
             this.loadModules(); // Triggers a grid regeneration to reflect updated states
         } catch (e) {
             console.error("Failed to delete module", e);
-            alert(t.lib_error || 'Delete Error');
+            await UI.alert(t.lib_error || 'Delete Error');
         }
     },
 
@@ -343,12 +343,12 @@ export const Library = {
                 this.loadModules(); // Triggers a grid regeneration to reflect updated states
             } catch (err) {
                 console.error("Failed to save artifact", err);
-                alert(t.lib_save_error || "Error saving artifact");
+                await UI.alert(t.lib_save_error || "Error saving artifact");
             }
         };
 
         reader.onerror = () => {
-            alert(t.lib_read_error || "Error reading file");
+            UI.alert(t.lib_read_error || "Error reading file");
         };
 
         reader.readAsText(file);

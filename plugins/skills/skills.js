@@ -679,7 +679,7 @@ window.SkillsPlugin = {
             mod = await this.getFilesModule();
         } catch (e) {
             console.warn('Skills: files module failed', e);
-            alert(this.getT('skills_file_error', 'Could not read the file'));
+            window.UI.showToast(this.getT('skills_file_error', 'Could not read the file'), 'alert-circle');
             return;
         }
         const target = this._fileTarget;
@@ -690,14 +690,14 @@ window.SkillsPlugin = {
                     window.DB.addSkillProjectItem(p.id, { kind: 'file', name: file.name, content });
                 } else {
                     if (this.state.attachments.length >= this.MAX_ATTACH) {
-                        alert(this.getT('skills_attach_limit', 'Up to 10 attachments per message'));
+                        window.UI.showToast(this.getT('skills_attach_limit', 'Up to 10 attachments per message'), 'alert-circle');
                         break;
                     }
                     this.state.attachments.push({ kind: 'file', name: file.name, content });
                 }
             } catch (e) {
                 console.warn('Skills: file parse failed', file.name, e);
-                alert(this.getT('skills_file_error', 'Could not read the file') + ': ' + file.name);
+                window.UI.showToast(this.getT('skills_file_error', 'Could not read the file') + ': ' + file.name, 'alert-circle');
             }
         }
         input.value = '';
@@ -722,23 +722,23 @@ window.SkillsPlugin = {
         }
     },
 
-    addComposerLink() {
+    async addComposerLink() {
         const p = this.activeProject();
         if (!p) return;
         if (this.state.attachments.length >= this.MAX_ATTACH) {
-            alert(this.getT('skills_attach_limit', 'Up to 10 attachments per message'));
+            window.UI.showToast(this.getT('skills_attach_limit', 'Up to 10 attachments per message'), 'alert-circle');
             return;
         }
-        const url = prompt(this.getT('skills_link_prompt', 'Paste a link'));
+        const url = await window.UI.prompt(this.getT('skills_link_prompt', 'Paste a link'));
         if (!url || !url.trim()) return;
         this.state.attachments.push({ kind: 'link', name: this.linkName(url), content: url.trim() });
         this.syncComposer();
     },
 
-    addMaterialLink() {
+    async addMaterialLink() {
         const p = this.activeProject();
         if (!p) return;
-        const url = prompt(this.getT('skills_link_prompt', 'Paste a link'));
+        const url = await window.UI.prompt(this.getT('skills_link_prompt', 'Paste a link'));
         if (!url || !url.trim()) return;
         window.DB.addSkillProjectItem(p.id, { kind: 'link', name: this.linkName(url), content: url.trim() });
         this.state.items = window.DB.getSkillProjectItems(p.id);
@@ -790,8 +790,8 @@ window.SkillsPlugin = {
         this.openProject(id);
     },
 
-    addProject() {
-        const name = prompt(this.getT('skills_project_name', 'Project name') + ':');
+    async addProject() {
+        const name = await window.UI.prompt(this.getT('skills_project_name', 'Project name') + ':');
         if (!name || !name.trim()) return;
         const id = window.DB.createSkillProject(name.trim());
         this.toast('skills_created', 'folder-plus', 'Created');
@@ -804,10 +804,10 @@ window.SkillsPlugin = {
         this.render();
     },
 
-    renameProject(id) {
+    async renameProject(id) {
         const p = this.state.projects.find(x => x.id === id);
         if (!p) return;
-        const name = prompt(this.getT('skills_project_name', 'Project name') + ':', p.title);
+        const name = await window.UI.prompt(this.getT('skills_project_name', 'Project name') + ':', p.title);
         if (!name || !name.trim()) return;
         window.DB.updateSkillProject(id, { title: name.trim() });
         this.toast('skills_saved', 'save', 'Saved');
@@ -816,8 +816,8 @@ window.SkillsPlugin = {
         this.refreshModal();
     },
 
-    deleteProject(id) {
-        if (!confirm(this.getT('skills_confirm_delete_project', 'Delete this project with all its files, pipeline and run history?'))) return;
+    async deleteProject(id) {
+        if (!(await window.UI.confirm(this.getT('skills_confirm_delete_project', 'Delete this project with all its files, pipeline and run history?')))) return;
         window.DB.deleteSkillProject(id);
         this.toast('skills_deleted', 'trash-2', 'Deleted');
         this.state.projects = window.DB.getSkillProjects();
@@ -839,10 +839,10 @@ window.SkillsPlugin = {
         this.render();
     },
 
-    clearThread() {
+    async clearThread() {
         const p = this.activeProject();
         if (!p) return;
-        if (!confirm(this.getT('skills_confirm_clear_thread', 'Delete the whole chat, runs and artifacts of this project?'))) return;
+        if (!(await window.UI.confirm(this.getT('skills_confirm_clear_thread', 'Delete the whole chat, runs and artifacts of this project?')))) return;
         window.DB.getSkillRuns(p.id, 1000).forEach(r => window.DB.deleteSkillRun(r.id));
         window.DB.getSkillArtifacts(p.id).forEach(a => window.DB.deleteSkillArtifact(a.id));
         window.DB.clearSkillProjectMessages(p.id);
@@ -1136,7 +1136,7 @@ window.SkillsPlugin = {
 
     saveSkill() {
         const title = document.getElementById('sk-f-title').value.trim();
-        if (!title) return alert(this.getT('skills_title_required', 'Name is required'));
+        if (!title) return window.UI.showToast(this.getT('skills_title_required', 'Name is required'), 'alert-circle');
         const data = {
             title,
             system_prompt: document.getElementById('sk-f-prompt').value,
@@ -1180,8 +1180,8 @@ window.SkillsPlugin = {
         this.refreshModal();
     },
 
-    deleteSkill(id) {
-        if (!confirm(this.getT('skills_confirm_delete_skill', 'Delete this skill? It will be removed from all project pipelines.'))) return;
+    async deleteSkill(id) {
+        if (!(await window.UI.confirm(this.getT('skills_confirm_delete_skill', 'Delete this skill? It will be removed from all project pipelines.')))) return;
         window.DB.deleteSkill(id);
         this.toast('skills_deleted', 'trash-2', 'Deleted');
         this.state.skills = window.DB.getSkills();

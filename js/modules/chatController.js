@@ -539,28 +539,28 @@ export const ChatController = {
         DB.save().then(() => ChatController.loadChatsList());
     },
 
-    createFolder: () => {
+    createFolder: async () => {
         const t = state.translations || {};
-        const name = prompt(t.prompt_folder_name || 'Введите название папки:');
+        const name = await UI.prompt(t.prompt_folder_name || 'Введите название папки:');
         if (name === null) return;
         DB.createFolder((name || '').trim() || (t.default_folder_name || 'Папка'));
         ChatController.loadChatsList();
     },
 
-    renameFolder: (id) => {
+    renameFolder: async (id) => {
         const t = state.translations || {};
         const folder = DB.getFolders().find(f => f.id == id);
         if (!folder) return;
-        const name = prompt(t.prompt_rename_folder || 'Новое название папки:', folder.title);
+        const name = await UI.prompt(t.prompt_rename_folder || 'Новое название папки:', folder.title);
         if (name && name.trim()) {
             DB.renameFolder(id, name.trim());
             ChatController.loadChatsList();
         }
     },
 
-    deleteFolder: (id) => {
+    deleteFolder: async (id) => {
         const t = state.translations || {};
-        if (!confirm(t.confirm_delete_folder || 'Удалить папку? Чаты вернутся в общий список.')) return;
+        if (!(await UI.confirm(t.confirm_delete_folder || 'Удалить папку? Чаты вернутся в общий список.'))) return;
         DB.deleteFolder(id);
         ChatController.loadChatsList();
     },
@@ -577,7 +577,7 @@ export const ChatController = {
         const chat = chats.find(c => c.id == id);
         if (!chat) return;
         const t = state.translations || {};
-        const newTitle = prompt(t.prompt_rename_chat || 'Enter new chat title:', chat.title);
+        const newTitle = await UI.prompt(t.prompt_rename_chat || 'Enter new chat title:', chat.title);
         if (newTitle && newTitle.trim()) {
             DB.updateChatTitle(id, newTitle.trim());
             const tab = state.tabs.find(t => t.chatId == id);
@@ -641,7 +641,7 @@ export const ChatController = {
 
     deleteChat: async (id) => {
         const t = state.translations || {};
-        if (!confirm(t.confirm_delete_chat || 'Удалить этот чат?')) return;
+        if (!(await UI.confirm(t.confirm_delete_chat || 'Удалить этот чат?'))) return;
         const tabIndex = state.tabs.findIndex(t => t.chatId == id);
         if (tabIndex !== -1) {
             state.tabs.splice(tabIndex, 1);
