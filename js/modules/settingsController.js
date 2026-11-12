@@ -873,6 +873,37 @@ export const SettingsController = {
         } else {
             const lastSync = RS.getLastSyncAt();
             const syncLabel = lastSync ? new Date(lastSync).toLocaleString() : (t.storage_never_synced || 'ещё не синхронизировано');
+            const engine = window.SyncEngine;
+            const v2 = !!(engine && engine.isEnabled());
+            const v2Last = v2 ? engine.getLastSyncAt() : 0;
+            const v2Label = v2Last ? new Date(v2Last).toLocaleString() : (t.storage_never_synced || 'ещё не синхронизировано');
+            const v2Block = v2 ? `
+                <div class="bg-white dark:bg-gray-900 rounded-xl p-4 border-2 border-emerald-200 dark:border-emerald-900/40 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="git-merge" class="w-4 h-4 text-emerald-500"></i> ${t.storage_v2_title || 'Слияние изменений'}</h4>
+                        <span class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">${t.storage_v2_on || 'Включено'}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                        <div class="flex justify-between"><span>${t.storage_label_last_sync || 'Последняя синхронизация'}</span><b class="text-gray-700 dark:text-gray-300">${v2Label}</b></div>
+                        <div class="flex justify-between"><span>${t.storage_v2_conflicts || 'Разрешено конфликтов'}</span><b class="text-gray-700 dark:text-gray-300">${v2 ? engine.getConflictCount() : 0}</b></div>
+                        <div class="flex justify-between gap-4"><span>${t.storage_v2_base || 'Рабочая область'}</span><b class="text-gray-700 dark:text-gray-300 font-mono text-[10px] truncate">${esc((v2 && engine.getBaseId()) || '—')}</b></div>
+                    </div>
+                    <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+                        <input type="checkbox" id="inp-sync-trust" ${v2 && engine.hasTrustedDevice() ? 'checked' : ''} onchange="SettingsController.storageToggleTrust(this.checked)" class="w-4 h-4 mt-0.5 accent-emerald-500">
+                        <span>${t.storage_v2_trust || 'Доверять этому устройству - не спрашивать пароль при запуске'}</span>
+                    </label>
+                    <button onclick="SettingsController.storageForgetDevice()" class="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-red-500 hover:border-red-200 dark:hover:border-red-900/40 font-bold text-xs transition">
+                        ${t.storage_v2_forget || 'Забыть это устройство'}
+                    </button>
+                    <p class="text-[10px] text-gray-400">${t.storage_v2_hint || 'Устройства обмениваются зашифрованными снимками и объединяют изменения автоматически: раз в 25 секунд при открытом приложении и сразу при возврате к вкладке.'}</p>
+                </div>` : `
+                <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
+                    <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="file-archive" class="w-4 h-4 text-gray-400"></i> ${t.storage_v2_off_title || 'Простой режим: файл базы целиком'}</h4>
+                    <p class="text-[11px] text-gray-500">${t.storage_v2_off_desc || 'Сейчас в облако отправляется вся база целиком, и последнее сохранение побеждает. Включите слияние изменений, чтобы устройства объединяли правки и не перезаписывали работу друг друга.'}</p>
+                    <button onclick="SettingsController.storageEnableV2()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition flex items-center justify-center gap-2">
+                        <i data-lucide="git-merge" class="w-4 h-4"></i> ${t.storage_v2_enable || 'Включить слияние изменений'}
+                    </button>
+                </div>`;
             body = `
                 <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
                     <div class="flex items-center justify-between">
@@ -885,6 +916,9 @@ export const SettingsController = {
                     </div>
                 </div>
 
+                ${v2Block}
+
+                ${v2 ? '' : `
                 <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-4">
                     <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4 text-aru-500"></i> ${t.storage_sync_settings || 'Параметры синхронизации'}</h4>
                     <div>
@@ -907,7 +941,7 @@ export const SettingsController = {
                         <input type="number" min="0" id="inp-remote-poll" value="${esc(s.remote_poll || '0')}" class="w-full p-2 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
                     </div>
                     <p class="text-[10px] text-gray-400">${t.storage_conflict_hint || 'Блокировки базы между устройствами нет: побеждает версия, сохранённая позже. При сомнениях скачивайте удалённую копию отдельным файлом.'}</p>
-                </div>
+                </div>`}
 
                 <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
                     <div class="grid grid-cols-2 gap-2">
@@ -998,7 +1032,46 @@ export const SettingsController = {
         });
     },
 
+    storageEnableV2: () => {
+        const t = state.translations || {};
+        SettingsController.app.promptPassword(async (pwd) => {
+            try {
+                await window.SyncEngine.enableWorkspace({ password: pwd });
+                UI.showToast(t.storage_v2_enabled || 'Слияние изменений включено', 'git-merge');
+            } catch (e) {
+                console.error('storageEnableV2 failed', e);
+                await UI.alert((t.storage_v2_enable_failed || 'Не удалось включить слияние изменений') + ': ' + e.message);
+            }
+            SettingsController.renderStorageTab();
+        });
+    },
+
+    storageToggleTrust: (on) => {
+        try { window.SyncEngine?.setTrustDevice?.(!!on); } catch (e) { console.warn('toggle trust failed', e); }
+        SettingsController.renderStorageTab();
+    },
+
+    storageForgetDevice: async () => {
+        const t = state.translations || {};
+        if (!(await UI.confirm(t.storage_v2_forget_confirm || 'Забыть это устройство? При следующем запуске понадобится пароль базы.'))) return;
+        try {
+            window.SyncEngine?.setTrustDevice?.(false);
+            window.SyncEngine?.forgetTrusted?.();
+            UI.showToast(t.storage_v2_forgotten || 'Устройство забыто', 'shield-off');
+        } catch (e) {
+            console.warn('forget device failed', e);
+        }
+        SettingsController.renderStorageTab();
+    },
+
     storageSyncNow: async () => {
+        if (window.SyncEngine?.isEnabled?.()) {
+            const res = await window.SyncEngine.syncNow('manual');
+            if (res && res.error) UI.showToast(res.error, 'alert-circle');
+            else UI.showToast(state.translations?.storage_sync_done || 'Синхронизировано', 'check-circle');
+            SettingsController.renderStorageTab();
+            return;
+        }
         try {
             await RemoteStorage.pushNow(DB.db.export());
         } catch (e) {
@@ -1009,6 +1082,13 @@ export const SettingsController = {
 
     storageCheckRemote: async () => {
         const t = state.translations || {};
+        if (window.SyncEngine?.isEnabled?.()) {
+            const res = await window.SyncEngine.syncNow('manual');
+            if (res && res.error) UI.showToast(res.error, 'alert-circle');
+            else UI.showToast(t.storage_check_ok || 'Удалённая копия актуальна, расхождений нет.', 'check-circle');
+            SettingsController.renderStorageTab();
+            return;
+        }
         try {
             const localTS = parseInt((DB.getSettings() || {}).last_save_ts) || 0;
             const cmp = await RemoteStorage.compareWithRemote(localTS);
@@ -1041,6 +1121,7 @@ export const SettingsController = {
     storageDisconnect: async () => {
         const t = state.translations || {};
         if (!(await UI.confirm(t.storage_disconnect_confirm || 'Отключить облачное хранилище? Локальная база останется на этом устройстве, файл на сервере не удаляется.'))) return;
+        try { window.SyncEngine?.disable?.(); } catch (e) { /* ignore */ }
         await RemoteStorage.disconnect();
         SettingsController.app.updateSyncStatus('synced');
         SettingsController.renderStorageTab();
@@ -1128,6 +1209,17 @@ export const SettingsController = {
                 } catch (e) {
                     console.error('Failed to re-encrypt remote profile', e);
                     await UI.alert(t.alert_password_remote_failed || 'Пароль изменён, но облачный профиль не удалось перешифровать. Переподключите хранилище.');
+                }
+            }
+
+            // The cloud keyfile is wrapped with the master password too; re-wrap
+            // it or joining devices would be locked out of the workspace.
+            if (window.SyncEngine?.isEnabled?.()) {
+                try {
+                    await window.SyncEngine.rewrapKeyfile(next);
+                } catch (e) {
+                    console.error('Failed to re-wrap sync keyfile', e);
+                    await UI.alert(t.alert_password_sync_key_failed || 'Пароль изменён, но ключ синхронизации в облаке не удалось перешифровать. Откройте Настройки → Хранилище и включите синхронизацию заново.');
                 }
             }
 

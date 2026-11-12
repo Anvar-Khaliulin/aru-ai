@@ -50,7 +50,7 @@ export const UI = {
         return host;
     },
 
-    _openDialog({ mode, message, value = '', okText, cancelText }) {
+    _openDialog({ mode, message, value = '', okText, cancelText, inputType = 'text' }) {
         const t = aruGlobalState.translations || {};
         return new Promise((resolve) => {
             const root = document.createElement('div');
@@ -69,7 +69,7 @@ export const UI = {
             let input = null;
             if (mode === 'prompt') {
                 input = document.createElement('input');
-                input.type = 'text';
+                input.type = inputType;
                 input.value = String(value ?? '');
                 input.className = 'mt-3 w-full p-2.5 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-sm outline-none focus:border-orange-500 dark:text-gray-100';
                 box.appendChild(input);

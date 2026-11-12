@@ -4,6 +4,8 @@ Local database client powered by SQL.js and IndexedDB for persistent storage of 
 ---chat.aru-lab.space---PWA---
 */
 import { UI } from './ui.js';
+import { SyncCore } from './sync/syncCore.js';
+import { ensureSyncSchema } from './sync/syncSchema.js';
 // Never leave the device through P2P transfer; the receiver enters their own.
 const TRANSFER_SECRET_SETTINGS = new Set([
     'db_password',
@@ -22,6 +24,7 @@ export const DB = {
 
     async init() {
         console.log("DB: Initializing...");
+        this._syncReady = false;
 
         // Loads the SQL.js WebAssembly environment layer
         if (!window.initSqlJs) {
@@ -127,6 +130,7 @@ export const DB = {
 
     async createDB(passwordHash) {
         console.log("DB: Creating new database...");
+        this._syncReady = false;
         if (!this.SQL) {
             console.log("DB: SQL not ready, re-initializing...");
             await this.init();
@@ -135,8 +139,8 @@ export const DB = {
         this.initSchema();
         this.migrateSchema();
         // Persists root database settings utilizing UPSERT operations to bypass schema collisions
-        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['db_password', passwordHash], false);
-        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['rules', '0'], false);
+        this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ['db_password', passwordHash], false);
+        this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ['rules', '0'], false);
         this.save();
         return true;
     },
@@ -752,6 +756,14 @@ export const DB = {
                 )`, [], false);
                 changed = true;
             }
+            // Cloud merge identity: uid/rev columns and write-capture triggers.
+            // Purely additive, so databases from older app versions keep working.
+            try {
+                if (ensureSyncSchema(this.db)) changed = true;
+                this._syncReady = true;
+            } catch (syncErr) {
+                console.warn('DB: sync schema setup failed', syncErr);
+            }
             if (changed) console.log('DB: schema migrated (folders/favorites/chapters/skills/fit-care ready)');
         } catch (e) {
             console.warn('DB.migrateSchema failed', e);
@@ -791,6 +803,16 @@ export const DB = {
 
     run(sql, params = [], autoSave = true) {
         if (!this.db) return;
+        // Stamp the hybrid logical clock before every write so triggers can
+        // label the changed rows without calling back into JS.
+        if (this._syncReady) {
+            const head = sql.trimStart().slice(0, 6).toUpperCase();
+            if (head.startsWith('INSERT') || head.startsWith('UPDATE') || head.startsWith('DELETE') || head.startsWith('REPLACE')) {
+                try {
+                    this.db.run('UPDATE _sync_ctx SET hlc = ?, device = ? WHERE id = 1', [SyncCore.nextRev(), SyncCore.deviceId()]);
+                } catch (e) { /* sync schema is optional */ }
+            }
+        }
         this.db.run(sql, params);
         // Auto-save on modification (except selects)
         if (autoSave && !sql.trim().toUpperCase().startsWith("SELECT")) {
@@ -2381,7 +2403,7 @@ export const DB = {
             console.warn('Blocked attempt to set personality-related setting via saveSetting():', key);
             return;
         }
-        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value], autoSave);
+        this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value], autoSave);
     },
 
     getModules(type) {
@@ -2436,7 +2458,9 @@ export const DB = {
             try {
                 if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('syncing');
 
-                this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['last_save_ts', Date.now().toString()], false);
+                // Local-only freshness marker. Written directly so it neither ticks
+                // the sync clock nor wakes the merge triggers.
+                this.db.run("INSERT INTO settings (key, value) VALUES ('last_save_ts', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [Date.now().toString()]);
                 const data = this.db.export();
 
                 await localforage.setItem(this.dbPath, data);
@@ -2452,10 +2476,14 @@ export const DB = {
                     }
                 }
 
-                // Debounced push to the configured remote storage (no-op when locked)
+                // Cloud sync: v2 merges snapshots, legacy pushes the file. Never both.
                 try {
-                    if (window.RemoteStorage && RemoteStorage.isUnlocked()) {
-                        RemoteStorage.schedulePush(data);
+                    if (!this._syncApplying && window.RemoteStorage && RemoteStorage.isUnlocked()) {
+                        if (window.SyncEngine?.isEnabled?.()) {
+                            window.SyncEngine.onLocalSave();
+                        } else {
+                            RemoteStorage.schedulePush(data);
+                        }
                     }
                 } catch (remoteErr) {
                     console.warn('DB.save: remote scheduling failed', remoteErr);
@@ -2596,6 +2624,7 @@ export const DB = {
             localStorage.setItem('aru_active_db', key);
 
             this.SQL = tempSQL; // Ensure we use the same SQL instance
+            this._syncReady = false;
             this.db = tempDB;
             this.migrateSchema(); // Forward migration for databases created by older app versions
             await this.save(); // Save the loaded data to IndexedDB
@@ -2632,9 +2661,63 @@ export const DB = {
         }
 
         this.SQL = tempSQL;
+        this._syncReady = false;
         this.db = tempDB;
         this.migrateSchema(); // Forward migration for databases created by older app versions
         await this.save();
+        return true;
+    },
+
+    // Replaces the live database with the result of a three-way merge.
+    // The merged image already went through the sync schema, so triggers are
+    // ready; saving here must not schedule another cloud push (the engine owns it).
+    async applySyncDatabase(newDb, bytes) {
+        let db = newDb;
+        if (!db) {
+            if (!this.SQL) {
+                this.SQL = await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
+            }
+            db = new this.SQL.Database(bytes);
+        }
+
+        const previous = this.db;
+        this._syncApplying = true;
+        try {
+            this.db = db;
+            this._syncReady = false;
+            try { ensureSyncSchema(this.db); } catch (e) { console.warn('DB.applySyncDatabase: schema ensure failed', e); }
+            this._syncReady = true;
+            await this.save();
+        } finally {
+            this._syncApplying = false;
+        }
+
+        if (previous && previous !== db) {
+            try { previous.close(); } catch (e) { }
+        }
+
+        const st = window.aruState || {};
+        try { st.userSettings = this.getSettings(); } catch (e) { }
+
+        if (st.tabs) {
+            const alive = new Set(this.getChats().map(c => String(c.id)));
+            st.tabs = st.tabs.filter(t => t.type === 'plugin' || alive.has(String(t.chatId)));
+            if (!st.tabs.some(t => t.chatId == st.currentChatId)) {
+                st.activeTabIndex = st.tabs.length ? st.tabs.length - 1 : -1;
+                st.currentChatId = st.tabs.length ? st.tabs[st.activeTabIndex].chatId : null;
+            }
+        }
+
+        if (window.app) {
+            try { window.app.loadChatsList(); } catch (e) { }
+            const activeTab = st.tabs && st.tabs[st.activeTabIndex];
+            if (st.currentChatId != null && !(activeTab && activeTab.isSending)) {
+                try { await window.app.loadChat(st.currentChatId); } catch (e) { }
+            }
+            try { window.app.updateSearchUI?.(); } catch (e) { }
+        }
+
+        try { window.dispatchEvent(new CustomEvent('aru-sync-applied')); } catch (e) { }
         return true;
     },
 
@@ -2649,6 +2732,7 @@ export const DB = {
 
     // One-shot reconciliation with the remote copy, honoring the remote_conflict setting
     async syncWithRemoteOnStart() {
+        if (window.SyncEngine?.isEnabled?.()) return; // v2 has its own merge pass
         if (!window.RemoteStorage || !RemoteStorage.isUnlocked()) return;
         try {
             const settings = this.getSettings();
@@ -2694,6 +2778,7 @@ export const DB = {
 
     // Handler for poll-detected external changes: asks unless the user configured an automatic rule
     async handleRemoteNewer(info) {
+        if (window.SyncEngine?.isEnabled?.()) return; // v2 merges instead of replacing
         const settings = this.getSettings();
         const mode = settings.remote_conflict || 'ask';
         const t = window.aruState?.translations || {};
@@ -2985,7 +3070,7 @@ export const DB = {
                 if (data.settings) { 
                     this.run("DELETE FROM settings"); this.run("DELETE FROM personality_state"); this.run("DELETE FROM memory_facts"); 
                     for (const s of data.settings) this.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
-                    if (localPasswordRow) this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['db_password', localPasswordRow.value], false);
+                    if (localPasswordRow) this.run("INSERT INTO settings (key, value) VALUES (?, ?)", ['db_password', localPasswordRow.value], false);
                     for (const p of data.personality) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
                     for (const m of data.memory) this.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content, m.category, m.embedding, m.created_at]);
                 }
@@ -3044,9 +3129,9 @@ export const DB = {
                 if (data.settings) {
                     for (const s of data.settings) {
                         if (s.key === 'db_password') continue;
-                        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
+                        this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [s.key, s.value]);
                     }
-                    for (const p of data.personality) this.run("INSERT OR REPLACE INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
+                    for (const p of data.personality) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET mood = excluded.mood, sarcasm = excluded.sarcasm, humor = excluded.humor, affinity = excluded.affinity, updated_at = excluded.updated_at", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
                     for (const m of data.memory) this.run("INSERT INTO memory_facts (content, category, embedding, created_at) VALUES (?, ?, ?, ?)", [m.content, m.category, m.embedding, m.created_at]);
                 }
                 if (data.artifacts) {

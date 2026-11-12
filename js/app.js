@@ -17,6 +17,7 @@ import { SettingsController } from './modules/settingsController.js';
 import { PluginManager } from './modules/pluginManager.js';
 import { TransferController } from './modules/transferController.js';
 import { RemoteStorage } from './modules/remoteStorage.js';
+import { SyncEngine } from './modules/sync/syncEngine.js';
 import { Chapters } from './modules/chapters.js';
 import { DesktopMode } from './modules/desktop.js';
 
@@ -1326,6 +1327,15 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
     refreshRemoteSync: async () => {
         RemoteStorage.onRemoteNewer = (info) => DB.handleRemoteNewer(info);
         RemoteStorage.onStatusChange = (st) => app.updateSyncStatus(st);
+
+        // Sync v2 workspaces merge snapshots and run silently; the legacy
+        // overwrite-push path must never run on top of them.
+        const v2 = await SyncEngine.autoStart().catch((e) => {
+            console.warn('SyncEngine.autoStart failed', e);
+            return false;
+        });
+        if (v2) return;
+
         if (!RemoteStorage.isUnlocked()) {
             const configured = await RemoteStorage.isConfigured();
             if (configured) app.updateSyncStatus('cloud-paused');

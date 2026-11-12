@@ -281,6 +281,85 @@ const GoogleDriveAdapter = {
         };
     },
 
+    // ----- Named files used by the v2 sync workspace -----
+
+    async listAllFiles() {
+        const folderId = await this.ensureFolder();
+        const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+        const files = [];
+        let pageToken = '';
+        do {
+            const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+            const res = await this._api(`/files?q=${q}&fields=nextPageToken,files(id,name,modifiedTime,size)&pageSize=1000${page}`);
+            const json = await res.json();
+            for (const f of json.files || []) {
+                files.push({
+                    id: f.id,
+                    name: f.name,
+                    ts: Date.parse(f.modifiedTime) || 0,
+                    size: parseInt(f.size) || 0
+                });
+            }
+            pageToken = json.nextPageToken || '';
+        } while (pageToken);
+        return files;
+    },
+
+    async findNamed(name) {
+        const files = await this.listAllFiles();
+        return files.find(f => f.name === name) || null;
+    },
+
+    async readNamed(name) {
+        const file = await this.findNamed(name);
+        if (!file) return null;
+        const res = await this._api(`/files/${file.id}?alt=media`);
+        return new Uint8Array(await res.arrayBuffer());
+    },
+
+    async writeNamed(name, bytes) {
+        await this._ensureAccessToken();
+        const folderId = await this.ensureFolder();
+        const existing = await this.findNamed(name);
+        if (existing) {
+            const res = await fetch(`${this._uploadBase}/files/${existing.id}?uploadType=media`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${this.profile.accessToken}`,
+                    'Content-Type': 'application/octet-stream'
+                },
+                body: bytes
+            });
+            if (!res.ok) throw new Error('Google Drive update failed: ' + res.status);
+            return { id: existing.id, name };
+        }
+        const boundary = 'aru_boundary_' + Date.now();
+        const metadata = { name, parents: [folderId] };
+        const body = new Blob([
+            `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+            `--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`,
+            bytes,
+            `\r\n--${boundary}--`
+        ]);
+        const res = await fetch(`${this._uploadBase}/files?uploadType=multipart&fields=id,name`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.profile.accessToken}`,
+                'Content-Type': `multipart/related; boundary=${boundary}`
+            },
+            body
+        });
+        if (!res.ok) throw new Error('Google Drive create failed: ' + res.status);
+        const json = await res.json();
+        return { id: json.id, name: json.name };
+    },
+
+    async removeNamed(name) {
+        const file = await this.findNamed(name);
+        if (!file) return;
+        await this.removeFile(file.id);
+    },
+
     async removeFile(fileId) {
         await this._api(`/files/${fileId}`, { method: 'DELETE' });
     }
@@ -415,6 +494,78 @@ const WebDAVAdapter = {
             ts: lastmodEl ? Date.parse(lastmodEl.textContent) || 0 : 0,
             size: sizeEl ? parseInt(sizeEl.textContent) || 0 : 0
         };
+    },
+
+    // ----- Named files used by the v2 sync workspace -----
+
+    _namedPath(name) {
+        const dir = (this.profile.davPath || '').replace(/^\/+|\/+$/g, '');
+        return (dir ? '/' + dir : '') + '/' + name;
+    },
+
+    async listAllFiles() {
+        const dir = (this.profile.davPath || '').replace(/^\/+|\/+$/g, '');
+        const path = dir ? '/' + dir + '/' : '/';
+        const res = await this._dav(path, { method: 'PROPFIND', headers: { Depth: '1' } });
+        if (!res.ok && res.status === 404) return [];
+        const xmlText = await res.text();
+        const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+        if (doc.querySelector('parsererror')) {
+            throw new Error('WebDAV list: ' + (translations().remote_error_webdav_xml || 'неверный XML-ответ от сервера'));
+        }
+        const responses = Array.from(doc.getElementsByTagNameNS('*', 'response'));
+        const files = [];
+        for (const resp of responses) {
+            const hrefEl = resp.getElementsByTagNameNS('*', 'href')[0];
+            const isCollection = resp.getElementsByTagNameNS('*', 'collection').length > 0;
+            if (!hrefEl || isCollection) continue;
+            const href = decodeURIComponent(hrefEl.textContent);
+            const name = href.split('/').filter(Boolean).pop();
+            if (!name) continue;
+            const lastmodEl = resp.getElementsByTagNameNS('*', 'getlastmodified')[0];
+            const sizeEl = resp.getElementsByTagNameNS('*', 'getcontentlength')[0];
+            files.push({
+                id: name,
+                name,
+                ts: lastmodEl ? Date.parse(lastmodEl.textContent) || 0 : 0,
+                size: sizeEl ? parseInt(sizeEl.textContent) || 0 : 0
+            });
+        }
+        files.sort((a, b) => b.ts - a.ts);
+        return files;
+    },
+
+    async findNamed(name) {
+        const files = await this.listAllFiles();
+        return files.find(f => f.name === name) || null;
+    },
+
+    async readNamed(name) {
+        try {
+            const res = await this._dav(this._namedPath(name), { method: 'GET' });
+            return new Uint8Array(await res.arrayBuffer());
+        } catch (e) {
+            if (/\b404\b/.test(e.message)) return null;
+            throw e;
+        }
+    },
+
+    async writeNamed(name, bytes) {
+        await this.ensureCollection();
+        await this._dav(this._namedPath(name), {
+            method: 'PUT',
+            body: bytes,
+            headers: { 'Content-Type': 'application/octet-stream' }
+        });
+        return { id: name, name };
+    },
+
+    async removeNamed(name) {
+        try {
+            await this._dav(this._namedPath(name), { method: 'DELETE' });
+        } catch (e) {
+            if (!/\b404\b/.test(e.message)) throw e;
+        }
     }
 };
 
@@ -571,6 +722,7 @@ export const RemoteStorage = {
 
     // Public API used by db.js — debounced push of the exported DB bytes
     schedulePush(bytes) {
+        if (window.SyncEngine?.isEnabled?.()) return; // v2 owns snapshots
         if (!this.isUnlocked() || !this.adapter) return;
         if (this._getSetting('remote_sync_mode', 'auto') !== 'auto') return;
         if (this._pushTimer) clearTimeout(this._pushTimer);
@@ -584,6 +736,7 @@ export const RemoteStorage = {
     },
 
     async pushNow(bytes) {
+        if (window.SyncEngine?.isEnabled?.()) return; // v2 owns snapshots
         if (!this.isUnlocked() || !this.adapter) return;
         // Recover from a previous failed push: without this the stored chain
         // stays rejected and every later sync attempt is skipped forever.
@@ -656,6 +809,7 @@ export const RemoteStorage = {
     // Periodic poll for external changes
     startPolling(intervalMin) {
         this.stopPolling();
+        if (window.SyncEngine?.isEnabled?.()) return; // v2 has its own adaptive polling
         if (!intervalMin || intervalMin <= 0) return;
         this._pollTimer = setInterval(async () => {
             if (!this.isUnlocked() || this._pushTimer) return; // skip while a push is pending

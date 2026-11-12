@@ -377,6 +377,17 @@ export const WizardController = {
             return;
         }
         const esc = (s) => String(s).replace(/'/g, "\\'");
+        let hasV2 = false;
+        try { hasV2 = !!(await window.SyncEngine?.hasCloudWorkspace?.()); } catch (e) { hasV2 = false; }
+        const v2Row = hasV2 && mode === 'open' ? `
+            <button onclick="WizardController.openCloudWorkspace()" class="w-full p-3 rounded-xl border-2 border-aru-400 bg-aru-50 dark:bg-aru-900/30 hover:bg-aru-100 dark:hover:bg-aru-900/50 transition flex items-center gap-3 text-left mb-2">
+                <i data-lucide="cloud" class="w-4 h-4 text-aru-500 flex-shrink-0"></i>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold text-gray-700 dark:text-gray-200">${t.remote_v2_workspace || 'Облачная база (синхронизация)'}</div>
+                    <div class="text-[10px] text-gray-500">${t.remote_v2_workspace_hint || 'Актуальная версия со всех устройств. Пароль базы потребуется один раз.'}</div>
+                </div>
+                <i data-lucide="download" class="w-4 h-4 text-aru-400"></i>
+            </button>` : '';
         const rows = files.length ? files.map(f => `
             <button onclick="WizardController.openRemoteFile('${f.id}', '${esc(f.name)}', '${mode}')" class="w-full p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-aru-400 hover:bg-aru-50 dark:hover:bg-aru-900/20 transition flex items-center gap-3 text-left">
                 <i data-lucide="database" class="w-4 h-4 text-aru-500 flex-shrink-0"></i>
@@ -395,7 +406,7 @@ export const WizardController = {
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${mode === 'link' ? (t.remote_pick_file_link || 'Выберите файл или загрузите текущую базу') : (t.remote_pick_file || 'Выберите файл базы')}</span>
                 <button onclick="WizardController._renderRemotePicker('${mode}')" class="p-1.5 text-gray-400 hover:text-aru-500 transition-colors" title="Refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
             </div>
-            <div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar mb-3">${rows}</div>
+            <div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar mb-3">${v2Row}${rows}</div>
             ${linkUpload}`;
         lucide.createIcons();
     },
@@ -426,6 +437,35 @@ export const WizardController = {
             WizardController.app.openModal('login');
         } catch (e) {
             console.error('openRemoteFile failed', e);
+            await UI.alert((t.remote_error_open || 'Не удалось открыть файл') + ': ' + e.message);
+        }
+    },
+
+    // Opens a sync-v2 workspace on this device: the password unwraps the cloud
+    // key, the newest merged snapshot is loaded, and the session starts without
+    // a second password prompt.
+    openCloudWorkspace: async () => {
+        const t = state.translations || {};
+        try {
+            const pwd = await UI.prompt(t.remote_enter_db_password || 'Пароль базы данных:', '', { inputType: 'password' });
+            if (!pwd) return;
+            const engine = window.SyncEngine;
+            if (!engine) return;
+            const { bytes, head, key, baseId } = await engine.openWorkspaceFromCloud(pwd);
+            const ok = await DB.smartLoadFromBytes(bytes, { force: true });
+            if (!ok) {
+                await UI.alert(t.remote_error_open || 'Не удалось открыть файл');
+                return;
+            }
+            WizardController._pendingRemoteProfile = {
+                ...RemoteStorage.profile,
+                fileName: head.head,
+                workspaceKey: key,
+                workspaceBaseId: baseId
+            };
+            await WizardController._completeLoginWithPassword(pwd);
+        } catch (e) {
+            console.error('openCloudWorkspace failed', e);
             await UI.alert((t.remote_error_open || 'Не удалось открыть файл') + ': ' + e.message);
         }
     },
@@ -869,8 +909,11 @@ export const WizardController = {
                     createdAt: Date.now()
                 };
                 await RemoteStorage.saveProfile(profile, d.password);
-                await RemoteStorage.createRemoteFile('aru_database.sqlite');
-                await RemoteStorage.pushNow(DB.db.export());
+                const v2 = await WizardController._enableSyncV2(d.password);
+                if (!v2) {
+                    await RemoteStorage.createRemoteFile('aru_database.sqlite');
+                    await RemoteStorage.pushNow(DB.db.export());
+                }
                 await DB.save();
                 WizardController.app.startSession();
                 return;
@@ -909,8 +952,11 @@ export const WizardController = {
                 createdAt: Date.now()
             };
             await RemoteStorage.saveProfile(profile, d.password);
-            await RemoteStorage.createRemoteFile('aru_database.sqlite');
-            await RemoteStorage.pushNow(DB.db.export());
+            const v2 = await WizardController._enableSyncV2(d.password);
+            if (!v2) {
+                await RemoteStorage.createRemoteFile('aru_database.sqlite');
+                await RemoteStorage.pushNow(DB.db.export());
+            }
         } catch (e) {
             // Local DB is already created; cloud link can be retried from Settings → Storage
             console.error('finishGoogleCreate cloud setup failed', e);
@@ -918,6 +964,28 @@ export const WizardController = {
         }
         await DB.save();
         WizardController.app.startSession();
+    },
+
+    // Turns on merge-based sync for a freshly created workspace. Returns false
+    // when the user declined or v2 is unavailable, so the caller keeps the
+    // legacy single-file cloud flow.
+    _enableSyncV2: async (password) => {
+        const t = state.translations || {};
+        const engine = window.SyncEngine;
+        if (!engine) return false;
+        try {
+            let force = false;
+            if (await engine.hasCloudWorkspace()) {
+                force = await UI.confirm(t.remote_replace_workspace_confirm || 'В облаке уже есть синхронизированная база.\n\nЗаменить её этой новой базой? Прежние снимки останутся в виде резервных копий.');
+                if (!force) return false;
+            }
+            await engine.enableWorkspace({ password, force });
+            return true;
+        } catch (e) {
+            console.error('enableSyncV2 failed', e);
+            UI.showToast((t.remote_sync_v2_failed || 'Синхронизация включена в простом режиме') + ': ' + e.message, 'alert-circle');
+            return false;
+        }
     },
 
     setupWebdavCreate: async (d) => {
@@ -933,8 +1001,11 @@ export const WizardController = {
                 createdAt: Date.now()
             };
             await RemoteStorage.saveProfile(profile, d.password);
-            await RemoteStorage.createRemoteFile('aru_database.sqlite');
-            await RemoteStorage.pushNow(DB.db.export());
+            const v2 = await WizardController._enableSyncV2(d.password);
+            if (!v2) {
+                await RemoteStorage.createRemoteFile('aru_database.sqlite');
+                await RemoteStorage.pushNow(DB.db.export());
+            }
         } catch (e) {
             console.error('setupWebdavCreate failed', e);
             await UI.alert((t.remote_error_setup || 'База создана локально, но настройка WebDAV не удалась. Проверьте параметры в Настройках → Хранилище.') + '\n' + e.message);
@@ -995,6 +1066,14 @@ export const WizardController = {
             } catch (e) {
                 console.warn('Remote profile unlock failed', e);
             }
+        }
+
+        // A known password can unwrap the workspace key of an existing cloud
+        // workspace; v2 then owns sync and refreshRemoteSync skips the legacy path.
+        try {
+            await window.SyncEngine?.start?.({ password: pwd });
+        } catch (e) {
+            console.warn('Sync v2 start after login failed', e);
         }
 
         await WizardController.app.refreshRemoteSync();

@@ -3,7 +3,7 @@
 Progressive Web App Service Worker for offline caching and resource management.
 ---chat.aru-lab.space---PWA---
 */
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.9';
 const CACHE_PREFIX = 'aru-ai';
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`;
 const CDN_CACHE_PREFIX = `${CACHE_PREFIX}-cdn`;
@@ -71,6 +71,12 @@ const ASSETS_TO_CACHE = [
   './js/modules/search.js',
   './js/modules/semantics.js',
   './js/modules/settingsController.js',
+  './js/modules/sync/syncCore.js',
+  './js/modules/sync/syncEngine.js',
+  './js/modules/sync/syncMerge.js',
+  './js/modules/sync/syncRegistry.js',
+  './js/modules/sync/syncSchema.js',
+  './js/modules/sync/syncTransport.js',
   './js/modules/tools.js',
   './js/modules/transferController.js',
   './js/modules/triggers.js',
