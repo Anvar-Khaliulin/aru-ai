@@ -586,6 +586,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-day.is-selected.is-fertile,
 .fit-day.is-selected.is-ovulation { background: var(--fit-accent-soft); }
 
+/* Forecast days keep the phase hint but lose the solid fill, so predicted
+   periods are never mistaken for logged ones. */
+.fit-day.is-forecast.is-period,
+.fit-day.is-forecast.is-fertile,
+.fit-day.is-forecast.is-ovulation { background: transparent; }
+.fit-day.is-forecast.is-selected { background: var(--fit-accent-soft); }
+
 .fit-day-top {
     display: flex;
     align-items: center;
@@ -620,6 +627,11 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-day-phase.fertile { background: var(--fit-sky); }
 .fit-day-phase.ovulation { background: var(--fit-violet); }
 .fit-day-phase.luteal { background: var(--fit-amber); }
+
+.fit-day-phase.period.is-forecast { background: transparent; border: 1.5px solid var(--fit-accent); }
+.fit-day-phase.fertile.is-forecast { background: transparent; border: 1.5px solid var(--fit-sky); }
+.fit-day-phase.ovulation.is-forecast { background: transparent; border: 1.5px solid var(--fit-violet); }
+.fit-day-phase.luteal.is-forecast { background: transparent; border: 1.5px solid var(--fit-amber); }
 
 .fit-day-lock {
     display: inline-flex;
@@ -1575,20 +1587,49 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 
 .fit-progress i { display: block; height: 100%; border-radius: 99px; background: var(--fit-accent); }
 
-.fit-week-tabs {
+.fit-week-tabs-wrap {
     display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.fit-week-tabs {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
     gap: 4px;
     overflow-x: auto;
     padding: 3px;
-    margin-bottom: 12px;
     border-radius: 11px;
     background: var(--fit-card-2);
     scrollbar-width: none;
+    scroll-behavior: smooth;
 }
 
 .fit-week-tabs::-webkit-scrollbar { display: none; }
 
+.fit-week-nav {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 30px;
+    flex: none;
+    border: 1px solid var(--fit-border);
+    border-radius: 9px;
+    background: var(--fit-card);
+    color: var(--fit-subtle);
+    cursor: pointer;
+}
+
+.fit-week-nav:hover { border-color: var(--fit-accent); color: var(--fit-text); }
+.fit-week-nav svg { width: 14px; height: 14px; }
+
 .fit-week-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 6px 12px;
     border: 0;
     border-radius: 8px;
@@ -1601,6 +1642,14 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 }
 
 .fit-week-tab.is-active { background: var(--fit-card); color: var(--fit-text); box-shadow: var(--fit-shadow); }
+.fit-week-tab.is-current:not(.is-active) { color: var(--fit-text); }
+
+.fit-week-tab-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--fit-accent);
+}
 
 .fit-plan-days {
     display: grid;
@@ -1625,6 +1674,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-plan-day:hover { border-color: var(--fit-accent); box-shadow: var(--fit-shadow); }
 .fit-plan-day.is-today { border-color: var(--fit-accent); }
 .fit-plan-day.is-rest { opacity: 0.75; }
+.fit-plan-day.is-before-start { opacity: 0.5; }
 
 .fit-plan-day-head {
     display: flex;
@@ -1767,7 +1817,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 
 .fit-cycle-phases {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(66px, 1fr));
     gap: 4px;
 }
 
@@ -1781,7 +1831,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     color: var(--fit-subtle);
 }
 
-.fit-cycle-phase b { display: block; font-size: 0.68rem; color: var(--fit-text); margin-bottom: 1px; }
+.fit-cycle-phase b { display: block; font-size: 0.64rem; line-height: 1.2; color: var(--fit-text); margin-bottom: 1px; overflow-wrap: anywhere; }
 .fit-cycle-phase.is-current { background: var(--fit-accent-soft); color: var(--fit-accent); }
 .fit-cycle-phase.is-current b { color: var(--fit-accent); }
 
@@ -2143,6 +2193,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     .fit-chart text { font-size: 10px; }
     .fit-cycle-mini { gap: 10px; }
     .fit-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container fitview (max-width: 520px) {
+    .fit-cycle-phases { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @container fitview (max-width: 420px) {

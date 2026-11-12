@@ -36,6 +36,7 @@ Object.assign(window.FitCarePlugin, {
                         <button type="button" data-fit-action="cal-mode" data-mode="week" class="${this.state.calendarMode === 'week' ? 'is-active' : ''}">${this.esc(this.t('cal_week_view'))}</button>
                     </div>
                 </div>
+                ${this.renderCycleNotice()}
                 <div class="fit-cal-layout">
                     <section class="fit-calendar-card">
                         ${this.state.calendarMode === 'week' ? this.renderWeekView() : this.renderMonthView()}
@@ -73,13 +74,36 @@ Object.assign(window.FitCarePlugin, {
         }
         badges.push(`<span class="fit-badge fit-badge-green"><i data-lucide="dumbbell"></i>${this.esc(this.t('workouts_done', { n: workouts.length }))}</span>`);
         if (cycle.tracking && cycle.hasData) {
-            badges.push(`<span class="fit-badge fit-badge-accent"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day}</span>`);
+            const forecast = cycle.confidence !== 'recorded';
+            badges.push(`<span class="fit-badge fit-badge-accent" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day}${forecast ? ` · ${this.esc(this.t('cycle_forecast_short'))}` : ''}</span>`);
         }
         if (this.state.activePlan) {
             badges.push(`<span class="fit-badge"><i data-lucide="target"></i>${this.esc(this.state.activePlan.title)}</span>`);
         }
         void range;
         return badges.join('');
+    },
+
+    // The calendar keeps predictions visible when tracking is quiet, but it has
+    // to say out loud that they are forecasts once real starts stop arriving.
+    renderCycleNotice() {
+        const cycle = this.getCycleInfo(this.todayKey());
+        if (!cycle.tracking || !cycle.hasData || cycle.confidence === 'recorded') return '';
+        const stale = cycle.confidence === 'stale';
+        const text = stale
+            ? this.t('cycle_stale_warning', {
+                date: this.formatShortDate(cycle.lastStart),
+                days: cycle.daysSinceLastStart,
+                n: cycle.predictedCycles
+            })
+            : this.t('cycle_forecast_warning', {
+                date: this.formatShortDate(cycle.nextPeriod)
+            });
+        return `<div class="fit-alert fit-alert-warn" style="margin:0 0 12px">
+            <i data-lucide="${stale ? 'circle-alert' : 'calendar-clock'}"></i>
+            <span>${this.esc(text)}</span>
+            <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}" style="margin-left:auto">${this.esc(this.t('cycle_mark_start'))}</button>
+        </div>`;
     },
 
     renderCalendarLegend() {
@@ -154,11 +178,12 @@ Object.assign(window.FitCarePlugin, {
         if (log.note) {
             marks.push(`<span class="fit-mark note" title="${this.esc(this.t('day_note'))}"><i data-lucide="notebook-pen"></i></span>`);
         }
+        const forecast = cycle.tracking && cycle.hasData && cycle.confidence !== 'recorded';
         const phaseClass = cycle.tracking && cycle.hasData && ['menstrual', 'fertile', 'ovulation'].includes(cycle.phase)
-            ? ` is-${cycle.phase === 'menstrual' ? 'period' : cycle.phase}`
+            ? ` is-${cycle.phase === 'menstrual' ? 'period' : cycle.phase}${forecast ? ' is-forecast' : ''}`
             : '';
         const phaseDot = cycle.tracking && cycle.hasData
-            ? `<i class="fit-day-phase ${cycle.phase === 'menstrual' ? 'period' : cycle.phase}" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}"></i>`
+            ? `<i class="fit-day-phase ${cycle.phase === 'menstrual' ? 'period' : cycle.phase}${forecast ? ' is-forecast' : ''}" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"></i>`
             : '';
         const intimacyEntries = this.intimacyEnabled() ? (this.getIntimacy(key) || []) : [];
         const unsafeIntimacy = intimacyEntries.some((entry) => !entry.protection);
@@ -179,6 +204,9 @@ Object.assign(window.FitCarePlugin, {
         if (meals.length) titleBits.push(`${this.t('day_meals')}: ${meals.length}`);
         if (medCount) titleBits.push(`${this.t('cal_mark_med')}: ${medCount}`);
         if (cycleLog && cycleLog.flow) titleBits.push(`${this.t('cycle_flow')}: ${this.t(`flow_${cycleLog.flow}`)}`);
+        if (cycle.tracking && cycle.hasData) {
+            titleBits.push(`${this.t('cycle_day')} ${cycle.day} · ${this.t(`cycle_phase_${cycle.phase}`)}${forecast ? ` · ${this.t('cycle_forecast')}` : ''}`);
+        }
         if (intimacyEntries.length) titleBits.push(`${this.t('intimacy_title')}: ${intimacyEntries.map((entry) => entry.log_time || '—').join(', ')}`);
         if (log.note) titleBits.push(this.t('day_note'));
         return `
@@ -264,8 +292,14 @@ Object.assign(window.FitCarePlugin, {
     renderDayPanelContent() {
         const date = this.state.selectedDate || this.todayKey();
         const cycle = this.getCycleInfo(date);
+        const forecast = cycle.tracking && cycle.hasData && cycle.confidence !== 'recorded';
         const phaseBadge = cycle.tracking && cycle.hasData
-            ? `<span class="fit-badge fit-badge-accent"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}</span>`
+            ? `<span class="fit-badge fit-badge-accent" title="${forecast ? this.esc(this.t('cycle_forecast_note')) : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}</span>`
+            : '';
+        const cycleWarning = forecast
+            ? `<div class="fit-alert fit-alert-warn" style="margin:7px 0 0"><i data-lucide="${cycle.stale ? 'circle-alert' : 'calendar-clock'}"></i><span>${this.esc(cycle.stale
+                ? this.t('cycle_stale_warning', { date: this.formatShortDate(cycle.lastStart), days: cycle.daysSinceLastStart, n: cycle.predictedCycles })
+                : this.t('cycle_forecast_note'))}</span></div>`
             : '';
         const dateLabel = this.formatDate(date);
         const tabs = `
@@ -285,6 +319,7 @@ Object.assign(window.FitCarePlugin, {
                         <p class="fit-kicker">${this.esc(this.t('nav_calendar'))}</p>
                         <h3>${this.esc(dateLabel)}</h3>
                         <p>${phaseBadge}</p>
+                        ${cycleWarning}
                     </div>
                     <div class="fit-row" style="gap:2px;flex-wrap:nowrap">
                         <button type="button" class="fit-btn-icon" data-fit-action="day-prev" data-date="${date}" aria-label="${this.esc(this.t('cal_prev'))}"><i data-lucide="chevron-left"></i></button>

@@ -637,7 +637,7 @@ HOW TO FILL VALUES:
 - Medication: match the user's wording against the protocol names in the journal facts and use the exact protocol name. If nothing matches, do not invent a drug name — record [[FIT: HEALTH type="other"]] with the user's own words.
 - Single session to log → WORKOUT. A repeating program for several days/weeks ("составь план тренировок", "make me a schedule") → PLAN_CREATE + PLAN_DAY for each training day; today's completed session still goes through WORKOUT so it lands in the day journal.
 - Date and time come from the user's words: "at 8 am" → time="08:00", "yesterday" → the previous date, "on Monday" → the most recent Monday. Date defaults to today; omit time only when it is truly unknown.
-- Several facts in one message → several commands. Nothing to record → no commands.
+${fitCycleOn ? '- Cycle start and end: use only the exact day the user names ("started yesterday", "on the 3rd"). If she does not say which day, ask before emitting CYCLE_START or CYCLE_END — never default these two to today. CYCLE_END only when she says the bleeding has stopped.\n' : ''}- Several facts in one message → several commands. Nothing to record → no commands.
 
 ANALYSIS ON REQUEST:
 - When the user asks about weight, nutrition, training progress, sleep, adherence${fitCycleOn ? ' or their cycle' : ''}, answer in plain prose from the journal facts above: name the trend, compare with the goal, point out what is missing, suggest small realistic adjustments.

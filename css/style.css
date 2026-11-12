@@ -791,8 +791,28 @@ a:focus-visible {
 }
 
 /* --- Chat folders & favorites --- */
-body.chats-dragging .folder-children {
-    display: block !important;
+/* Folders stay collapsed while dragging; a compact drop zone appears instead of
+   expanding every folder and pushing the target out of reach. */
+.folder-dropzone {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    margin: 0 8px 6px;
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+    border-radius: 10px;
+    font-size: 11px;
+    color: #94a3b8;
+    user-select: none;
+}
+
+body.chats-dragging .folder-dropzone {
+    display: flex;
+}
+
+body.chats-dragging .folder-dropzone:hover {
+    border-color: #f59e0b;
+    color: #f59e0b;
 }
 
 .folder-empty {

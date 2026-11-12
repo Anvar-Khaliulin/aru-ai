@@ -5,7 +5,7 @@ Local database client powered by SQL.js and IndexedDB for persistent storage of 
 */
 import { UI } from './ui.js';
 import { SyncCore } from './sync/syncCore.js';
-import { ensureSyncSchema } from './sync/syncSchema.js';
+import { ensureSyncSchema, readDirtyState } from './sync/syncSchema.js';
 // Never leave the device through P2P transfer; the receiver enters their own.
 const TRANSFER_SECRET_SETTINGS = new Set([
     'db_password',
@@ -708,6 +708,16 @@ export const DB = {
                 )`, [], false);
                 this.run(`CREATE INDEX IF NOT EXISTS idx_fit_cycles_start ON fit_cycles(start_date)`, [], false);
                 changed = true;
+            }
+            if (this.tableExists('fit_cycles')) {
+                // Older builds closed the previous cycle by writing the day before
+                // the next start into end_date. Today end_date means "bleeding
+                // stopped", so that pattern would read as a month-long period.
+                this.run(`UPDATE fit_cycles SET end_date = '' WHERE end_date != '' AND EXISTS (
+                    SELECT 1 FROM fit_cycles AS next
+                    WHERE date(next.start_date) = date(fit_cycles.end_date, '+1 day')
+                )`, [], false);
+                if (this.db.getRowsModified && this.db.getRowsModified() > 0) changed = true;
             }
             if (!this.tableExists('fit_cycle_logs')) {
                 this.run(`CREATE TABLE fit_cycle_logs (
@@ -1498,6 +1508,107 @@ export const DB = {
         return rows.length ? rows[0] : null;
     },
 
+    // Cycle maths lives here alone so the Aru snapshot and the plugin UI cannot
+    // drift apart. Confidence tells how far the forecast is from real data:
+    // recorded = inside the last logged cycle, estimated = first missed cycle,
+    // stale = two or more expected starts were never logged.
+    getFitCycleStats() {
+        const profile = this.getFitProfile();
+        const cycles = this.getFitCycles().filter((cycle) => cycle.start_date);
+        const lengths = cycles
+            .map((cycle) => Number(cycle.cycle_length))
+            .filter((length) => Number.isFinite(length) && length >= 15 && length <= 60)
+            .slice(-6);
+        const profileLength = Math.min(Math.max(Number(profile.cycle_length) || 28, 15), 60);
+        const avg = lengths.length >= 2
+            ? Math.round(lengths.reduce((sum, length) => sum + length, 0) / lengths.length)
+            : profileLength;
+        const today = this._fitDateKey(new Date());
+        const past = cycles.filter((cycle) => cycle.start_date <= today);
+        const last = past.length ? past[past.length - 1] : null;
+        const daysSince = last ? this._fitDiffDays(last.start_date, today) : null;
+        const predictedCycles = last ? Math.max(0, Math.floor(daysSince / avg)) : 0;
+        return {
+            tracking: Number(profile.cycle_tracking) === 1,
+            cycles,
+            lengths,
+            avg,
+            profileLength,
+            last,
+            daysSince,
+            predictedCycles,
+            confidence: !last ? 'none' : predictedCycles === 0 ? 'recorded' : predictedCycles === 1 ? 'estimated' : 'stale',
+            irregular: lengths.length >= 2 && (Math.max(...lengths) - Math.min(...lengths)) > 4
+        };
+    },
+
+    getFitCycleInfo(date, stats = null) {
+        const key = date || this._fitDateKey(new Date());
+        const info = stats || this.getFitCycleStats();
+        if (!info.tracking) return { tracking: false, hasData: false, phase: '', day: null };
+        if (!info.cycles.length) {
+            return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
+        }
+        const reference = info.cycles.filter((cycle) => cycle.start_date <= key).pop();
+        if (!reference) return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
+        const profile = this.getFitProfile();
+        const avg = info.avg;
+        const luteal = Math.min(Math.max(Number(profile.luteal_length) || 14, 7), Math.max(avg - 7, 7));
+        const periodLength = Math.min(Math.max(Number(reference.period_length) || Number(profile.period_length) || 5, 1), avg);
+        const offset = this._fitDiffDays(reference.start_date, key);
+        const predictedCycles = Math.max(0, Math.floor(offset / avg));
+        const cycleStart = this._fitAddDays(reference.start_date, predictedCycles * avg);
+        const cycleDay = this._fitDiffDays(cycleStart, key) + 1;
+        const ovulationDay = Math.max(periodLength + 1, avg - luteal + 1);
+        const fertileStart = Math.max(periodLength + 1, ovulationDay - 5);
+        const fertileEnd = Math.min(avg, ovulationDay + 1);
+        let phase = 'luteal';
+        if (cycleDay <= periodLength) phase = 'menstrual';
+        else if (cycleDay === ovulationDay) phase = 'ovulation';
+        else if (cycleDay >= fertileStart && cycleDay <= fertileEnd) phase = 'fertile';
+        else if (cycleDay < fertileStart) phase = 'follicular';
+        return {
+            tracking: true,
+            hasData: true,
+            phase,
+            day: cycleDay,
+            avg,
+            periodLength,
+            cycleStart,
+            ovulationDay,
+            fertileStart,
+            fertileEnd,
+            nextPeriod: this._fitAddDays(cycleStart, avg),
+            predicted: predictedCycles > 0,
+            confidence: predictedCycles === 0 ? 'recorded' : predictedCycles === 1 ? 'estimated' : 'stale',
+            stale: predictedCycles >= 2,
+            predictedCycles,
+            lastStart: reference.start_date,
+            daysSinceLastStart: info.daysSince,
+            periodEndRecorded: !!reference.end_date,
+            periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+        };
+    },
+
+    _fitWeekKey(key) {
+        const date = this._fitDateFromKey(key || this._fitDateKey(new Date()));
+        date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+        return this._fitDateKey(date);
+    },
+
+    // A cycle_length is the distance to the next recorded start, so any change to
+    // the list of starts has to recompute the neighbouring rows instead of only
+    // the one that was edited.
+    _fitRecalcCycleLengths() {
+        const rows = this.query("SELECT id, start_date, cycle_length FROM fit_cycles ORDER BY start_date ASC, id ASC");
+        for (let index = 0; index < rows.length - 1; index++) {
+            const length = this._fitDiffDays(rows[index].start_date, rows[index + 1].start_date);
+            if (length > 0 && Number(rows[index].cycle_length) !== length) {
+                this.run("UPDATE fit_cycles SET cycle_length = ? WHERE id = ?", [length, rows[index].id], false);
+            }
+        }
+    },
+
     saveFitCycle(data, autoSave = true) {
         const d = data || {};
         if (!d.start_date) return null;
@@ -1510,30 +1621,55 @@ export const DB = {
                 [d.start_date, d.end_date || '', d.cycle_length ?? null, d.period_length ?? null, d.notes || ''], false);
             id = this._lastInsertId('fit_cycles');
         }
+        this._fitRecalcCycleLengths();
         if (autoSave) this.save();
         return id;
     },
 
+    // Returns { id, created, reason, start_date }. A start less than 10 days after
+    // the previous one is treated as the same period (a double tap or a corrected
+    // date) and is not inserted; callers offer to move the existing start instead.
     startFitCycle(date) {
         const key = date || this._fitDateKey(new Date());
-        const same = this.query("SELECT id FROM fit_cycles WHERE start_date = ? LIMIT 1", [key]);
-        if (same.length) return same[0].id;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
+        if (key > this._fitDateKey(new Date())) return null;
+        const same = this.query("SELECT id, start_date FROM fit_cycles WHERE start_date = ? LIMIT 1", [key]);
+        if (same.length) return { id: same[0].id, created: false, reason: 'same', start_date: same[0].start_date };
         const previous = this.query("SELECT * FROM fit_cycles WHERE start_date < ? ORDER BY start_date DESC LIMIT 1", [key]);
         if (previous.length) {
-            const length = this._fitDiffDays(previous[0].start_date, key);
-            this.run("UPDATE fit_cycles SET end_date = ?, cycle_length = ? WHERE id = ?",
-                [this._fitAddDays(key, -1), length > 0 ? length : null, previous[0].id], false);
+            const gap = this._fitDiffDays(previous[0].start_date, key);
+            if (gap > 0 && gap < 10) {
+                return { id: previous[0].id, created: false, reason: 'recent', start_date: previous[0].start_date };
+            }
         }
-        const profile = this.getFitProfile();
-        this.run("INSERT INTO fit_cycles (start_date, end_date, period_length) VALUES (?, '', ?)",
-            [key, profile.period_length], false);
+        // period_length stays unknown until the user actually marks the end,
+        // so the history never presents the profile default as a real period.
+        this.run("INSERT INTO fit_cycles (start_date, end_date) VALUES (?, '')", [key], false);
         const id = this._lastInsertId('fit_cycles');
+        this._fitRecalcCycleLengths();
         this.save();
-        return id;
+        return { id, created: true, reason: 'inserted', start_date: key };
+    },
+
+    moveFitCycleStart(id, date) {
+        const cycle = this.getFitCycle(id);
+        const key = date || this._fitDateKey(new Date());
+        if (!cycle || !/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
+        if (key > this._fitDateKey(new Date())) return null;
+        // end_date means "the bleeding stopped", so it cannot stay before a moved start.
+        const end = cycle.end_date && cycle.end_date >= key ? cycle.end_date : '';
+        const periodLength = end ? this._fitDiffDays(key, end) + 1 : null;
+        this.run("UPDATE fit_cycles SET start_date = ?, end_date = ?, period_length = ? WHERE id = ?",
+            [key, end, periodLength, cycle.id], false);
+        this._fitRecalcCycleLengths();
+        this.save();
+        return cycle.id;
     },
 
     endFitCycle(date, cycleId = null) {
         const key = date || this._fitDateKey(new Date());
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
+        if (key > this._fitDateKey(new Date())) return null;
         let cycle = cycleId ? this.getFitCycle(cycleId) : null;
         if (!cycle) {
             const rows = this.query("SELECT * FROM fit_cycles WHERE start_date <= ? ORDER BY start_date DESC LIMIT 1", [key]);
@@ -1549,7 +1685,9 @@ export const DB = {
     },
 
     deleteFitCycle(id) {
-        this.run("DELETE FROM fit_cycles WHERE id = ?", [Number(id)]);
+        this.run("DELETE FROM fit_cycles WHERE id = ?", [Number(id)], false);
+        this._fitRecalcCycleLengths();
+        this.save();
     },
 
     getFitCycleLogs(fromDate, toDate) {
@@ -1879,13 +2017,19 @@ export const DB = {
                 const plan = plans[0];
                 let planLine = `Active plan: "${plan.title}" (${plan.weeks} weeks, started ${plan.start_date})`;
                 if (plan.start_date) {
-                    const diff = this._fitDiffDays(plan.start_date, today);
-                    if (diff >= 0 && diff < Number(plan.weeks) * 7) {
-                        const week = Math.floor(diff / 7) + 1;
+                    const weekStart = this._fitWeekKey(plan.start_date);
+                    const planEnd = this._fitAddDays(weekStart, Number(plan.weeks) * 7 - 1);
+                    if (today >= plan.start_date && today <= planEnd) {
+                        const week = Math.floor(this._fitDiffDays(weekStart, today) / 7) + 1;
                         const weekday = ((this._fitDateFromKey(today).getDay() + 6) % 7) + 1;
                         const day = this.getFitPlanDayForDate(plan.id, week, weekday);
-                        planLine += `, week ${week}/${plan.weeks}`;
+                        planLine += `, week ${week}/${plan.weeks} of the plan`;
                         if (day) planLine += `, today: "${day.title || day.focus || 'session'}"`;
+                        else planLine += ', no session scheduled today';
+                    } else if (today > planEnd) {
+                        planLine += `, finished on ${planEnd}`;
+                    } else {
+                        planLine += `, starts on ${plan.start_date}`;
                     }
                 }
                 lines.push(planLine + '.');
@@ -1918,17 +2062,25 @@ export const DB = {
             }
             if (scheduled.length) lines.push(`Medications today: ${scheduled.join('; ')}.`);
 
-            if (Number(p.cycle_tracking) && cycles.length) {
-                const last = cycles.filter(c => c.start_date <= today).pop();
-                if (last) {
-                    const len = Number(p.cycle_length) || 28;
-                    const since = this._fitDiffDays(last.start_date, today);
-                    const bits = [`last period started ${last.start_date}`, `typical cycle ${len} days`];
-                    if (since >= 0) {
-                        bits.push(`current cycle day ${(since % len) + 1}`);
-                        bits.push(`next period expected around ${this._fitAddDays(last.start_date, (Math.floor(since / len) + 1) * len)} (estimate, not contraception)`);
-                    }
+            if (Number(p.cycle_tracking)) {
+                const cycle = this.getFitCycleInfo(today);
+                if (cycle.hasData) {
+                    const bits = [
+                        `last logged period start ${cycle.lastStart}`,
+                        `typical cycle ${cycle.avg} days${cycle.confidence === 'recorded' ? '' : ' (estimate)'}`
+                    ];
+                    if (cycle.periodEndRecorded) bits.push(`bleeding ended ${cycle.periodEnd}`);
+                    else bits.push(`bleeding end not logged (phase estimates assume ${cycle.periodLength} days)`);
+                    bits.push(`${cycle.confidence === 'recorded' ? 'cycle' : 'estimated cycle'} day ${cycle.day} (${cycle.phase})`);
+                    bits.push(`next period expected around ${cycle.nextPeriod} (forecast, not contraception)`);
                     lines.push(`Cycle tracking: ${bits.join(', ')}.`);
+                    if (cycle.stale) {
+                        lines.push(`Cycle warning: no period start has been logged for ${cycle.daysSinceLastStart} days, which is at least two expected cycles. Forecast dates are stale and must not be treated as reliable. If the user mentions a period, ask for the exact first day and record CYCLE_START; never invent a start date.`);
+                    } else if (cycle.confidence === 'estimated') {
+                        lines.push(`Cycle note: the current phase is forecast from the average because this period start is not logged yet. Ask the user to confirm or record the first day when it happens.`);
+                    }
+                } else {
+                    lines.push('Cycle tracking is on, but no period start has been recorded yet, so no cycle facts or forecasts exist. If the user says her period started, record CYCLE_START with the real date.');
                 }
             }
             if (p.aru_notes) lines.push(`User's instructions for Aru in Fit & Care: ${String(p.aru_notes).slice(0, 1200)}`);
@@ -2671,13 +2823,20 @@ export const DB = {
     // Replaces the live database with the result of a three-way merge.
     // The merged image already went through the sync schema, so triggers are
     // ready; saving here must not schedule another cloud push (the engine owns it).
-    async applySyncDatabase(newDb, bytes) {
+    // expectedSeq aborts the swap when a local write landed after the merge was
+    // built, so in-flight rows are never dropped by the replaced image.
+    async applySyncDatabase(newDb, bytes, { expectedSeq = null } = {}) {
         let db = newDb;
         if (!db) {
             if (!this.SQL) {
                 this.SQL = await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
             }
             db = new this.SQL.Database(bytes);
+        }
+
+        if (expectedSeq !== null && readDirtyState(this.db).seq !== expectedSeq) {
+            try { db.close(); } catch (e) { }
+            return false;
         }
 
         const previous = this.db;
@@ -2710,8 +2869,10 @@ export const DB = {
 
         if (window.app) {
             try { window.app.loadChatsList(); } catch (e) { }
-            const activeTab = st.tabs && st.tabs[st.activeTabIndex];
-            if (st.currentChatId != null && !(activeTab && activeTab.isSending)) {
+            // Reloading the open chat while any reply is still generating would
+            // wipe the visible answer and look like the generation was interrupted.
+            const generating = !!(st.tabs && st.tabs.some(t => t && t.isSending));
+            if (st.currentChatId != null && !generating) {
                 try { await window.app.loadChat(st.currentChatId); } catch (e) { }
             }
             try { window.app.updateSearchUI?.(); } catch (e) { }

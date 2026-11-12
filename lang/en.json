@@ -514,5 +514,6 @@
     "safety_refusal_homework": "I can't give you a ready-made answer - this is your task, and you can do it! Let me explain how to solve things like this, with a similar example.",
     "safety_refusal_topic": "Sorry, this topic isn't right for your age. Let's talk about something interesting and useful instead!",
     "safety_refusal_support": "I'm really sorry you're hurting right now. Please tell a trusted adult - a parent, teacher, or friend. You're not alone; people love you and will help you.",
-    "safety_output_fallback": "Sorry, I couldn't answer that in a proper way. Let's try talking about something else!"
+    "safety_output_fallback": "Sorry, I couldn't answer that in a proper way. Let's try talking about something else!",
+    "sync_wait_generation": "Aru is replying - sync will start when the answer is ready"
 }

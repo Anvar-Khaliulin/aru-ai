@@ -230,7 +230,7 @@ Object.assign(window.FitCarePlugin, {
             streak,
             activityByDate,
             cycle,
-            cycleAvg: this.state.cycles.length >= 2 ? this.averageCycleLength() : null,
+            cycleAvg: this.cycleStats().lengths.length >= 2 ? this.averageCycleLength() : null,
             missedDoses,
             plan,
             planProgress: this.getActivePlanProgress()
@@ -490,14 +490,21 @@ Object.assign(window.FitCarePlugin, {
                         <strong>${this.esc(this.t('cycle_no_history'))}</strong>
                         <span>${this.esc(this.t('cycle_prediction_note'))}</span>
                     </div>
-                    <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}" style="margin-top:10px;width:100%">
-                        <i data-lucide="plus"></i>${this.esc(this.t('cycle_log_title'))}
+                    <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}" style="margin-top:10px;width:100%">
+                        <i data-lucide="play"></i>${this.esc(this.t('cycle_mark_start'))}
                     </button>
                 </section>
             `;
         }
         const percent = Math.min(100, Math.max(2, (cycle.day / cycle.avg) * 100));
         const phase = this.t(`cycle_phase_${cycle.phase}`);
+        const forecast = cycle.confidence !== 'recorded';
+        const confidenceBadge = forecast
+            ? `<span class="fit-badge fit-badge-amber" title="${this.esc(this.t('cycle_forecast_note'))}"><i data-lucide="calendar-clock"></i>${this.esc(this.t('cycle_forecast'))}</span>`
+            : '';
+        const nextLine = this.esc(forecast
+            ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
+            : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`);
         return `
             <section class="fit-card">
                 <div class="fit-card-head">
@@ -512,14 +519,19 @@ Object.assign(window.FitCarePlugin, {
                         <div class="fit-cycle-ring-inner"><b>${cycle.day}</b><span>${this.esc(this.t('cycle_day'))}</span></div>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
-                        <b style="font-size:.86rem">${this.esc(phase)}${cycle.predicted ? ` · ${this.esc(this.t('cycle_regular'))}` : ''}</b>
-                        <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_next_period'))}: ${this.esc(this.formatShortDate(cycle.nextPeriod))}</span>
+                        <b class="fit-row" style="font-size:.86rem;gap:5px">${this.esc(phase)}${confidenceBadge}</b>
+                        <span class="fit-muted" style="font-size:.68rem">${nextLine}</span>
                         <div class="fit-row" style="gap:5px">
                             <span class="fit-badge fit-badge-violet"><i data-lucide="refresh-cw"></i>${this.esc(this.t('cycle_avg'))} ${cycle.avg}</span>
                             ${stats.cycleAvg && stats.cycleAvg !== cycle.avg ? `<span class="fit-badge">${this.esc(this.t('insight_cycle_long', { n: stats.cycleAvg }))}</span>` : ''}
                         </div>
                     </div>
                 </div>
+                ${cycle.stale ? `<div class="fit-alert fit-alert-warn" style="margin:10px 0 0"><i data-lucide="circle-alert"></i><span>${this.esc(this.t('cycle_stale_warning', {
+                    date: this.formatShortDate(cycle.lastStart),
+                    days: cycle.daysSinceLastStart,
+                    n: cycle.predictedCycles
+                }))}</span></div>` : ''}
                 <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.5">${this.esc(this.t('cycle_prediction_note'))}</p>
             </section>
         `;
@@ -604,7 +616,7 @@ Object.assign(window.FitCarePlugin, {
         if (stats.missedDoses > 0) {
             insights.push({ icon: 'pill', tone: 'amber', title: this.t('today_doses'), text: this.t('insight_med_missed', { n: stats.missedDoses }) });
         }
-        if (stats.cycleAvg && this.state.cycles.length >= 2) {
+        if (stats.cycleAvg && this.cycleStats().lengths.length >= 2) {
             insights.push({ icon: 'droplet', tone: 'violet', title: this.t('cycle'), text: this.t('insight_cycle_long', { n: stats.cycleAvg }) });
         }
         const selected = insights.slice(0, 6);

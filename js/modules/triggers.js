@@ -1115,9 +1115,17 @@ export const Triggers = {
                         }
                         continue;
                     }
-                    db.startFitCycle(date);
-                    notices.push(this.fitT('fit_notice_cycle_start', { date }, `Cycle start saved for ${date}.`));
-                    wrote = true;
+                    const start = db.startFitCycle(date);
+                    if (start && start.created) {
+                        notices.push(this.fitT('fit_notice_cycle_start', { date: start.start_date }, `Cycle start saved for ${start.start_date}.`));
+                        wrote = true;
+                    } else if (start && start.reason === 'recent') {
+                        notices.push(this.fitT('fit_notice_cycle_start_recent', { date: start.start_date, new_date: date }, `A period start is already logged on ${start.start_date}, so ${date} was not added: the dates are less than 10 days apart. If ${date} is the corrected first day, move the start in Fit & Care.`));
+                    } else if (start) {
+                        notices.push(this.fitT('fit_notice_cycle_start_exists', { date: start.start_date }, `A cycle already starts on ${start.start_date}, so the new start was not added.`));
+                    } else {
+                        notices.push(this.fitT('fit_notice_cycle_future', { date }, `The period start ${date} is not saved: it cannot be in the future.`));
+                    }
                 } else if (name === 'CYCLE_END') {
                     if (!cycleTrackingOn) {
                         if (!cycleOffNotified) {
@@ -1126,7 +1134,14 @@ export const Triggers = {
                         }
                         continue;
                     }
-                    if (db.endFitCycle(date)) {
+                    const cycles = db.getFitCycles ? (db.getFitCycles() || []) : [];
+                    const current = cycles.filter((cycle) => cycle.start_date && cycle.start_date <= date).pop() || null;
+                    const span = current
+                        ? Math.round((new Date(`${date}T12:00:00`) - new Date(`${current.start_date}T12:00:00`)) / 86400000) + 1
+                        : 0;
+                    if (current && span > 15) {
+                        notices.push(this.fitT('fit_notice_cycle_end_suspect', { date, start: current.start_date, days: span }, `The period end ${date} was not saved: the last logged start is ${current.start_date}, so that would be ${span} days of bleeding. If it is correct, mark the end in Fit & Care; otherwise add the missing period start first.`));
+                    } else if (db.endFitCycle(date)) {
                         notices.push(this.fitT('fit_notice_cycle_end', { date }, `Cycle end saved for ${date}.`));
                         wrote = true;
                     }

@@ -198,26 +198,27 @@ Object.assign(window.FitCarePlugin, {
                         <i data-lucide="droplet"></i>
                         <strong>${this.esc(this.t('cycle_no_history'))}</strong>
                         <span>${this.esc(this.t('cycle_prediction_note'))}</span>
-                        <button type="button" class="fit-btn fit-btn-primary fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}">${this.esc(this.t('cycle_start'))}</button>
+                        <button type="button" class="fit-btn fit-btn-primary fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}">${this.esc(this.t('cycle_start'))}</button>
                     </div>
                 </section>
             `;
         }
-        const lengths = (this.state.cycles || [])
-            .map((item) => Number(item.cycle_length))
-            .filter((value) => Number.isFinite(value) && value >= 15 && value <= 60);
-        const irregular = lengths.length >= 2 && (Math.max(...lengths) - Math.min(...lengths)) > 4;
-        const currentPhase = cycle.phase === 'fertile' ? 'ovulation' : cycle.phase;
+        const stats = this.cycleStats();
+        const lengths = stats.lengths || [];
+        const irregular = !!stats.irregular;
+        const regularityLabel = lengths.length < 2 ? 'cycle_not_enough' : (irregular ? 'cycle_irregular' : 'cycle_regular');
         const periodLength = cycle.periodLength;
         const ovulationDay = cycle.ovulationDay;
+        const follicularEnd = Math.max(periodLength, cycle.fertileStart - 1);
         const phaseRanges = {
             menstrual: `1–${periodLength}`,
-            follicular: `${periodLength + 1}–${Math.max(periodLength + 1, cycle.fertileStart - 1)}`,
+            follicular: cycle.fertileStart > periodLength + 1 ? `${periodLength + 1}–${follicularEnd}` : '—',
+            fertile: `${cycle.fertileStart}–${cycle.fertileEnd}`,
             ovulation: `${ovulationDay}`,
-            luteal: `${Math.min(ovulationDay + 1, cycle.avg)}–${cycle.avg}`
+            luteal: `${Math.min(cycle.fertileEnd + 1, cycle.avg)}–${cycle.avg}`
         };
-        const phases = ['menstrual', 'follicular', 'ovulation', 'luteal'].map((phase) => `
-            <div class="fit-cycle-phase ${currentPhase === phase ? 'is-current' : ''}">
+        const phases = ['menstrual', 'follicular', 'fertile', 'ovulation', 'luteal'].map((phase) => `
+            <div class="fit-cycle-phase ${cycle.phase === phase ? 'is-current' : ''}">
                 <b>${this.esc(this.t(`cycle_phase_${phase}`))}</b>
                 <span>${this.esc(phaseRanges[phase])}</span>
             </div>
@@ -226,11 +227,24 @@ Object.assign(window.FitCarePlugin, {
             <div class="fit-cycle-history-row">
                 <b>${this.esc(this.formatShortDate(item.start_date))}</b>
                 <span title="${this.esc(this.t('cycle_avg'))} / ${this.esc(this.t('period_length'))}">
-                    ${item.cycle_length ? `${this.esc(item.cycle_length)} / ${this.esc(item.period_length || '—')}` : this.esc(this.t('cycle_regular'))}
+                    ${this.esc(item.cycle_length || '—')} / ${this.esc(item.period_length || '—')}
                 </span>
                 <button type="button" class="fit-btn-icon" data-fit-action="health-cycle-delete" data-id="${item.id}" aria-label="${this.esc(this.t('delete'))}" style="width:22px;height:22px"><i data-lucide="x"></i></button>
             </div>
         `).join('');
+        const forecast = cycle.confidence !== 'recorded';
+        const nextPeriodLine = this.esc(forecast
+            ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
+            : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`);
+        const confidenceNote = cycle.stale
+            ? `<div class="fit-alert fit-alert-warn" style="margin:9px 0 0"><i data-lucide="circle-alert"></i><span>${this.esc(this.t('cycle_stale_warning', {
+                date: this.formatShortDate(cycle.lastStart),
+                days: cycle.daysSinceLastStart,
+                n: cycle.predictedCycles
+            }))}</span></div>`
+            : forecast
+                ? `<div class="fit-alert fit-alert-info" style="margin:9px 0 0"><i data-lucide="calendar-clock"></i><span>${this.esc(this.t('cycle_forecast_note'))}</span></div>`
+                : '';
         return `
             <section class="fit-card">
                 <div class="fit-card-head">
@@ -242,12 +256,13 @@ Object.assign(window.FitCarePlugin, {
                         <div class="fit-cycle-ring-inner"><b>${cycle.day}</b><span>${this.esc(this.t('cycle_day'))}</span></div>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
-                        <b style="font-size:.84rem">${this.esc(this.t('cycle_next_period'))}: ${this.esc(this.formatShortDate(cycle.nextPeriod))}</b>
+                        <b style="font-size:.84rem">${nextPeriodLine}</b>
                         <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_fertile'))}: ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileStart - 1)))} – ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileEnd - 1)))}</span>
-                        <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_avg'))}: ${cycle.avg} · ${this.esc(this.t(irregular ? 'cycle_irregular' : 'cycle_regular'))}</span>
+                        <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_avg'))}: ${cycle.avg} · ${this.esc(this.t(regularityLabel))}${lengths.length ? ` (${lengths.length})` : ''}</span>
                     </div>
                 </div>
                 <div class="fit-cycle-phases">${phases}</div>
+                ${confidenceNote}
                 <div class="fit-data-actions" style="margin-top:12px">
                     <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}"><i data-lucide="play"></i>${this.esc(this.t('cycle_start'))}</button>
                     <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="cycle-end" data-date="${this.todayKey()}"><i data-lucide="square"></i>${this.esc(this.t('cycle_end'))}</button>

@@ -48,6 +48,11 @@ const GoogleDriveAdapter = {
 
     _apiBase: 'https://www.googleapis.com/drive/v3',
     _uploadBase: 'https://www.googleapis.com/upload/drive/v3',
+    // name -> file id cache: every sync file has a stable name, so resolving ids
+    // from a full folder listing on each read/write wasted Drive API quota and
+    // made three-device sync hit rate limits.
+    _nameIds: new Map(),
+    _folderCheckedAt: 0,
 
     init(profile) {
         this.profile = profile;
@@ -184,9 +189,13 @@ const GoogleDriveAdapter = {
 
     // Creates (or reuses) the app-owned "Aru AI" folder
     async ensureFolder() {
+        if (this.profile.folderId && Date.now() - this._folderCheckedAt < 10 * 60 * 1000) {
+            return this.profile.folderId;
+        }
         if (this.profile.folderId) {
             try {
                 await this._api(`/files/${this.profile.folderId}?fields=id`);
+                this._folderCheckedAt = Date.now();
                 return this.profile.folderId;
             } catch (e) { /* folder gone, recreate */ }
         }
@@ -302,25 +311,40 @@ const GoogleDriveAdapter = {
             }
             pageToken = json.nextPageToken || '';
         } while (pageToken);
+        this._nameIds = new Map(files.map(f => [f.name, f.id]));
         return files;
     },
 
     async findNamed(name) {
+        const cached = this._nameIds.get(name);
+        if (cached) return { id: cached, name };
         const files = await this.listAllFiles();
         return files.find(f => f.name === name) || null;
     },
 
     async readNamed(name) {
-        const file = await this.findNamed(name);
-        if (!file) return null;
-        const res = await this._api(`/files/${file.id}?alt=media`);
-        return new Uint8Array(await res.arrayBuffer());
+        await this._ensureAccessToken();
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const file = await this.findNamed(name);
+            if (!file) return null;
+            const res = await fetch(`${this._apiBase}/files/${file.id}?alt=media`, {
+                cache: 'no-store',
+                headers: { 'Authorization': `Bearer ${this.profile.accessToken}` }
+            });
+            if (res.status === 404) {
+                this._nameIds.delete(name);
+                continue;
+            }
+            if (!res.ok) throw new Error('Google Drive read failed: ' + res.status);
+            return new Uint8Array(await res.arrayBuffer());
+        }
+        return null;
     },
 
-    async writeNamed(name, bytes) {
+    async writeNamed(name, bytes, opts = {}) {
         await this._ensureAccessToken();
         const folderId = await this.ensureFolder();
-        const existing = await this.findNamed(name);
+        const existing = opts.fresh ? null : await this.findNamed(name);
         if (existing) {
             const res = await fetch(`${this._uploadBase}/files/${existing.id}?uploadType=media`, {
                 method: 'PATCH',
@@ -330,8 +354,13 @@ const GoogleDriveAdapter = {
                 },
                 body: bytes
             });
-            if (!res.ok) throw new Error('Google Drive update failed: ' + res.status);
-            return { id: existing.id, name };
+            if (res.status === 404) {
+                this._nameIds.delete(name);
+            } else if (res.ok) {
+                return { id: existing.id, name };
+            } else {
+                throw new Error('Google Drive update failed: ' + res.status);
+            }
         }
         const boundary = 'aru_boundary_' + Date.now();
         const metadata = { name, parents: [folderId] };
@@ -351,6 +380,7 @@ const GoogleDriveAdapter = {
         });
         if (!res.ok) throw new Error('Google Drive create failed: ' + res.status);
         const json = await res.json();
+        this._nameIds.set(json.name || name, json.id);
         return { id: json.id, name: json.name };
     },
 
@@ -358,6 +388,7 @@ const GoogleDriveAdapter = {
         const file = await this.findNamed(name);
         if (!file) return;
         await this.removeFile(file.id);
+        this._nameIds.delete(name);
     },
 
     async removeFile(fileId) {
@@ -390,15 +421,17 @@ const WebDAVAdapter = {
 
         // Support custom proxy configured on the profile itself or in Network settings
         const customProxy = this.profile.proxyUrl || (settings.proxy_strategy === 'custom' ? settings.proxy_custom_url : null);
+        // Never let the browser HTTP cache serve a stale head or snapshot.
+        const fetchOpts = { cache: 'no-store', ...options, headers };
         let res;
         if (customProxy) {
             const proxyUrl = customProxy.includes('%URL%')
                 ? customProxy.replace('%URL%', encodeURIComponent(url))
                 : customProxy + encodeURIComponent(url);
-            res = await fetch(proxyUrl, { ...options, headers });
+            res = await fetch(proxyUrl, fetchOpts);
         } else {
             try {
-                res = await fetch(url, { ...options, headers });
+                res = await fetch(url, fetchOpts);
             } catch (e) {
                 const t = translations();
                 const isCors = e.name === 'TypeError' || /fetch/i.test(e.message);

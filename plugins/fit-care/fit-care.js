@@ -37,7 +37,7 @@ Object.assign(window.FitCarePlugin, {
         chatDraft: '',
         showPrivate: false,
         planViewId: null,
-        planWeek: 'template',
+        planWeek: null,
         healthPage: 0,
         cyclesPage: 0,
         intimacyPage: 0
@@ -434,6 +434,7 @@ Object.assign(window.FitCarePlugin, {
         this.state.planDays = this.state.activePlan ? (DB.getFitPlanDays(this.state.activePlan.id) || []) : [];
         this.state.protocols = DB.getFitProtocols();
         this.state.cycles = cycleOn ? DB.getFitCycles() : [];
+        this._cycleStatsCache = null;
     },
 
     refresh() {
@@ -471,13 +472,28 @@ Object.assign(window.FitCarePlugin, {
         return this.state.activePlan;
     },
 
+    // Plan weeks follow the calendar (Mon–Sun), not rolling 7-day blocks from the
+    // start date: week cards are labelled Mon…Sun, so a Wednesday start must not
+    // shift "Monday" onto Thursday. Days before start_date belong to week 1 but
+    // are not part of the plan.
+    planWeekStartKey(plan) {
+        return plan && plan.start_date ? this.dateKey(this.startOfWeek(plan.start_date)) : '';
+    },
+
+    planSpan(plan) {
+        if (!plan || !plan.start_date) return null;
+        const weekStart = this.planWeekStartKey(plan);
+        const totalWeeks = Math.max(1, Number(plan.weeks) || 1);
+        const end = this.addDays(weekStart, totalWeeks * 7 - 1);
+        return { weekStart, end, totalWeeks };
+    },
+
     getPlanSessionForDate(date) {
         const plan = this.getActivePlan();
-        if (!plan || !plan.start_date) return null;
-        const totalDays = Number(plan.weeks || 0) * 7;
-        const offset = this.diffDays(plan.start_date, date);
-        if (offset < 0 || offset >= totalDays) return null;
-        const week = Math.floor(offset / 7) + 1;
+        const span = plan ? this.planSpan(plan) : null;
+        if (!span) return null;
+        if (date < plan.start_date || date > span.end) return null;
+        const week = Math.floor(this.diffDays(span.weekStart, date) / 7) + 1;
         const weekday = this.weekdayIndex(date);
         const days = (this.state.planDays || []).filter((day) => Number(day.plan_id) === Number(plan.id));
         const exact = days.find((day) => Number(day.week_index) === week && Number(day.weekday) === weekday);
@@ -490,9 +506,11 @@ Object.assign(window.FitCarePlugin, {
 
     getActivePlanProgress() {
         const plan = this.getActivePlan();
-        if (!plan || !plan.start_date) return null;
-        const totalDays = Number(plan.weeks || 0) * 7;
-        const elapsed = Math.min(Math.max(this.diffDays(plan.start_date, this.todayKey()) + 1, 0), totalDays);
+        const span = plan ? this.planSpan(plan) : null;
+        if (!span) return null;
+        const today = this.todayKey();
+        const totalDays = Math.max(1, this.diffDays(plan.start_date, span.end) + 1);
+        const elapsed = Math.min(Math.max(this.diffDays(plan.start_date, today) + 1, 0), totalDays);
         const sessionsPerWeek = (this.state.planDays || []).filter((day) => (
             Number(day.plan_id) === Number(plan.id) &&
             Number(day.week_index) === 0 &&
@@ -503,67 +521,37 @@ Object.assign(window.FitCarePlugin, {
             elapsedDays: elapsed,
             totalDays,
             percent: totalDays ? Math.round((elapsed / totalDays) * 100) : 0,
-            currentWeek: Math.min(Math.floor(elapsed / 7) + 1, Number(plan.weeks || 1)),
-            sessionsPerWeek
+            currentWeek: Math.min(Math.max(Math.floor(this.diffDays(span.weekStart, today) / 7) + 1, 1), Number(plan.weeks || 1)),
+            inPlan: today >= plan.start_date && today <= span.end,
+            beforeStart: today < plan.start_date,
+            finished: today > span.end,
+            sessionsPerWeek,
+            weekStart: span.weekStart,
+            end: span.end
         };
     },
 
     // ---------- cycle engine ----------
-    averageCycleLength() {
-        const profile = this.state.profile || {};
-        const lengths = (this.state.cycles || [])
-            .map((cycle) => Number(cycle.cycle_length))
-            .filter((length) => Number.isFinite(length) && length >= 15 && length <= 60)
-            .slice(-6);
-        if (lengths.length >= 2) {
-            return Math.round(lengths.reduce((sum, value) => sum + value, 0) / lengths.length);
+    // The maths lives in DB.getFitCycleStats/getFitCycleInfo; this wrapper only
+    // caches the stats for one render pass so a 42-cell month does not recompute them.
+    cycleStats() {
+        if (!this._cycleStatsCache) {
+            this._cycleStatsCache = (window.DB && typeof window.DB.getFitCycleStats === 'function')
+                ? window.DB.getFitCycleStats()
+                : { tracking: false, cycles: [], lengths: [], avg: 28, confidence: 'none' };
         }
-        return Number(profile.cycle_length) || 28;
+        return this._cycleStatsCache;
+    },
+
+    averageCycleLength() {
+        return this.cycleStats().avg;
     },
 
     getCycleInfo(date) {
-        const profile = this.state.profile || {};
-        if (!Number(profile.cycle_tracking)) {
-            return { tracking: false, hasData: false, phase: '', day: null };
-        }
-        const cycles = (this.state.cycles || []).filter((cycle) => cycle.start_date);
-        if (!cycles.length) {
-            return { tracking: true, hasData: false, phase: '', day: null, avg: Number(profile.cycle_length) || 28 };
-        }
-        const reference = cycles.filter((cycle) => cycle.start_date <= date).pop();
-        if (!reference) {
-            return { tracking: true, hasData: false, phase: '', day: null, avg: this.averageCycleLength() };
-        }
-        const avg = this.averageCycleLength();
-        const luteal = Math.min(Math.max(Number(profile.luteal_length) || 14, 7), Math.max(avg - 7, 7));
-        const periodLength = Math.min(Math.max(Number(profile.period_length) || 5, 1), avg);
-        const offset = this.diffDays(reference.start_date, date);
-        const predictedCycles = Math.max(0, Math.floor(offset / avg));
-        const cycleStart = this.addDays(reference.start_date, predictedCycles * avg);
-        const cycleDay = this.diffDays(cycleStart, date) + 1;
-        const ovulationDay = Math.max(periodLength + 1, avg - luteal + 1);
-        const fertileStart = Math.max(periodLength + 1, ovulationDay - 5);
-        const fertileEnd = Math.min(avg, ovulationDay + 1);
-        let phase = 'luteal';
-        if (cycleDay <= periodLength) phase = 'menstrual';
-        else if (cycleDay === ovulationDay) phase = 'ovulation';
-        else if (cycleDay >= fertileStart && cycleDay <= fertileEnd) phase = 'fertile';
-        else if (cycleDay < fertileStart) phase = 'follicular';
-        return {
-            tracking: true,
-            hasData: true,
-            phase,
-            day: cycleDay,
-            avg,
-            periodLength,
-            cycleStart,
-            ovulationDay,
-            fertileStart,
-            fertileEnd,
-            nextPeriod: this.addDays(cycleStart, avg),
-            predicted: predictedCycles > 0,
-            lastStart: reference.start_date
-        };
+        const info = (window.DB && typeof window.DB.getFitCycleInfo === 'function')
+            ? window.DB.getFitCycleInfo(date || this.todayKey(), this.cycleStats())
+            : null;
+        return info || { tracking: false, hasData: false, phase: '', day: null };
     },
 
     getDosesForDate(date) {
@@ -783,16 +771,16 @@ Object.assign(window.FitCarePlugin, {
                 this.toggleDose(date, el.dataset);
                 return;
             case 'cycle-start':
-                window.DB.startFitCycle(date);
-                this.closeModal();
-                this.refresh();
-                this.toast(this.t('cycle_started'), 'success');
+                this.requestCycleStart(date);
+                return;
+            case 'cycle-start-move':
+                this.applyCycleStartMove(date, el.dataset.id);
                 return;
             case 'cycle-end':
-                window.DB.endFitCycle(date);
-                this.closeModal();
-                this.refresh();
-                this.toast(this.t('cycle_ended'), 'success');
+                this.requestCycleEnd(date);
+                return;
+            case 'cycle-end-confirm':
+                this.applyCycleEnd(date, el.dataset.id);
                 return;
             case 'enable-cycle':
                 window.DB.saveFitProfile({ cycle_tracking: 1 });
@@ -1402,6 +1390,149 @@ Object.assign(window.FitCarePlugin, {
         this.toast(this.t('toast_saved'), 'success');
     },
 
+    // A start/end mark silently moves predictions, so both go through a check:
+    // future dates are refused, duplicates and double taps are recognised, and
+    // unusual gaps need an explicit confirmation instead of a silent overwrite.
+    requestCycleStart(date) {
+        const key = date || this.todayKey();
+        if (key > this.todayKey()) {
+            this.toast(this.t('cycle_future_date'), 'error');
+            return;
+        }
+        const cycles = (this.state.cycles || []).filter((cycle) => cycle.start_date);
+        const same = cycles.find((cycle) => cycle.start_date === key);
+        if (same) {
+            this.toast(this.t('cycle_start_exists', { date: this.formatShortDate(same.start_date) }), 'info');
+            return;
+        }
+        const previous = cycles.filter((cycle) => cycle.start_date < key).pop() || null;
+        if (previous) {
+            const gap = this.diffDays(previous.start_date, key);
+            if (gap > 0 && gap < 10) {
+                this.openCycleStartConfirm(key, previous, gap);
+                return;
+            }
+        }
+        this.applyCycleStart(key);
+    },
+
+    applyCycleStart(date) {
+        const result = window.DB.startFitCycle(date);
+        if (!result) {
+            this.toast(this.t('cycle_future_date'), 'error');
+            return;
+        }
+        if (!result.created) {
+            this.toast(this.t('cycle_start_exists', { date: this.formatShortDate(result.start_date) }), 'info');
+            return;
+        }
+        this.closeModal();
+        this.refresh();
+        this.toast(this.t('cycle_started_on', { date: this.formatShortDate(result.start_date) }), 'success');
+    },
+
+    applyCycleStartMove(date, cycleId) {
+        const id = window.DB.moveFitCycleStart(Number(cycleId), date);
+        if (!id) {
+            this.toast(this.t('toast_error'), 'error');
+            return;
+        }
+        this.closeModal();
+        this.refresh();
+        this.toast(this.t('cycle_started_on', { date: this.formatShortDate(date) }), 'success');
+    },
+
+    openCycleStartConfirm(date, previous, gap) {
+        this.openModal({
+            title: this.t('cycle_start_confirm_title'),
+            body: `<p class="fit-muted" style="margin:0;font-size:.8rem;line-height:1.55">${this.esc(this.t('cycle_start_confirm_text', {
+                date: this.formatShortDate(previous.start_date),
+                days: gap,
+                new_date: this.formatShortDate(date)
+            }))}</p>`,
+            footer: `
+                <button type="button" class="fit-btn fit-btn-ghost" data-fit-action="close-modal">${this.esc(this.t('cycle_keep_existing'))}</button>
+                <button type="button" class="fit-btn fit-btn-primary" data-fit-action="cycle-start-move" data-date="${date}" data-id="${previous.id}">${this.esc(this.t('cycle_move_start', { date: this.formatShortDate(date) }))}</button>
+            `
+        });
+    },
+
+    requestCycleEnd(date) {
+        const key = date || this.todayKey();
+        if (key > this.todayKey()) {
+            this.toast(this.t('cycle_future_date'), 'error');
+            return;
+        }
+        const cycle = (this.state.cycles || [])
+            .filter((item) => item.start_date && item.start_date <= key)
+            .pop() || null;
+        if (!cycle) {
+            this.toast(this.t('cycle_no_active'), 'error');
+            return;
+        }
+        if (cycle.end_date === key) {
+            this.toast(this.t('cycle_end_exists', { date: this.formatShortDate(key) }), 'info');
+            return;
+        }
+        const days = this.diffDays(cycle.start_date, key) + 1;
+        if (days > 15) {
+            this.openCycleEndConfirm(key, cycle, days);
+            return;
+        }
+        this.applyCycleEnd(key, cycle.id);
+    },
+
+    applyCycleEnd(date, cycleId) {
+        const id = window.DB.endFitCycle(date, cycleId ? Number(cycleId) : null);
+        if (!id) {
+            this.toast(this.t('cycle_no_active'), 'error');
+            return;
+        }
+        this.closeModal();
+        this.refresh();
+        this.toast(this.t('cycle_ended_on', { date: this.formatShortDate(date) }), 'success');
+    },
+
+    openCycleEndConfirm(date, cycle, days) {
+        this.openModal({
+            title: this.t('cycle_end_confirm_title'),
+            body: `<p class="fit-muted" style="margin:0;font-size:.8rem;line-height:1.55">${this.esc(this.t('cycle_end_confirm_text', {
+                date: this.formatShortDate(cycle.start_date),
+                days
+            }))}</p>`,
+            footer: `
+                <button type="button" class="fit-btn fit-btn-ghost" data-fit-action="close-modal">${this.esc(this.t('cancel'))}</button>
+                <button type="button" class="fit-btn fit-btn-primary" data-fit-action="cycle-end-confirm" data-date="${date}" data-id="${cycle.id}">${this.esc(this.t('cycle_end_anyway'))}</button>
+            `
+        });
+    },
+
+    // Logging flow without a recent "first day" is the usual way tracking starts
+    // by accident, so offer to record the start instead of leaving predictions stale.
+    offerCycleStart(date) {
+        if (!this.cycleEnabled()) return;
+        const key = date || this.state.selectedDate || this.todayKey();
+        const cycles = (this.state.cycles || []).filter((cycle) => cycle.start_date);
+        const recent = cycles.some((cycle) => {
+            const gap = this.diffDays(cycle.start_date, key);
+            return gap >= 0 && gap <= 10;
+        });
+        const upcoming = cycles.some((cycle) => {
+            const gap = this.diffDays(key, cycle.start_date);
+            return gap > 0 && gap <= 10;
+        });
+        if (recent || upcoming) return;
+        this.openModal({
+            title: this.t('cycle_start_prompt_title'),
+            subtitle: this.formatDate(key, { day: 'numeric', month: 'long' }),
+            body: `<p class="fit-muted" style="margin:0;font-size:.8rem;line-height:1.55">${this.esc(this.t('cycle_start_prompt_text', { date: this.formatShortDate(key) }))}</p>`,
+            footer: `
+                <button type="button" class="fit-btn fit-btn-ghost" data-fit-action="close-modal">${this.esc(this.t('cycle_start_prompt_no'))}</button>
+                <button type="button" class="fit-btn fit-btn-primary" data-fit-action="cycle-start" data-date="${key}"><i data-lucide="play"></i>${this.esc(this.t('cycle_start_prompt_yes'))}</button>
+            `
+        });
+    },
+
     openCycleModal(date) {
         const profile = this.state.profile || {};
         if (!Number(profile.cycle_tracking)) {
@@ -1447,14 +1578,18 @@ Object.assign(window.FitCarePlugin, {
 
     saveCycleLog(form) {
         const date = form.dataset.date;
-        window.DB.saveFitCycleLog({
-            log_date: date,
-            flow: this.fieldValue(form, 'flow'),
-            note: this.fieldValue(form, 'note')
-        });
+        const flow = this.fieldValue(form, 'flow');
+        const note = this.fieldValue(form, 'note');
+        if (!flow && !String(note || '').trim()) {
+            // An empty row would still count as a logged cycle day, so remove it.
+            window.DB.deleteFitCycleLog(date);
+        } else {
+            window.DB.saveFitCycleLog({ log_date: date, flow, note });
+        }
         this.closeModal();
         this.refresh();
         this.toast(this.t('toast_saved'), 'success');
+        if (flow) this.offerCycleStart(date);
     },
 
     openIntimacyModal(date, entry) {
@@ -1582,7 +1717,16 @@ Object.assign(window.FitCarePlugin, {
         }
         const cycle = this.getCycleInfo(date);
         if (cycle.tracking && cycle.hasData) {
-            lines.push(`Cycle context: day ${cycle.day}, phase ${this.t(`cycle_phase_${cycle.phase}`)}${cycle.predicted ? ' (predicted)' : ''}. Predicted next period: ${cycle.nextPeriod}. Predictions are estimates and not contraception.`);
+            const kind = cycle.confidence === 'recorded' ? 'recorded' : 'estimated';
+            let line = `Cycle context: ${kind} cycle day ${cycle.day}, phase ${cycle.phase}, started ${cycle.cycleStart}. Next period forecast: ${cycle.nextPeriod}. Forecasts are estimates and not contraception.`;
+            if (cycle.stale) {
+                line += ` Warning: the last logged start was ${cycle.daysSinceLastStart} days ago and at least two expected starts were never logged, so this forecast is stale. Do not treat the phase as reliable; if the user confirms a period, ask for the exact first day and record CYCLE_START.`;
+            } else if (cycle.confidence === 'estimated') {
+                line += ' This phase is forecast because the current period start is not logged.';
+            }
+            lines.push(line);
+        } else if (cycle.tracking && !cycle.hasData) {
+            lines.push('Cycle tracking is on but no first day has been recorded, so there is no cycle context. If the user says her period started, record CYCLE_START with that date.');
         }
         return lines.join('\n');
     },

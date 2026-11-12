@@ -72,7 +72,7 @@ Object.assign(window.FitCarePlugin, {
                             <label class="fit-field">
                                 <span>${this.esc(this.t('current_weight'))}</span>
                                 <input class="fit-input" type="number" inputmode="decimal" name="current_weight"
-                                    min="20" max="400" step="0.1" value="${this.esc(num(latestWeight))}">
+                                    min="20" max="400" step="0.1" value="${this.esc(num(latestWeight))}" data-initial="${this.esc(num(latestWeight))}">
                                 <small>${this.esc(latestWeightRow ? this.t('weight_logged_at', { date: this.formatShortDate(latestWeightRow.log_date) }) : this.t('current_weight_hint'))}</small>
                             </label>
                             <label class="fit-field">
@@ -396,8 +396,13 @@ Object.assign(window.FitCarePlugin, {
             calorie_min: calorieMin,
             calorie_max: calorieMax
         });
+        // The field is pre-filled with the latest weight, so saving an unrelated
+        // profile change must not write that old value into today's journal.
+        const weightInput = form.elements.namedItem('current_weight');
         const currentWeight = this.fieldNumber(form, 'current_weight');
-        if (currentWeight !== null) {
+        const initialWeight = weightInput ? Number(weightInput.dataset.initial) : NaN;
+        const weightChanged = currentWeight !== null && (!Number.isFinite(initialWeight) || currentWeight !== initialWeight);
+        if (weightChanged) {
             window.DB.saveFitDailyLog({ log_date: this.todayKey(), weight: currentWeight });
             this.loadAll();
         }

@@ -26,8 +26,8 @@ export class SyncTransport {
         return this.adapter.readNamed(name);
     }
 
-    async writeBytes(name, bytes) {
-        return this.adapter.writeNamed(name, bytes);
+    async writeBytes(name, bytes, opts) {
+        return this.adapter.writeNamed(name, bytes, opts);
     }
 
     async readJson(name) {
@@ -66,13 +66,15 @@ export class SyncTransport {
         const safeGen = String(generation).padStart(6, '0');
         const name = `${SYNC_FILES.snapshotPrefix}${safeGen}_${deviceId}_${SyncCore.revSuffix(rev)}.bin`;
         const encrypted = await SyncCore.encryptBytes(workspaceKey, bytes);
-        await this.writeBytes(name, encrypted);
+        // Snapshot names are unique (generation + device + rev), so the provider
+        // can create the file directly instead of looking it up first.
+        await this.writeBytes(name, encrypted, { fresh: true });
         return {
             v: HEAD_VERSION,
             baseId,
             head: name,
             parents,
-            lineage: lineage.slice(-20),
+            lineage: lineage.slice(-100),
             generation,
             rev,
             device: deviceId,

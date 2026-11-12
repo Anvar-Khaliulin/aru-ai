@@ -46,11 +46,19 @@ Object.assign(window.FitCarePlugin, {
             Number(day.week_index) === 0 &&
             (day.title || day.focus || this.parseExercises(day.exercises).length)
         )).length;
-        const selectedWeek = this.state.planWeek === 'template' ? 0 : Number(this.state.planWeek);
+        // Opening the Plan tab lands on the current calendar week instead of the
+        // template, which is what people actually look at mid-plan.
+        const autoWeek = progress && progress.inPlan ? String(progress.currentWeek) : 'template';
+        const selectedWeek = this.state.planWeek == null
+            ? (autoWeek === 'template' ? 0 : Number(autoWeek))
+            : (this.state.planWeek === 'template' ? 0 : Number(this.state.planWeek));
         const weekIndex = Number.isFinite(selectedWeek) ? selectedWeek : 0;
+        const currentWeek = progress && progress.inPlan ? progress.currentWeek : 0;
         const weekTabs = [`<button type="button" class="fit-week-tab ${weekIndex === 0 ? 'is-active' : ''}" data-fit-action="plan-week" data-week="template">${this.esc(this.t('plan_template'))}</button>`];
         for (let week = 1; week <= Number(plan.weeks || 0); week++) {
-            weekTabs.push(`<button type="button" class="fit-week-tab ${weekIndex === week ? 'is-active' : ''}" data-fit-action="plan-week" data-week="${week}">${this.esc(this.t('plan_week'))} ${week}</button>`);
+            const isCurrent = week === currentWeek && weekIndex !== week;
+            const dot = isCurrent ? '<span class="fit-week-tab-dot" aria-hidden="true"></span>' : '';
+            weekTabs.push(`<button type="button" class="fit-week-tab ${weekIndex === week ? 'is-active' : ''} ${week === currentWeek ? 'is-current' : ''}" data-fit-action="plan-week" data-week="${week}" title="${this.esc(this.t('plan_week'))} ${week}${week === currentWeek ? ` · ${this.t('today')}` : ''}">${dot}${this.esc(this.t('plan_week'))} ${week}</button>`);
         }
 
         const chips = plans.length > 1 ? `
@@ -64,7 +72,9 @@ Object.assign(window.FitCarePlugin, {
             </div>
         ` : '';
 
-        const goalLabel = plan.goal ? this.t(`plan_goal_${plan.goal}`) : '';
+        const goalKey = plan.goal ? `plan_goal_${plan.goal}` : '';
+        const goalTranslated = goalKey ? this.t(goalKey) : '';
+        const goalLabel = plan.goal ? (goalTranslated === goalKey ? String(plan.goal) : goalTranslated) : '';
         const bannerBits = [];
         if (goalLabel) bannerBits.push(goalLabel);
         if (plan.start_date) bannerBits.push(`${this.t('plan_start')}: ${this.formatShortDate(plan.start_date)}`);
@@ -122,7 +132,15 @@ Object.assign(window.FitCarePlugin, {
                     </div>
                 ` : ''}
                 <div class="fit-card">
-                    <div class="fit-week-tabs">${weekTabs.join('')}</div>
+                    <div class="fit-week-tabs-wrap">
+                        <button type="button" class="fit-week-nav" data-fit-action="plan-week-scroll" data-dir="-1" aria-label="${this.esc(this.t('cal_prev'))}">
+                            <i data-lucide="chevron-left"></i>
+                        </button>
+                        <div class="fit-week-tabs" role="tablist" aria-label="${this.esc(this.t('plan_weeks'))}">${weekTabs.join('')}</div>
+                        <button type="button" class="fit-week-nav" data-fit-action="plan-week-scroll" data-dir="1" aria-label="${this.esc(this.t('cal_next'))}">
+                            <i data-lucide="chevron-right"></i>
+                        </button>
+                    </div>
                     <p class="fit-muted" style="margin:0 0 12px;font-size:.7rem">${this.esc(weekHint)}</p>
                     <div class="fit-plan-days">
                         ${[1, 2, 3, 4, 5, 6, 7].map((weekday) => this.renderPlanDayCard(plan, days, weekIndex, weekday)).join('')}
@@ -130,6 +148,17 @@ Object.assign(window.FitCarePlugin, {
                 </div>
             </div>
         `;
+        setTimeout(() => this.scrollPlanWeekTabs(false), 0);
+    },
+
+    // Up to 52 week tabs never fit on a phone, so the row scrolls horizontally
+    // and keeps the active week centred.
+    scrollPlanWeekTabs(smooth = true) {
+        const tabs = document.querySelector('#fit-view .fit-week-tabs');
+        const active = tabs && tabs.querySelector('.fit-week-tab.is-active');
+        if (!tabs || !active) return;
+        const target = active.offsetLeft - (tabs.clientWidth - active.offsetWidth) / 2;
+        tabs.scrollTo({ left: Math.max(0, target), behavior: smooth ? 'smooth' : 'auto' });
     },
 
     currentPlan() {
@@ -141,27 +170,34 @@ Object.assign(window.FitCarePlugin, {
         let plan = plans.find((item) => Number(item.id) === Number(this.state.planViewId));
         if (!plan) plan = this.state.activePlan || plans[0];
         this.state.planViewId = plan.id;
-        if (this.state.planWeek !== 'template' && Number(this.state.planWeek) > Number(plan.weeks || 0)) {
+        if (this.state.planWeek != null && this.state.planWeek !== 'template' && Number(this.state.planWeek) > Number(plan.weeks || 0)) {
             this.state.planWeek = 'template';
         }
         return plan;
     },
 
     getPlanDisplayProgress(plan) {
-        if (!plan || !plan.start_date) return null;
+        const span = this.planSpan(plan);
+        if (!span) return null;
+        const today = this.todayKey();
         const totalWeeks = Number(plan.weeks) || 0;
-        const totalDays = totalWeeks * 7;
-        const elapsed = Math.min(Math.max(this.diffDays(plan.start_date, this.todayKey()) + 1, 0), totalDays);
+        const totalDays = Math.max(1, this.diffDays(plan.start_date, span.end) + 1);
+        const elapsed = Math.min(Math.max(this.diffDays(plan.start_date, today) + 1, 0), totalDays);
         return {
             percent: totalDays ? Math.round((elapsed / totalDays) * 100) : 0,
-            currentWeek: Math.min(Math.floor(elapsed / 7) + 1, Math.max(totalWeeks, 1)),
-            totalWeeks
+            currentWeek: Math.min(Math.max(Math.floor(this.diffDays(span.weekStart, today) / 7) + 1, 1), Math.max(totalWeeks, 1)),
+            totalWeeks,
+            inPlan: today >= plan.start_date && today <= span.end,
+            beforeStart: today < plan.start_date,
+            finished: today > span.end,
+            end: span.end
         };
     },
 
     planDateForWeekday(plan, weekIndex, weekday) {
-        if (!plan || !plan.start_date || !weekIndex) return '';
-        return this.addDays(plan.start_date, (Number(weekIndex) - 1) * 7 + (Number(weekday) - 1));
+        if (!plan || !plan.start_date || !Number(weekIndex)) return '';
+        const weekStart = this.planWeekStartKey(plan);
+        return this.addDays(weekStart, (Number(weekIndex) - 1) * 7 + (Number(weekday) - 1));
     },
 
     renderPlanDayCard(plan, days, weekIndex, weekday) {
@@ -173,14 +209,18 @@ Object.assign(window.FitCarePlugin, {
         const inherited = weekIndex > 0 && !exact && !!day;
         const title = isRest ? this.t('rest_day') : (day.title || day.focus || this.t('day_plan'));
         const sessionDate = weekIndex > 0 ? this.planDateForWeekday(plan, weekIndex, weekday) : '';
-        const planEnd = plan.start_date ? this.addDays(plan.start_date, Number(plan.weeks || 0) * 7 - 1) : '';
-        const canLog = plan.status === 'active' && !!sessionDate && sessionDate <= this.todayKey() && (!planEnd || sessionDate <= planEnd);
+        const span = this.planSpan(plan);
+        const planEnd = span ? span.end : '';
+        const beforeStart = !!sessionDate && !!plan.start_date && sessionDate < plan.start_date;
+        const afterEnd = !!sessionDate && !!planEnd && sessionDate > planEnd;
+        const canLog = plan.status === 'active' && !!sessionDate && !beforeStart && !afterEnd && sessionDate <= this.todayKey();
         let existing = null;
         if (canLog && day) {
             const workouts = window.DB.getFitWorkouts(sessionDate, sessionDate) || [];
             existing = workouts.find((workout) => Number(workout.plan_day_id) === Number(day.id)) || null;
         }
         const badges = [];
+        if (beforeStart) badges.push(`<span class="fit-badge" style="padding:1px 6px">${this.esc(this.t('plan_before_start'))}</span>`);
         if (inherited) badges.push(`<span class="fit-badge" style="padding:1px 6px">${this.esc(this.t('plan_template_badge'))}</span>`);
         if (exact && weekIndex > 0) badges.push(`<span class="fit-badge fit-badge-accent" style="padding:1px 6px">${this.esc(this.t('plan_override_badge'))}</span>`);
         if (existing) badges.push(`<span class="fit-badge fit-badge-green" style="padding:1px 6px"><i data-lucide="check"></i>${this.esc(this.t('plan_logged'))}</span>`);
@@ -191,7 +231,7 @@ Object.assign(window.FitCarePlugin, {
         const more = exercises.length > 4 ? `<span class="fit-badge">+${exercises.length - 4}</span>` : '';
 
         return `
-            <div class="fit-plan-day ${isRest ? 'is-rest' : ''} ${sessionDate === this.todayKey() ? 'is-today' : ''}"
+            <div class="fit-plan-day ${isRest ? 'is-rest' : ''} ${sessionDate === this.todayKey() ? 'is-today' : ''} ${beforeStart ? 'is-before-start' : ''}"
                 role="button" tabindex="0" data-fit-action="plan-edit-day" data-plan="${plan.id}" data-week="${weekIndex}" data-weekday="${weekday}">
                 <div class="fit-plan-day-head">
                     <span>${this.esc(headMeta)}</span>
@@ -214,9 +254,12 @@ Object.assign(window.FitCarePlugin, {
 
     openPlanModal(plan) {
         const existing = plan || null;
-        const goalOptions = ['strength', 'fat_loss', 'endurance', 'mobility', 'general']
+        const knownGoals = ['strength', 'fat_loss', 'endurance', 'mobility', 'general'];
+        const extraGoal = existing && existing.goal && !knownGoals.includes(existing.goal) ? String(existing.goal) : null;
+        const goalOptions = knownGoals
             .map((goal) => `<option value="${goal}" ${existing && existing.goal === goal ? 'selected' : ''}>${this.esc(this.t(`plan_goal_${goal}`))}</option>`)
-            .join('');
+            .join('')
+            + (extraGoal ? `<option value="${this.esc(extraGoal)}" selected>${this.esc(extraGoal)}</option>` : '');
         const body = `
             <form id="fit-form-plan" data-fit-form="plan" data-id="${existing ? existing.id : ''}" class="fit-form-grid">
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('plan_name'))}</span>
@@ -267,7 +310,7 @@ Object.assign(window.FitCarePlugin, {
             notes: this.fieldValue(form, 'notes')
         });
         this.state.planViewId = id;
-        this.state.planWeek = 'template';
+        this.state.planWeek = null;
         this.closeModal();
         this.loadAll();
         this.render();
@@ -406,8 +449,14 @@ Object.assign(window.FitCarePlugin, {
                 const id = Number(el.dataset.id);
                 if (!id) return true;
                 this.state.planViewId = id;
-                this.state.planWeek = 'template';
+                this.state.planWeek = null;
                 this.render();
+                return true;
+            }
+            case 'plan-week-scroll': {
+                const tabs = document.querySelector('#fit-view .fit-week-tabs');
+                if (!tabs) return true;
+                tabs.scrollBy({ left: Number(el.dataset.dir || 0) * Math.max(160, tabs.clientWidth * 0.7), behavior: 'smooth' });
                 return true;
             }
             case 'plan-new':
@@ -454,6 +503,7 @@ Object.assign(window.FitCarePlugin, {
                 const week = el.dataset.week;
                 this.state.planWeek = week === 'template' ? 'template' : String(Number(week) || 1);
                 this.render();
+                setTimeout(() => this.scrollPlanWeekTabs(true), 0);
                 return true;
             }
             case 'plan-edit-day':

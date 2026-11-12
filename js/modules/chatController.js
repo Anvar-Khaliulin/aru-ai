@@ -106,6 +106,7 @@ export const ChatController = {
                 <div class="folder-children space-y-1 pl-2 mb-2 ${collapsed ? 'hidden' : ''}" data-folder-id="${folder.id}">
                     ${chats.length ? chats.map(c => ChatController.chatItemHTML(c)).join('') : `<div class="folder-empty text-xs text-gray-400 px-3 py-2 select-none">${t.folder_empty_hint || 'Перетащите чаты сюда'}</div>`}
                 </div>
+                ${collapsed ? `<div class="folder-dropzone" data-folder-id="${folder.id}">${t.folder_empty_hint || 'Перетащите чаты сюда'}</div>` : ''}
             </div>`;
     },
 
@@ -126,16 +127,6 @@ export const ChatController = {
             localStorage.setItem('aru_folder_collapsed', JSON.stringify(map));
         } catch (e) { }
         ChatController.loadChatsList();
-    },
-
-    expandFolder: (folderId) => {
-        try {
-            const map = JSON.parse(localStorage.getItem('aru_folder_collapsed') || '{}');
-            if (map[folderId]) {
-                delete map[folderId];
-                localStorage.setItem('aru_folder_collapsed', JSON.stringify(map));
-            }
-        } catch (e) { }
     },
 
     renderTabs: () => {
@@ -496,8 +487,20 @@ export const ChatController = {
             onStart: () => document.body.classList.add('chats-dragging'),
             onEnd: (evt) => {
                 document.body.classList.remove('chats-dragging');
-                const folderId = evt && evt.to && evt.to.dataset ? evt.to.dataset.folderId : null;
-                if (folderId) ChatController.expandFolder(folderId);
+                const to = evt && evt.to;
+                // Dropped on a collapsed folder: move the chat there without
+                // expanding the folder, so long folder lists stay reachable.
+                if (to && to.classList && to.classList.contains('folder-dropzone')) {
+                    const folderId = parseInt(to.dataset.folderId, 10);
+                    const chatId = evt.item.getAttribute('data-id');
+                    if (chatId && !Number.isNaN(folderId)) {
+                        const order = DB.getChats().filter(c => c.folder_id == folderId && String(c.id) !== String(chatId)).length;
+                        DB.setChatFolder(chatId, folderId, false);
+                        DB.updateChatOrder(chatId, order, false);
+                        DB.save().then(() => ChatController.loadChatsList());
+                    }
+                    return;
+                }
                 ChatController.persistChatOrder();
             },
         });
@@ -520,7 +523,7 @@ export const ChatController = {
             }));
         }
 
-        const containers = [list, ...document.querySelectorAll('.folder-children')];
+        const containers = [list, ...document.querySelectorAll('.folder-children'), ...document.querySelectorAll('.folder-dropzone')];
         containers.forEach(container => sortables.push(Sortable.create(container, chatSortableOptions())));
 
         ChatController._sortables = sortables;
