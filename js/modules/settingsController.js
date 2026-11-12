@@ -884,8 +884,7 @@ export const SettingsController = {
                         <span class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">${t.storage_v2_on || 'Включено'}</span>
                     </div>
                     <div class="text-xs text-gray-500 space-y-1">
-                        <div class="flex justify-between"><span>${t.storage_label_last_sync || 'Последняя синхронизация'}</span><b class="text-gray-700 dark:text-gray-300">${v2Label}</b></div>
-                        <div class="flex justify-between"><span>${t.storage_v2_conflicts || 'Разрешено конфликтов'}</span><b class="text-gray-700 dark:text-gray-300">${v2 ? engine.getConflictCount() : 0}</b></div>
+                        <div class="flex justify-between"><span>${t.storage_v2_updated || 'Данные обновлены'}</span><b class="text-gray-700 dark:text-gray-300">${v2Label}</b></div>
                         <div class="flex justify-between gap-4"><span>${t.storage_v2_base || 'Рабочая область'}</span><b class="text-gray-700 dark:text-gray-300 font-mono text-[10px] truncate">${esc((v2 && engine.getBaseId()) || '—')}</b></div>
                     </div>
                     <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">

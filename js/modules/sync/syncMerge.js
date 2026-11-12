@@ -6,7 +6,7 @@ concurrent edits are ordered by a hybrid logical clock. Deletions travel as
 tombstones, so an offline device cannot silently resurrect removed data.
 ---chat.aru-lab.space---PWA---
 */
-import { SYNC_TABLES, TABLE_BY_NAME, SYNC_META_COLUMNS, rowIdentity } from './syncRegistry.js';
+import { SYNC_TABLES, TABLE_BY_NAME, SYNC_META_COLUMNS, LOCAL_ONLY_SETTINGS, rowIdentity } from './syncRegistry.js';
 import { SyncCore, randomId } from './syncCore.js';
 
 const LEGACY_REV = '0000000000001-000000-legacy';
@@ -142,10 +142,39 @@ function resolveRefs(row, reg, remoteIdToUid, localIdByUid) {
     return out;
 }
 
-function applyRowUpdate(db, table, columns, values, localId) {
+function applyRowUpdate(db, reg, columns, values, local) {
     const sets = columns.map(c => `"${c}" = ?`).join(', ');
     const params = columns.map(c => (values[c] === undefined ? null : values[c]));
-    db.run(`UPDATE ${table} SET ${sets} WHERE id = ?`, [...params, localId]);
+    const where = rowWhere(reg, local);
+    db.run(`UPDATE ${reg.name} SET ${sets} WHERE ${where.sql}`, [...params, ...where.params]);
+}
+
+function applyRowDelete(db, reg, row) {
+    const where = rowWhere(reg, row);
+    db.run(`DELETE FROM ${reg.name} WHERE ${where.sql}`, where.params);
+}
+
+// Natural-key tables (settings, personality_state, fit_*) have no id column,
+// so they must be addressed by their identity instead of rowid.
+function rowWhere(reg, row) {
+    const identity = parseIdentity(reg);
+    if (identity && !identity.includes('id')) {
+        return {
+            sql: identity.map(c => `"${c}" = ?`).join(' AND '),
+            params: identity.map(c => row[c])
+        };
+    }
+    return { sql: 'id = ?', params: [row.id] };
+}
+
+// Device-local settings must never travel: they differ on every save and would
+// otherwise show up as endless conflicts and push noise.
+function stripLocalOnly(reg, map) {
+    if (reg.name !== 'settings') return map;
+    for (const [key, row] of map) {
+        if (LOCAL_ONLY_SETTINGS.has(row.key)) map.delete(key);
+    }
+    return map;
 }
 
 function applyRowInsert(db, table, columns, values) {
@@ -280,10 +309,10 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
             const cols = dataColumns(columns);
             const natural = parseIdentity(reg);
 
-            const localMap = buildMaps(reg, readRows(localDb, reg.name)).map;
-            const remoteMap = buildMaps(reg, readRows(remoteDb, reg.name)).map;
+            const localMap = stripLocalOnly(reg, buildMaps(reg, readRows(localDb, reg.name)).map);
+            const remoteMap = stripLocalOnly(reg, buildMaps(reg, readRows(remoteDb, reg.name)).map);
             const baseMap = baseDb && tableExists(baseDb, reg.name)
-                ? buildMaps(reg, readRows(baseDb, reg.name)).map
+                ? stripLocalOnly(reg, buildMaps(reg, readRows(baseDb, reg.name)).map)
                 : new Map();
 
             const keys = new Set([...localMap.keys(), ...remoteMap.keys(), ...baseMap.keys()]);
@@ -301,7 +330,7 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
                         if (!resolved) { stats.skipped++; logConflict(localDb, reg.name, remoteUid, 'missing_parent', rowRev(local), rowRev(remote), 'skipped'); continue; }
                         const values = { ...resolved };
                         if (natural) values.uid = local.uid; // keep local identity for natural keys
-                        applyRowUpdate(localDb, reg.name, columns.filter(c => c !== 'id'), values, local.id);
+                        applyRowUpdate(localDb, reg, columns.filter(c => c !== 'id'), values, local);
                         stats.updated++;
                         stats.changed = true;
                         continue;
@@ -315,7 +344,7 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
                         if (!resolved) { stats.skipped++; logConflict(localDb, reg.name, remoteUid, 'insert_collision', rowRev(local), rowRev(remote), 'skipped'); continue; }
                         const values = { ...resolved };
                         if (natural) values.uid = local.uid;
-                        applyRowUpdate(localDb, reg.name, columns.filter(c => c !== 'id'), values, local.id);
+                        applyRowUpdate(localDb, reg, columns.filter(c => c !== 'id'), values, local);
                         stats.updated++;
                         stats.changed = true;
                         stats.conflicts++;
@@ -343,7 +372,7 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
                     resolved.rev_device = merged.rev_device;
                     if (natural) resolved.uid = local.uid;
                     if (!rowsEqual(cols, resolved, local)) {
-                        applyRowUpdate(localDb, reg.name, columns.filter(c => c !== 'id'), resolved, local.id);
+                        applyRowUpdate(localDb, reg, columns.filter(c => c !== 'id'), resolved, local);
                         stats.updated++;
                         stats.merged++;
                         stats.changed = true;
@@ -359,7 +388,7 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
                     if (!base) continue; // Created locally only
                     if (rowsEqual(cols, local, base)) {
                         // Deleted remotely, untouched locally.
-                        localDb.run(`DELETE FROM ${reg.name} WHERE id = ?`, [local.id]);
+                        applyRowDelete(localDb, reg, local);
                         localIdByUid[reg.name]?.delete(local.uid);
                         stats.deleted++;
                         stats.changed = true;
@@ -369,7 +398,7 @@ export function mergeDatabases({ SQL, baseBytes, localBytes, remoteBytes }) {
                     // Delete vs update: the newer revision wins; without a tombstone keep the data.
                     const tomb = local.uid ? maxTomb(reg.name, local.uid) : null;
                     if (tomb && SyncCore.compareRev(tomb.rev, rowRev(local)) > 0) {
-                        localDb.run(`DELETE FROM ${reg.name} WHERE id = ?`, [local.id]);
+                        applyRowDelete(localDb, reg, local);
                         localIdByUid[reg.name]?.delete(local.uid);
                         stats.deleted++;
                         stats.changed = true;

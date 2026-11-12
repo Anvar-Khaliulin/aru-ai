@@ -40,7 +40,7 @@ export const SyncEngine = {
     _debounceTimer: null,
     _listenersBound: false,
     _lastMergeAt: 0,
-    _lastConflictToastAt: 0,
+    _lastMergeToastAt: 0,
 
     isEnabled() {
         return !!(this._started && this._workspaceKey && this._transport);
@@ -517,7 +517,7 @@ export const SyncEngine = {
                     await this._storeBase(remoteBytes);
                     this._saveMeta({ lastHead: head.head, lastSyncAt: Date.now(), lastRev: head.rev });
                     this._setStatus('cloud-synced');
-                    this._notifyConflicts(merged.stats.conflicts);
+                    this._notifyMerged();
                     return { ok: true, pulled: true };
                 }
 
@@ -563,7 +563,7 @@ export const SyncEngine = {
                 transport.cleanupSnapshots(desc.head, 12).catch(() => {});
                 this._lastMergeAt = Date.now();
                 this._setStatus('cloud-synced');
-                this._notifyConflicts(merged.stats.conflicts);
+                this._notifyMerged();
                 return { ok: true, merged: true, stats: merged.stats };
             }
 
@@ -580,13 +580,12 @@ export const SyncEngine = {
         }
     },
 
-    _notifyConflicts(count) {
-        if (!count) return;
+    _notifyMerged() {
         const now = Date.now();
-        if (now - this._lastConflictToastAt < 60000) return;
-        this._lastConflictToastAt = now;
-        const total = this.getConflictCount();
-        toast(`Изменения объединены. Разрешено конфликтов: ${count}${total ? ` (всего ${total})` : ''}`, 'git-merge');
+        if (now - this._lastMergeToastAt < 60000) return;
+        this._lastMergeToastAt = now;
+        const text = window.aruState?.translations?.sync_merged_toast || 'Данные обновлены с других устройств';
+        toast(text, 'git-merge');
     },
 
     // ---------- Status helpers for Settings ----------
