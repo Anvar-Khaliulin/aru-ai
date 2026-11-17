@@ -18,19 +18,23 @@ export const CanvasManager = {
 
         try {
             if (typeof MutationObserver !== 'undefined') {
-                this._themeObserver = new MutationObserver(mutations => {
-                    for (const m of mutations) {
-                        if (m.attributeName === 'class') {
-                            const isDark = document.documentElement.classList.contains('dark');
-                            Object.values(this.containers).forEach(({ iframe }) => {
-                                if (iframe && iframe.contentWindow && iframe.contentWindow.document) {
-                                    const doc = iframe.contentWindow.document.documentElement;
-                                    doc.classList.toggle('dark', isDark);
-                                    const body = iframe.contentWindow.document.body;
-                                    if (body) body.classList.toggle('dark', isDark);
-                                }
-                            });
+                this._themeObserver = new MutationObserver(() => {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    Object.values(this.containers).forEach(({ iframe }) => {
+                        if (!iframe) return;
+                        try {
+                            const doc = iframe.contentWindow.document;
+                            doc.documentElement.classList.toggle('dark', isDark);
+                            if (doc.body) doc.body.classList.toggle('dark', isDark);
+                        } catch (e) {
+                            // Artifacts run in a sandbox without same-origin access, so the
+                            // theme can only be applied at srcdoc render time.
+                            iframe.dataset.lastTheme = '';
                         }
+                    });
+                    const renderArea = document.getElementById('canvas-render-area');
+                    if (this.currentArtifact && renderArea && !renderArea.classList.contains('hidden')) {
+                        this.renderPreview();
                     }
                 });
                 this._themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -42,6 +46,10 @@ export const CanvasManager = {
 
     open() {
         this.panel.classList.remove('hidden');
+        // Artifacts can open the panel without going through ChatController.toggleCanvas,
+        // so the split handle has to follow the panel state here as well.
+        const resizer = document.getElementById('canvas-resizer');
+        if (resizer) resizer.classList.remove('hidden');
         if (window.innerWidth < 768) {
             this.panel.classList.add('absolute', 'z-50', 'w-full');
         }
@@ -49,6 +57,8 @@ export const CanvasManager = {
 
     close() {
         this.panel.classList.add('hidden');
+        const resizer = document.getElementById('canvas-resizer');
+        if (resizer) resizer.classList.add('hidden');
     },
 
     renderArtifact(type, title, code) {
@@ -147,10 +157,18 @@ export const CanvasManager = {
         if (type === 'doc') {
             if (typeof marked !== 'undefined') {
                 const docHtml = marked.parse(code);
-                const safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
-                finalCode = `<div class="prose prose-sm md:prose-base dark:prose-invert max-w-none">${safeHtml}</div>`;
+                let safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
+                // The chat markdown renderer injects a copy button that relies on the
+                // parent page cache; inside the sandbox it would be a dead icon.
+                try {
+                    const holder = document.createElement('div');
+                    holder.innerHTML = safeHtml;
+                    holder.querySelectorAll('div.rounded-xl > div:first-child > button').forEach(btn => btn.remove());
+                    safeHtml = holder.innerHTML;
+                } catch (e) { /* keep sanitized markup as-is */ }
+                finalCode = `<article class="aru-doc">${safeHtml}</article>`;
             } else {
-                finalCode = `<pre>${code}</pre>`;
+                finalCode = `<pre class="aru-doc">${code}</pre>`;
             }
         } else if (type === 'app' || type === 'game' || type === 'analytics') {
             if (!/<!DOCTYPE html>/i.test(code) && !/^\s*<html/i.test(code)) {
@@ -168,6 +186,95 @@ export const CanvasManager = {
             canvas, img, svg, video { max-width: 100% !important; height: auto !important; object-fit: contain; }
             body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; margin: 0; padding: 10px; overflow-x: hidden; }
             #app, #root, #game-container { max-width: 100%; width: 100%; }
+        ` : '';
+
+        // Text documents must read exactly like the "Edit" tab, which renders inside
+        // #doc-editor with the app transcript styles. The typography plugin is not
+        // available in the sandbox, so the document rules are spelled out here.
+        const docStyles = (type === 'doc') ? `
+            body {
+                margin: 0;
+                padding: 20px;
+                background: #ffffff;
+                color: #1f2937;
+                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 14px;
+                line-height: 1.65;
+                -webkit-font-smoothing: antialiased;
+            }
+            .dark body { background: #1c1c1e; color: #e5e7eb; }
+            .aru-doc { max-width: none; word-break: break-word; }
+            .aru-doc > :first-child { margin-top: 0; }
+            .aru-doc > :last-child { margin-bottom: 0; }
+            .aru-doc h1, .aru-doc h2, .aru-doc h3,
+            .aru-doc h4, .aru-doc h5, .aru-doc h6 {
+                margin: 0.9em 0 0.45em;
+                font-weight: 700;
+                line-height: 1.3;
+                letter-spacing: -0.01em;
+            }
+            .aru-doc h1 { font-size: 1.45em; }
+            .aru-doc h2 { font-size: 1.25em; }
+            .aru-doc h3 { font-size: 1.1em; }
+            .aru-doc h4, .aru-doc h5, .aru-doc h6 { font-size: 1em; }
+            .aru-doc p { margin: 0.5em 0; }
+            .aru-doc ul, .aru-doc ol { margin: 0.5em 0; padding-left: 1.4em; }
+            .aru-doc ul { list-style: disc; }
+            .aru-doc ol { list-style: decimal; }
+            .aru-doc li { margin: 0.2em 0; }
+            .aru-doc li > ul, .aru-doc li > ol { margin: 0.2em 0; }
+            .aru-doc input[type="checkbox"] { margin: 0 0.45em 0 0; vertical-align: middle; accent-color: #f97316; }
+            .aru-doc blockquote {
+                margin: 0.6em 0;
+                padding-left: 0.9em;
+                border-left: 3px solid #f97316;
+                color: #6b7280;
+            }
+            .dark .aru-doc blockquote { color: #9ca3af; }
+            .aru-doc a { color: #f97316; text-decoration: underline; }
+            .aru-doc strong { font-weight: 700; }
+            .aru-doc :not(pre) > code {
+                padding: 0.1em 0.35em;
+                border-radius: 4px;
+                background: #f3f4f6;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: 0.9em;
+            }
+            .dark .aru-doc :not(pre) > code { background: #1f2937; }
+            .aru-doc pre {
+                margin: 0.6em 0;
+                padding: 0.8em 1em;
+                border-radius: 8px;
+                background: #f3f4f6;
+                overflow-x: auto;
+            }
+            .dark .aru-doc pre { background: #1f2937; }
+            .aru-doc pre code { background: transparent; padding: 0; font-size: 0.92em; }
+            .aru-doc hr { margin: 1em 0; border: 0; border-top: 1px solid #e9e9ec; }
+            .dark .aru-doc hr { border-top-color: #2b2b2f; }
+            .aru-doc table { width: 100%; margin: 0.65em 0; border-collapse: collapse; font-size: 0.95em; }
+            .aru-doc th, .aru-doc td { padding: 6px 9px; text-align: left; }
+            .aru-doc th { background: #f4f4f6; font-weight: 700; }
+            .dark .aru-doc th { background: #232326; }
+            .aru-doc tbody tr:nth-child(even) { background: #fafafa; }
+            .dark .aru-doc tbody tr:nth-child(even) { background: #202023; }
+            .aru-doc img { max-width: 100%; height: auto; border-radius: 8px; }
+            /* Fenced code arrives as a chat-style card; keep its shape but drop the hairline. */
+            .aru-doc > div.rounded-xl {
+                margin: 0.9em 0 !important;
+                border: 0 !important;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 14px -8px rgba(15, 23, 42, 0.22) !important;
+            }
+            .dark .aru-doc > div.rounded-xl {
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 8px 18px -10px rgba(0, 0, 0, 0.65) !important;
+            }
+            .aru-doc > div.rounded-xl > div:first-child {
+                border-bottom: 0 !important;
+                background: #f4f4f6 !important;
+            }
+            .dark .aru-doc > div.rounded-xl > div:first-child { background: #232326 !important; }
+            .aru-doc > div.rounded-xl pre { background: #fafafa !important; }
+            .dark .aru-doc > div.rounded-xl pre { background: #18181b !important; }
         ` : '';
 
         // Sandboxed iframes get an opaque origin, so native localStorage/sessionStorage
@@ -201,6 +308,7 @@ export const CanvasManager = {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${storageShim}
+                ${type === 'doc' ? '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">' : ''}
                 <script src="https://cdn.tailwindcss.com"></script>
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -211,10 +319,11 @@ export const CanvasManager = {
                     ::-webkit-scrollbar { width: 6px; }
                     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
                     ${gameScaling}
+                    ${docStyles}
                 </style>
                 <script>tailwind.config = { darkMode: 'class' };</script>
             </head>
-            <body class="bg-white dark:bg-gray-900">
+            <body class="${type === 'doc' ? 'aru-doc-body' : 'bg-white dark:bg-gray-900'}">
                 ${finalCode}
                 <script>document.querySelectorAll('pre code').forEach((el) => hljs.highlightElement(el));</script>
             </body>

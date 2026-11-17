@@ -322,3 +322,117 @@
 .opacity-20 {
     opacity: 0.2 !important;
 }
+
+/* ---------- main app skin ---------- */
+/* Flat surfaces, soft shadows, no hairlines — the plugin follows the app shell. */
+
+:root {
+    --task-bg: var(--aru-surface);
+    --task-muted: var(--aru-surface-muted);
+    --task-hover: var(--aru-surface-hover);
+    --task-card: var(--aru-surface);
+    --task-text: var(--aru-text);
+    --task-subtle: var(--aru-text-muted);
+    --task-shadow: var(--aru-shadow-xs);
+}
+
+.dark {
+    --task-bg: var(--aru-surface);
+    --task-muted: var(--aru-surface-muted);
+    --task-hover: var(--aru-surface-hover);
+    --task-card: var(--aru-surface);
+    --task-text: var(--aru-text);
+    --task-subtle: var(--aru-text-muted);
+    --task-shadow: var(--aru-shadow-xs);
+}
+
+#task-plugin-root {
+    background: var(--aru-surface);
+    color: var(--aru-text);
+}
+
+#task-sidebar {
+    background: var(--aru-surface-muted);
+}
+
+.task-column {
+    border: 0;
+    border-radius: var(--aru-radius);
+    background: var(--aru-surface-muted);
+}
+
+.task-card {
+    border: 0;
+    background: var(--aru-surface);
+    box-shadow: var(--aru-shadow-xs);
+}
+
+.task-card:hover {
+    transform: none;
+    box-shadow: var(--aru-shadow-sm);
+}
+
+.task-column > button {
+    border: 0 !important;
+    background: transparent !important;
+    border-radius: var(--aru-radius-sm);
+}
+
+.task-column > button:hover {
+    background: var(--aru-surface-hover) !important;
+    color: var(--aru-accent);
+}
+
+#task-sidebar-backdrop {
+    background: var(--aru-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#task-detail-modal > div:last-of-type {
+    border: 0 !important;
+    border-radius: var(--aru-radius-lg) !important;
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-lg);
+}
+
+.task-modal-input {
+    border: 0;
+    background: var(--aru-surface-muted);
+    box-shadow: none;
+}
+
+.task-modal-input:focus {
+    background: var(--aru-surface-hover);
+    box-shadow: var(--aru-shadow-sm);
+    outline: none;
+}
+
+.btn-task-primary {
+    box-shadow: none;
+}
+
+#board-columns {
+    scrollbar-color: #c7c7cc transparent;
+}
+
+.dark #board-columns {
+    scrollbar-color: #45454b transparent;
+}
+
+#board-columns::-webkit-scrollbar-thumb {
+    background: #c7c7cc;
+    border: 0;
+}
+
+.dark #board-columns::-webkit-scrollbar-thumb {
+    background: #45454b;
+}
+
+.dark .task-card {
+    background: var(--aru-surface) !important;
+}
+
+.dark .task-column {
+    background: var(--aru-surface-muted) !important;
+}

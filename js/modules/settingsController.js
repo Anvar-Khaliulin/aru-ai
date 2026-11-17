@@ -23,15 +23,27 @@ export const SettingsController = {
         const target = document.getElementById(`tab-${tabName}`);
         if (target) target.classList.remove('hidden');
 
-        document.querySelectorAll('.tab-btn').forEach(el => {
-            el.classList.remove('border-aru-500', 'text-aru-600', 'dark:text-aru-400');
-            el.classList.add('border-transparent', 'text-gray-500');
+        const scope = document.getElementById('settings-dialog') || document;
+        scope.querySelectorAll('.settings-tab').forEach(el => {
+            const active = el.dataset.tab === tabName;
+            el.classList.toggle('is-active', active);
+            el.setAttribute('aria-selected', active ? 'true' : 'false');
+            // Legacy classes kept for DesktopMode's adopted copy of the dialog.
+            el.classList.toggle('border-aru-500', active);
+            el.classList.toggle('border-transparent', !active);
+            el.classList.toggle('text-aru-600', active);
+            el.classList.toggle('text-gray-500', !active);
         });
-        const activeBtn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
-        if (activeBtn) {
-            activeBtn.classList.remove('border-transparent', 'text-gray-500');
-            activeBtn.classList.add('border-aru-500', 'text-aru-600', 'dark:text-aru-400');
+
+        const body = scope.querySelector('.settings-body');
+        if (body) body.scrollTop = 0;
+
+        const nav = scope.querySelector('.settings-tabs');
+        const activeBtn = scope.querySelector('.settings-tab.is-active');
+        if (nav && activeBtn && nav.scrollWidth > nav.clientWidth) {
+            nav.scrollTo({ left: activeBtn.offsetLeft - (nav.clientWidth - activeBtn.offsetWidth) / 2, behavior: 'smooth' });
         }
+
         if (tabName === 'storage') SettingsController.renderStorageTab();
         if (tabName === 'state') SettingsController.renderStateTab();
     },
@@ -226,32 +238,53 @@ export const SettingsController = {
         const isOpt = (curr, val) => (curr === val ? 'selected' : '');
 
         const html = `
-        <div class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center bg-white/5 dark:bg-black/5 backdrop-blur-md fade-in p-2 md:p-4">
-            <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-2xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
-                <!-- Header -->
-                <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
-                    <h3 class="text-xl font-bold dark:text-white flex items-center gap-2">
-                        <i data-lucide="settings" class="w-6 h-6 text-aru-500"></i>
+        <div id="settings-dialog" class="fixed inset-0 z-[100] fade-in">
+            <div class="settings-shell w-full max-w-4xl h-[85vh] relative overflow-hidden">
+                <!-- Title bar -->
+                <header class="settings-header">
+                    <h3 class="flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-aru-500"></i>
                         <span>${t.settings_title || 'Настройки'}</span>
                     </h3>
-                    <button onclick="document.getElementById('modal-container').innerHTML=''" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
-                        <i data-lucide="x" class="w-6 h-6"></i>
+                    <button type="button" aria-label="${esc(t.btn_cancel || 'Close')}" onclick="document.getElementById('modal-container').innerHTML=''" class="settings-close p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
                     </button>
-                </div>
+                </header>
 
-                <!-- Tabs Header -->
-                <div class="flex border-b border-gray-100 dark:border-gray-800 px-4 overflow-x-auto no-scrollbar">
-                     <button onclick="app.switchTab('state')" data-tab="state" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-aru-500 text-aru-600 dark:text-aru-400 transition-colors whitespace-nowrap">${t.settings_tab_state || 'Состояние'}</button>
-                     <button onclick="app.switchTab('general')" data-tab="general" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_general || 'Общее'}</button>
-                     <button onclick="app.switchTab('memory')" data-tab="memory" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_memory || 'Память'}</button>
-                     <button onclick="app.switchTab('rss')" data-tab="rss" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_rss || 'Новости (RSS)'}</button>
-                     <button onclick="app.switchTab('network')" data-tab="network" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_network || 'Сеть'}</button>
-                     <button onclick="app.switchTab('storage')" data-tab="storage" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_storage || 'Хранилище'}</button>
-                     <button onclick="app.switchTab('security')" data-tab="security" class="tab-btn py-3 px-4 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors whitespace-nowrap">${t.settings_tab_security || 'Безопасность'}</button>
-                </div>
+                <!-- Sections: sidebar on desktop, scrolling icon strip on phones -->
+                <nav class="settings-tabs" role="tablist" aria-label="${esc(t.settings_title || 'Настройки')}">
+                    <button type="button" role="tab" aria-selected="true" onclick="app.switchTab('state')" data-tab="state" class="tab-btn settings-tab is-active">
+                        <i data-lucide="activity"></i><span data-i18n="settings_tab_state">${t.settings_tab_state || 'Состояние'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('general')" data-tab="general" class="tab-btn settings-tab">
+                        <i data-lucide="sliders-horizontal"></i><span data-i18n="settings_tab_general">${t.settings_tab_general || 'Общее'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('memory')" data-tab="memory" class="tab-btn settings-tab">
+                        <i data-lucide="brain"></i><span data-i18n="settings_tab_memory">${t.settings_tab_memory || 'Память'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('rss')" data-tab="rss" class="tab-btn settings-tab">
+                        <i data-lucide="rss"></i><span data-i18n="settings_tab_rss">${t.settings_tab_rss || 'Новости (RSS)'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('network')" data-tab="network" class="tab-btn settings-tab">
+                        <i data-lucide="network"></i><span data-i18n="settings_tab_network">${t.settings_tab_network || 'Сеть'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('storage')" data-tab="storage" class="tab-btn settings-tab">
+                        <i data-lucide="hard-drive"></i><span data-i18n="settings_tab_storage">${t.settings_tab_storage || 'Хранилище'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('security')" data-tab="security" class="tab-btn settings-tab">
+                        <i data-lucide="shield-check"></i><span data-i18n="settings_tab_security">${t.settings_tab_security || 'Безопасность'}</span>
+                    </button>
+                </nav>
+
+                <button type="button" class="settings-tabs-arrow is-prev" aria-label="${esc(t.settings_scroll_prev || 'Прокрутить разделы влево')}" data-i18n-title="settings_scroll_prev">
+                    <i data-lucide="chevron-left"></i>
+                </button>
+                <button type="button" class="settings-tabs-arrow is-next" aria-label="${esc(t.settings_scroll_next || 'Прокрутить разделы вправо')}" data-i18n-title="settings_scroll_next">
+                    <i data-lucide="chevron-right"></i>
+                </button>
 
                 <!-- Content Area -->
-                <div class="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar bg-white dark:bg-gray-950">
+                <div class="settings-body custom-scrollbar">
                     
                     <!-- State Dashboard Tab -->
                     <div id="tab-state" class="tab-content space-y-6 animate-fade-in">
@@ -625,18 +658,48 @@ export const SettingsController = {
                 </div>
 
                 <!-- Footer -->
-                <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-end bg-gray-50 dark:bg-gray-900/50">
-                    <button onclick="app.saveAllSettings()" class="px-6 py-2 bg-aru-500 hover:bg-aru-600 text-white rounded-xl font-bold transition shadow-lg shadow-aru-500/20 active:scale-95">
+                <footer class="settings-footer">
+                    <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" class="px-4 py-2 rounded-lg font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                        ${t.btn_cancel || 'Отмена'}
+                    </button>
+                    <button type="button" onclick="app.saveAllSettings()" class="settings-primary-button font-semibold transition active:scale-[0.98]">
                         ${t.btn_save_settings_short || 'Сохранить'}
                     </button>
-                </div>
+                </footer>
             </div>
         </div>`;
 
         modalContainer.innerHTML = html;
         SettingsController.app.applyTranslations(modalContainer);
         lucide.createIcons();
+        SettingsController.initTabsScroller();
         SettingsController.renderStateTab();
+    },
+
+    // Phone-only horizontal tab strip: arrows appear only when the sections overflow.
+    initTabsScroller: () => {
+        const dialog = document.getElementById('settings-dialog');
+        if (!dialog) return;
+        const nav = dialog.querySelector('.settings-tabs');
+        if (!nav || nav.dataset.scrollerBound === '1') return;
+        nav.dataset.scrollerBound = '1';
+
+        const prev = dialog.querySelector('.settings-tabs-arrow.is-prev');
+        const next = dialog.querySelector('.settings-tabs-arrow.is-next');
+        const step = () => Math.max(140, Math.round(nav.clientWidth * 0.7));
+
+        const sync = () => {
+            const max = nav.scrollWidth - nav.clientWidth;
+            nav.classList.toggle('has-overflow', max > 2);
+            if (prev) prev.disabled = nav.scrollLeft <= 2;
+            if (next) next.disabled = nav.scrollLeft >= max - 2;
+        };
+
+        prev?.addEventListener('click', () => nav.scrollBy({ left: -step(), behavior: 'smooth' }));
+        next?.addEventListener('click', () => nav.scrollBy({ left: step(), behavior: 'smooth' }));
+        nav.addEventListener('scroll', sync, { passive: true });
+        if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(nav);
+        sync();
     },
 
     // --- State dashboard tab ---
@@ -958,8 +1021,32 @@ export const SettingsController = {
                 ${privacyNote}`;
         }
 
-        el.innerHTML = body;
+        const downloadBlock = `
+            <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
+                <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="database" class="w-4 h-4 text-aru-500"></i> ${t.storage_download_title || 'Скачать базу'}</h4>
+                <p class="text-xs text-gray-500">${t.storage_download_desc || 'Сохраните текущую актуальную базу в файл .sqlite на это устройство. Файл подходит для резервной копии и переноса на другое устройство.'}</p>
+                <button onclick="SettingsController.downloadDatabase()" class="w-full py-3 rounded-xl bg-aru-500 hover:bg-aru-600 text-white font-bold text-xs transition flex items-center justify-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> ${t.storage_download_btn || 'Скачать файл базы'}
+                </button>
+            </div>`;
+
+        el.innerHTML = downloadBlock + body;
         if (window.lucide) lucide.createIcons();
+    },
+
+    downloadDatabase: async () => {
+        const t = state.translations || {};
+        if (!DB.db) {
+            UI.showToast(t.storage_download_unavailable || 'База ещё не создана', 'alert-circle');
+            return;
+        }
+        try {
+            await DB.exportToFile('aru_db');
+            UI.showToast(t.storage_download_done || 'Файл базы сохранён', 'check-circle');
+        } catch (e) {
+            console.error('downloadDatabase failed', e);
+            UI.showToast(t.storage_download_failed || 'Не удалось сохранить файл базы', 'alert-circle');
+        }
     },
 
     storageSetProvider: (p) => {

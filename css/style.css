@@ -5,60 +5,73 @@ Clean application UI: neutral surfaces, one orange accent, and shared dialogs.
 
 :root {
     color-scheme: light;
-    --aru-bg: #f5f5f4;
+    --aru-bg: #f2f2f4;
     --aru-surface: #ffffff;
-    --aru-surface-muted: #f5f5f4;
-    --aru-surface-hover: #ececea;
-    --aru-border: #dededb;
-    --aru-border-subtle: #ececea;
-    --aru-card-bg: #fafaf9;
-    --aru-text: #1c1917;
-    --aru-text-muted: #6b6865;
-    --aru-text-faint: #a09c97;
+    --aru-surface-muted: #f4f4f6;
+    --aru-surface-hover: #e9e9ed;
+    --aru-border: #d8d8dd;
+    --aru-border-subtle: #e9e9ec;
+    --aru-card-bg: #fafafa;
+    --aru-text: #1c1c1e;
+    --aru-text-muted: #6e6e73;
+    --aru-text-faint: #9a9aa0;
     --aru-accent: #f97316;
     --aru-accent-strong: #ea580c;
-    --aru-accent-soft: #fff7ed;
-    --aru-overlay: rgba(28, 25, 23, 0.55);
-    --aru-radius-sm: 10px;
-    --aru-radius: 14px;
-    --aru-radius-lg: 18px;
-    --aru-control-height: 44px;
-    --aru-shadow-xs: none;
-    --aru-shadow-sm: none;
-    --aru-shadow-lg: none;
+    --aru-accent-soft: #fff3e8;
+    --aru-overlay: rgba(20, 20, 22, 0.42);
+    --aru-radius-sm: 8px;
+    --aru-radius: 12px;
+    --aru-radius-lg: 16px;
+    --aru-control-height: 36px;
+    --aru-header-h: 60px;
+    --aru-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.03);
+    --aru-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 14px -8px rgba(15, 23, 42, 0.22);
+    --aru-shadow-lg: 0 4px 12px rgba(15, 23, 42, 0.07), 0 24px 60px -20px rgba(15, 23, 42, 0.32);
+}
+
+@media (min-width: 768px) {
+    :root {
+        --aru-header-h: 72px;
+    }
 }
 
 .dark {
     color-scheme: dark;
-    --aru-bg: #0f0f10;
-    --aru-surface: #171719;
-    --aru-surface-muted: #202023;
-    --aru-surface-hover: #29292d;
-    --aru-border: #303034;
-    --aru-border-subtle: #252528;
-    --aru-card-bg: #19191b;
-    --aru-text: #f4f4f5;
-    --aru-text-muted: #a1a1aa;
-    --aru-text-faint: #71717a;
-    --aru-accent-soft: #2c1b12;
-    --aru-overlay: rgba(0, 0, 0, 0.68);
-    --aru-shadow-xs: none;
-    --aru-shadow-sm: none;
-    --aru-shadow-lg: none;
+    --aru-bg: #131315;
+    --aru-surface: #1c1c1e;
+    --aru-surface-muted: #232326;
+    --aru-surface-hover: #2d2d31;
+    --aru-border: #3a3a3f;
+    --aru-border-subtle: #2b2b2f;
+    --aru-card-bg: #202023;
+    --aru-text: #f5f5f7;
+    --aru-text-muted: #a1a1a8;
+    --aru-text-faint: #70707a;
+    --aru-accent-soft: #2a1a10;
+    --aru-overlay: rgba(0, 0, 0, 0.6);
+    --aru-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 1px rgba(0, 0, 0, 0.3);
+    --aru-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.45), 0 8px 18px -10px rgba(0, 0, 0, 0.65);
+    --aru-shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.5), 0 28px 64px -18px rgba(0, 0, 0, 0.85);
 }
 
 * {
     box-sizing: border-box;
-    border: 0 !important;
-    outline: 0 !important;
-    box-shadow: none !important;
 }
 
 *::before,
 *::after {
-    border: 0 !important;
-    outline: 0 !important;
-    box-shadow: none !important;
+    box-sizing: border-box;
+}
+
+/* Flat surfaces only: the interface never uses frosted glass or translucency. */
+[class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 html,
@@ -68,9 +81,24 @@ body,
     color: var(--aru-text);
 }
 
+html,
+body {
+    height: 100%;
+}
+
 body {
     margin: 0;
+    width: 100% !important;
+    height: 100dvh !important;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+}
+
+#app {
+    width: 100%;
+    height: 100%;
 }
 
 ::selection {
@@ -140,22 +168,34 @@ button:not(:disabled):active {
     transform: scale(0.98);
 }
 
+/* Text fields stay quiet: no glow, ring or accent outline on focus. */
+input,
+textarea,
+select {
+    outline: none !important;
+}
+
 input:focus,
+input:focus-visible,
 textarea:focus,
-select:focus {
-    background: var(--aru-surface-hover) !important;
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 button:focus-visible,
-a:focus-visible {
-    background: var(--aru-surface-hover) !important;
-    color: var(--aru-accent-strong) !important;
+a:focus-visible,
+[role="tab"]:focus-visible,
+[role="separator"]:focus-visible {
+    outline: 2px solid var(--aru-accent);
+    outline-offset: 2px;
 }
 
 #send-btn:focus-visible,
 .settings-primary-button:focus-visible {
-    background: var(--aru-accent-strong) !important;
-    color: #ffffff !important;
+    outline-offset: 2px;
 }
 
 /* Shared motion utilities retained for dynamic interface fragments. */
@@ -198,10 +238,23 @@ a:focus-visible {
 /* Header and lightweight menus */
 .app-header {
     background: var(--aru-surface) !important;
+    height: calc(var(--aru-header-h) + env(safe-area-inset-top)) !important;
+    border: 0 !important;
+    box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 #chat-title {
     color: var(--aru-text-muted) !important;
+    border-left: 0 !important;
+    padding-left: 0 !important;
+}
+
+@media (min-width: 768px) {
+    .app-header {
+        padding-top: calc(16px + env(safe-area-inset-top)) !important;
+    }
 }
 
 .app-header button:hover,
@@ -213,19 +266,35 @@ a:focus-visible {
 
 #btn-config-trigger {
     background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+    box-shadow: var(--aru-shadow-xs) !important;
     color: var(--aru-accent);
 }
 
 #btn-config-trigger:hover {
-    background: var(--aru-surface-muted) !important;
+    background: var(--aru-surface-hover) !important;
 }
 
 .app-popover,
 #tools-menu,
 #download-dropdown {
     background: var(--aru-surface) !important;
+    border: 0 !important;
+    border-radius: var(--aru-radius) !important;
+    box-shadow: var(--aru-shadow-lg) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    max-width: calc(100vw - 16px);
+}
+
+#config-menu > div:first-child {
+    background: var(--aru-surface-muted) !important;
+}
+
+#config-menu button[data-lang-btn].bg-white,
+.dark #config-menu button[data-lang-btn].dark\:bg-gray-700 {
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-xs) !important;
 }
 
 /* Auth */
@@ -268,7 +337,7 @@ a:focus-visible {
 #screen-chat:not(.hidden) {
     display: flex;
     gap: 12px;
-    padding: 72px 12px 12px;
+    padding: calc(var(--aru-header-h) + 12px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     background: var(--aru-bg) !important;
 }
 
@@ -276,12 +345,13 @@ a:focus-visible {
 .chat-workspace,
 .canvas-workspace {
     background: var(--aru-surface) !important;
+    border: 0 !important;
+    border-radius: var(--aru-radius) !important;
+    box-shadow: var(--aru-shadow-sm) !important;
 }
 
-.app-sidebar,
-.chat-workspace,
-.canvas-workspace {
-    border-radius: var(--aru-radius) !important;
+.app-sidebar button[class*="border"] {
+    border: 0 !important;
 }
 
 .app-sidebar > div:first-child {
@@ -291,6 +361,7 @@ a:focus-visible {
 #chat-search {
     height: 36px;
     background: var(--aru-surface-muted) !important;
+    border: 0 !important;
     color: var(--aru-text) !important;
 }
 
@@ -348,17 +419,6 @@ a:focus-visible {
     background: var(--aru-surface-muted) !important;
     color: var(--aru-accent-strong) !important;
     box-shadow: none !important;
-}
-
-.tab-item.active::after {
-    content: '';
-    position: absolute;
-    right: 12px;
-    bottom: -5px;
-    left: 12px;
-    height: 2px;
-    border-radius: 999px;
-    background: var(--aru-accent);
 }
 
 .tab-scroll-button {
@@ -428,11 +488,13 @@ a:focus-visible {
 
 .composer-area {
     background: var(--aru-surface) !important;
+    border-top: 0 !important;
 }
 
 .composer-shell {
     background: var(--aru-surface-muted) !important;
     border: 0 !important;
+    border-radius: var(--aru-radius-lg) !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -440,6 +502,8 @@ a:focus-visible {
 
 .composer-shell:focus-within {
     background: var(--aru-surface-hover) !important;
+    border: 0 !important;
+    box-shadow: var(--aru-shadow-sm) !important;
     transform: none;
 }
 
@@ -472,20 +536,83 @@ a:focus-visible {
     border: 0 !important;
 }
 
-#canvas-tabs,
-#canvas-tabs button,
-#download-dropdown {
-    border: 0 !important;
+#canvas-panel > div:first-child {
+    border-bottom: 0 !important;
 }
 
 #canvas-tabs {
     background: var(--aru-surface-muted) !important;
+    border: 0 !important;
+}
+
+#canvas-tabs button {
+    border: 0 !important;
 }
 
 #canvas-tabs button.bg-white,
 .dark #canvas-tabs button.dark\:bg-gray-700 {
     background: var(--aru-surface) !important;
     box-shadow: var(--aru-shadow-xs) !important;
+}
+
+/* Desktop-only resize handle between chat and canvas (macOS split view feel). */
+.canvas-resizer {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    body:not(.aru-desktop-mode) #canvas-resizer:not(.hidden) {
+        display: block;
+        position: relative;
+        flex: 0 0 9px;
+        align-self: stretch;
+        cursor: col-resize;
+        touch-action: none;
+        outline-offset: -2px;
+    }
+
+    body:not(.aru-desktop-mode) #canvas-resizer::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 3px;
+        height: 46px;
+        border-radius: 999px;
+        transform: translate(-50%, -50%);
+        background: var(--aru-border);
+        transition: background-color 140ms ease;
+    }
+
+    body:not(.aru-desktop-mode) #canvas-resizer:hover::after,
+    body:not(.aru-desktop-mode) #canvas-resizer:focus-visible::after,
+    body.aru-resizing-canvas #canvas-resizer::after {
+        background: var(--aru-accent);
+    }
+
+    body:not(.aru-desktop-mode) #canvas-panel {
+        width: var(--aru-canvas-width, 460px) !important;
+        min-width: 280px;
+        max-width: 70%;
+        flex: 0 0 auto;
+    }
+}
+
+body.aru-desktop-mode #canvas-resizer {
+    display: none !important;
+}
+
+body.aru-resizing-canvas {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.aru-resizing-canvas #canvas-panel {
+    transition: none !important;
+}
+
+body.aru-resizing-canvas iframe {
+    pointer-events: none;
 }
 
 /* Dialogs and overlays */
@@ -502,11 +629,23 @@ a:focus-visible {
     background: transparent !important;
 }
 
+/* Dialogs separate their toolbars with surface tone, not hairlines. */
+#modal-container .border-b,
+#modal-container .border-t,
+#lib-add-overlay .border-b,
+#lib-add-overlay .border-t,
+#transfer-sub-modal .border-b,
+#transfer-sub-modal .border-t {
+    border-color: transparent !important;
+}
+
 #modal-container > [class*="fixed"] > div:not(.absolute),
 #lib-add-overlay > div,
 #transfer-sub-modal > div {
     background: var(--aru-surface) !important;
+    border: 0 !important;
     border-radius: var(--aru-radius-lg) !important;
+    box-shadow: var(--aru-shadow-lg) !important;
     animation: aru-dialog-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -519,6 +658,7 @@ a:focus-visible {
 #transfer-sub-modal input:not([type="checkbox"]) {
     background: var(--aru-surface-muted) !important;
     color: var(--aru-text) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--aru-radius-sm) !important;
     transition: background-color 150ms ease, color 150ms ease;
 }
@@ -531,40 +671,148 @@ a:focus-visible {
 #lib-add-overlay select:focus,
 #transfer-sub-modal input:not([type="checkbox"]):focus {
     background: var(--aru-surface-hover) !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
 }
 
-/* Settings */
+/* Settings: macOS-style sidebar window; a scrolling icon strip on phones. */
 #settings-dialog {
     color: var(--aru-text);
+    background: var(--aru-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 16px !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
 }
 
 #settings-dialog .settings-shell {
+    display: grid;
+    grid-template-columns: 212px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: min(980px, 100%);
+    height: min(760px, calc(100dvh - 32px));
     background: var(--aru-surface) !important;
+    border: 0 !important;
+    border-radius: var(--aru-radius-lg) !important;
+    box-shadow: var(--aru-shadow-lg) !important;
+    overflow: hidden;
 }
 
 #settings-dialog .settings-header {
-    padding: 20px;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px !important;
     background: var(--aru-surface) !important;
+    border-bottom: 0 !important;
+}
+
+#settings-dialog .settings-header h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
 }
 
 #settings-dialog .settings-tabs {
-    gap: 6px;
-    padding: 0 16px 12px;
-    background: var(--aru-surface) !important;
+    grid-column: 1;
+    grid-row: 2 / 4;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    min-height: 0;
+    padding: 10px !important;
+    overflow-y: auto;
+    border: 0 !important;
+    background: var(--aru-surface-muted) !important;
+    scrollbar-width: thin;
+    touch-action: pan-y;
+}
+
+/* Phone-only arrows: they signal the tab strip can be moved sideways. */
+.settings-tabs-arrow {
+    display: none;
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow {
+    position: relative;
+    z-index: 3;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--aru-surface);
+    color: var(--aru-text-muted);
+    box-shadow: var(--aru-shadow-sm);
+    cursor: pointer;
+    transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow.is-prev {
+    justify-self: start;
+    margin-left: 6px;
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow.is-next {
+    justify-self: end;
+    margin-right: 6px;
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow:hover:not(:disabled) {
+    background: var(--aru-surface-hover);
+    color: var(--aru-text);
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow i,
+#settings-dialog .settings-tabs.has-overflow ~ .settings-tabs-arrow svg {
+    width: 16px;
+    height: 16px;
 }
 
 #settings-dialog .settings-tab {
-    padding: 10px 14px;
-    border-radius: var(--aru-radius-sm);
-    color: var(--aru-text-muted) !important;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 10px !important;
+    border: 0 !important;
+    border-radius: var(--aru-radius-sm) !important;
+    background: transparent !important;
+    color: var(--aru-text) !important;
     font-size: 0.8125rem;
-    font-weight: 700;
-    transition: background-color 160ms ease, color 160ms ease;
+    font-weight: 500;
+    text-align: left;
+    transition: background-color 140ms ease, color 140ms ease;
+}
+
+#settings-dialog .settings-tab i,
+#settings-dialog .settings-tab svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    color: var(--aru-text-muted);
 }
 
 #settings-dialog .settings-tab:hover {
-    background: var(--aru-surface-muted) !important;
-    color: var(--aru-text) !important;
+    background: var(--aru-surface-hover) !important;
 }
 
 #settings-dialog .settings-tab.is-active {
@@ -572,14 +820,36 @@ a:focus-visible {
     color: var(--aru-accent-strong) !important;
 }
 
+#settings-dialog .settings-tab.is-active i,
+#settings-dialog .settings-tab.is-active svg {
+    color: var(--aru-accent);
+}
+
 #settings-dialog .settings-body {
-    padding: 20px !important;
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 22px 24px !important;
     background: var(--aru-surface) !important;
+}
+
+/* Cards and rows are separated by surface tone, never by strokes. */
+#settings-dialog .settings-body .border,
+#settings-dialog .settings-body .border-2,
+#settings-dialog .settings-body .border-b {
+    border-color: transparent !important;
+}
+
+#settings-dialog .settings-body .divide-y > :not([hidden]) ~ :not([hidden]) {
+    border-color: transparent !important;
 }
 
 #settings-dialog .settings-section,
 #settings-dialog .settings-panel {
     padding: 20px !important;
+    border: 0 !important;
     border-radius: var(--aru-radius) !important;
     background: var(--aru-surface-muted) !important;
 }
@@ -592,29 +862,35 @@ a:focus-visible {
 #settings-dialog select {
     width: 100%;
     height: var(--aru-control-height);
-    padding: 0 14px !important;
-    background: var(--aru-surface) !important;
+    padding: 0 12px !important;
+    background: var(--aru-surface-muted) !important;
     color: var(--aru-text) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--aru-radius-sm) !important;
     font-size: 0.8125rem !important;
+    box-shadow: none !important;
 }
 
 #settings-dialog textarea {
     width: 100%;
     min-height: 140px;
-    padding: 12px 14px !important;
-    background: var(--aru-surface) !important;
+    padding: 10px 12px !important;
+    background: var(--aru-surface-muted) !important;
     color: var(--aru-text) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--aru-radius-sm) !important;
     font-size: 0.8125rem !important;
     line-height: 1.5;
     resize: vertical;
+    box-shadow: none !important;
 }
 
 #settings-dialog input:not([type="checkbox"]):not([type="range"]):focus,
 #settings-dialog select:focus,
 #settings-dialog textarea:focus {
     background: var(--aru-surface-hover) !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
 }
 
 #settings-dialog input[type="checkbox"],
@@ -634,8 +910,14 @@ a:focus-visible {
 }
 
 #settings-dialog .settings-footer {
-    padding: 16px 20px;
+    grid-column: 2;
+    grid-row: 3;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px !important;
     background: var(--aru-surface) !important;
+    border-top: 0 !important;
 }
 
 #settings-dialog .settings-primary-button {
@@ -650,9 +932,107 @@ a:focus-visible {
     background: var(--aru-accent-strong) !important;
 }
 
+@media (max-width: 767px) {
+    #settings-dialog {
+        padding: 0 !important;
+        align-items: stretch;
+    }
+
+    /* Outrank the generic dialog-skin rule (#modal-container > [class*="fixed"]...). */
+    #modal-container > #settings-dialog {
+        padding: 0 !important;
+    }
+
+    #modal-container > #settings-dialog > .settings-shell {
+        width: 100%;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    #settings-dialog .settings-shell {
+        width: 100%;
+        height: 100dvh;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        border: 0 !important;
+        border-radius: 0 !important;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #settings-dialog .settings-header {
+        grid-column: 1;
+        grid-row: 1;
+        padding: 12px 14px !important;
+    }
+
+    #settings-dialog .settings-tabs {
+        grid-column: 1;
+        grid-row: 2;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 6px;
+        padding: 8px 38px !important;
+        border: 0 !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        touch-action: pan-x;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #settings-dialog .settings-tabs.has-overflow {
+        -webkit-mask-image: linear-gradient(to right, transparent 0, #000 34px, #000 calc(100% - 34px), transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0, #000 34px, #000 calc(100% - 34px), transparent 100%);
+    }
+
+    #settings-dialog .settings-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    #settings-dialog .settings-tab {
+        flex: 0 0 auto;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        width: auto;
+        min-width: 78px;
+        padding: 8px 10px !important;
+        font-size: 11px;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    #settings-dialog .settings-tab i,
+    #settings-dialog .settings-tab svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    #settings-dialog .settings-body {
+        grid-column: 1;
+        grid-row: 3;
+        padding: 16px 12px 20px !important;
+    }
+
+    #settings-dialog .settings-footer {
+        grid-column: 1;
+        grid-row: 4;
+        padding: 10px 12px !important;
+    }
+
+    #settings-dialog .settings-footer .settings-primary-button {
+        width: 100%;
+    }
+}
+
 /* Informational documents */
 #help-root .glass {
-    border: 1px solid var(--aru-border) !important;
+    border: 0 !important;
     background: var(--aru-surface) !important;
     box-shadow: var(--aru-shadow-xs) !important;
 }
@@ -664,15 +1044,15 @@ a:focus-visible {
 
 #tab-switcher > div:first-child,
 #tab-switcher > div:last-child {
-    border-color: var(--aru-border) !important;
+    border: 0 !important;
     background: var(--aru-surface) !important;
 }
 
 #tab-switcher .tab-card {
-    border: 1px solid var(--aru-border) !important;
+    border: 0 !important;
     border-radius: var(--aru-radius);
     background: var(--aru-surface) !important;
-    box-shadow: var(--aru-shadow-xs) !important;
+    box-shadow: var(--aru-shadow-sm) !important;
 }
 
 #tab-switcher button[onclick*="newChat"] {
@@ -687,8 +1067,10 @@ a:focus-visible {
 }
 
 #drag-drop-overlay > div {
-    border: 0 !important;
+    border: 2px dashed var(--aru-border) !important;
+    border-radius: var(--aru-radius-lg) !important;
     background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-lg);
 }
 
 /* Task plugin owns its markup, but follows the same neutral controls. */
@@ -722,12 +1104,15 @@ a:focus-visible {
 
     #screen-chat:not(.hidden) {
         gap: 0;
-        padding: 60px 0 0;
+        padding: calc(var(--aru-header-h) + env(safe-area-inset-top)) 0 0;
     }
 
     .app-sidebar {
         border-radius: 0 !important;
-        box-shadow: var(--aru-shadow-lg);
+        border-top: 0 !important;
+        border-bottom: 0 !important;
+        border-left: 0 !important;
+        box-shadow: var(--aru-shadow-lg) !important;
     }
 
     aside#sidebar:not(.-translate-x-full) {
@@ -736,16 +1121,18 @@ a:focus-visible {
 
     .chat-workspace,
     .canvas-workspace {
+        border: 0 !important;
         border-radius: 0 !important;
         box-shadow: none !important;
     }
 
     .app-header {
-        padding: 10px 12px !important;
+        padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)) !important;
+        padding-top: calc(10px + env(safe-area-inset-top)) !important;
     }
 
     .composer-area {
-        padding: 10px !important;
+        padding: 10px max(10px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)) !important;
     }
 
     .composer-shell {
@@ -770,10 +1157,6 @@ a:focus-visible {
 }
 
 @media (min-width: 768px) {
-    #screen-chat:not(.hidden) {
-        padding-top: 84px;
-    }
-
     #tabs-navigation:not(.hidden) {
         display: flex !important;
     }
@@ -844,26 +1227,27 @@ body.chats-dragging .folder-dropzone:hover {
     width: 34px;
     height: 34px;
     padding: 0;
+    border: 0 !important;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(10px) saturate(1.4);
-    -webkit-backdrop-filter: blur(10px) saturate(1.4);
+    background: var(--aru-surface) !important;
     color: var(--aru-text-muted);
+    box-shadow: var(--aru-shadow-sm);
     cursor: pointer;
-    transition: color 0.15s ease, background 0.15s ease;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .chapters-fab:hover {
     color: var(--aru-accent-strong);
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--aru-surface-hover) !important;
+    border: 0 !important;
 }
 
 .dark .chapters-fab {
-    background: rgba(23, 23, 25, 0.5);
+    background: var(--aru-surface) !important;
 }
 
 .dark .chapters-fab:hover {
-    background: rgba(23, 23, 25, 0.75);
+    background: var(--aru-surface-hover) !important;
 }
 
 .chapters-panel {
@@ -875,15 +1259,17 @@ body.chats-dragging .folder-dropzone:hover {
     flex-direction: column;
     width: min(84vw, 300px);
     max-height: min(62vh, 480px);
+    border: 0 !important;
     border-radius: var(--aru-radius);
-    background: rgba(255, 255, 255, 0.66);
-    backdrop-filter: blur(16px) saturate(1.5);
-    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    background: var(--aru-surface) !important;
+    box-shadow: var(--aru-shadow-lg);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     overflow: hidden;
 }
 
 .dark .chapters-panel {
-    background: rgba(23, 23, 25, 0.62);
+    background: var(--aru-surface) !important;
 }
 
 .chapters-list {
@@ -1036,7 +1422,7 @@ body.chats-dragging .folder-dropzone:hover {
 
 .chapters-pick-banner {
     position: fixed;
-    top: 14px;
+    top: calc(14px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     z-index: 105;
@@ -1045,11 +1431,11 @@ body.chats-dragging .folder-dropzone:hover {
     gap: 10px;
     max-width: calc(100vw - 24px);
     padding: 8px 10px 8px 14px;
+    border: 0;
     border-radius: 999px;
-    background: rgba(28, 25, 23, 0.8);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: #1f1f22;
     color: #fafaf9;
+    box-shadow: var(--aru-shadow-lg);
     font-size: 12px;
     white-space: nowrap;
 }
@@ -1069,9 +1455,9 @@ body.chats-dragging .folder-dropzone:hover {
     align-items: center;
     gap: 4px;
     padding: 3px 9px;
-    border: 1px solid rgba(0, 0, 0, 0.07);
+    border: 0 !important;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--aru-surface-muted) !important;
     color: var(--aru-text-muted);
     font-size: 10.5px;
     font-weight: 700;
@@ -1081,22 +1467,21 @@ body.chats-dragging .folder-dropzone:hover {
 }
 
 .dark .msg-files-badge {
-    border-color: rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--aru-surface-muted) !important;
 }
 
 .msg-files-badge:hover,
 .msg-files-badge.is-open {
     color: var(--aru-accent-strong);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: var(--aru-surface-hover) !important;
 }
 
 .msg-files-badge.is-open {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--aru-surface) !important;
 }
 
 .dark .msg-files-badge.is-open {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--aru-surface) !important;
 }
 
 .msg-files-popover {

@@ -1610,3 +1610,172 @@ Aru Skills Plugin - UI styles (scoped to #skills-plugin-root)
         max-width: none;
     }
 }
+
+/* ---------- main app skin ---------- */
+/* Flat surfaces, soft shadows, no hairlines — the plugin follows the app shell. */
+
+:root {
+    --skills-bg: var(--aru-surface);
+    --skills-muted: var(--aru-surface-muted);
+    --skills-hover: var(--aru-surface-hover);
+    --skills-card: var(--aru-surface);
+    --skills-text: var(--aru-text);
+    --skills-subtle: var(--aru-text-muted);
+    --skills-border: transparent;
+    --skills-shadow: var(--aru-shadow-xs);
+}
+
+.dark {
+    --skills-bg: var(--aru-surface);
+    --skills-muted: var(--aru-surface-muted);
+    --skills-hover: var(--aru-surface-hover);
+    --skills-card: var(--aru-surface);
+    --skills-text: var(--aru-text);
+    --skills-subtle: var(--aru-text-muted);
+    --skills-border: transparent;
+    --skills-shadow: var(--aru-shadow-xs);
+}
+
+#skills-header {
+    border-bottom: 0;
+    box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45);
+}
+
+#skills-composer {
+    border-top: 0;
+}
+
+.skills-run-block,
+.skills-answer,
+.skills-card,
+.skills-artifact-card,
+.skills-item-row,
+.skills-step-card,
+.skills-modal-row,
+.skills-attach-chip,
+.skills-final-btn,
+.skills-rail-clear {
+    border: 0;
+}
+
+.skills-answer,
+.skills-card,
+.skills-artifact-card,
+.skills-item-row,
+.skills-step-card,
+.skills-modal-row {
+    background: var(--skills-card);
+    box-shadow: var(--aru-shadow-xs);
+}
+
+.skills-answer-head,
+.skills-run-body,
+.skills-step-bottom,
+.skills-card-actions {
+    border: 0;
+}
+
+.skills-composer-box {
+    border: 0;
+    background: var(--skills-muted);
+    box-shadow: none;
+}
+
+.skills-composer-box:focus-within {
+    border: 0;
+    background: var(--aru-surface-hover);
+    box-shadow: var(--aru-shadow-sm);
+}
+
+.skills-modal-input,
+.skills-add-step-select {
+    border: 0;
+    background: var(--skills-muted);
+    box-shadow: none;
+}
+
+.skills-modal-input:focus,
+.skills-add-step-select:focus {
+    box-shadow: var(--aru-shadow-sm);
+}
+
+.skills-empty,
+.skills-pipeline-placeholder {
+    border: 0;
+    background: var(--skills-muted);
+}
+
+.skills-empty {
+    background: transparent;
+}
+
+.skills-step-card.st-running {
+    border: 0;
+    background: color-mix(in srgb, var(--skills-accent) 7%, transparent);
+    box-shadow: none;
+}
+
+.skills-step-card.st-done {
+    border: 0;
+    background: rgba(16, 185, 129, 0.07);
+}
+
+.skills-step-card.st-error {
+    border: 0;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.skills-switch-slider {
+    border: 0;
+}
+
+.skills-card:hover {
+    border: 0;
+    box-shadow: var(--aru-shadow-sm);
+}
+
+.skills-modal-row.is-active {
+    border: 0;
+    background: var(--aru-accent-soft);
+}
+
+#skills-rail {
+    border-left: 0;
+}
+
+#skills-rail.open {
+    border-left-color: transparent;
+    box-shadow: -18px 0 36px -32px rgba(15, 23, 42, 0.5);
+}
+
+#skills-rail-backdrop {
+    background: var(--aru-overlay);
+}
+
+.dark #skills-rail-backdrop {
+    background: var(--aru-overlay);
+}
+
+#skills-modal {
+    background: var(--aru-overlay) !important;
+}
+
+.dark #skills-modal {
+    background: var(--aru-overlay) !important;
+}
+
+#skills-modal-card {
+    border: 0;
+    border-radius: var(--aru-radius-lg);
+    background: var(--skills-card);
+    box-shadow: var(--aru-shadow-lg);
+}
+
+#skills-modal-card > div:first-child {
+    border-bottom: 0;
+}
+
+#skills-modal .border-b,
+#skills-modal .border-t {
+    border-color: transparent !important;
+}

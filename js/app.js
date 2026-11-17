@@ -20,6 +20,7 @@ import { RemoteStorage } from './modules/remoteStorage.js';
 import { SyncEngine } from './modules/sync/syncEngine.js';
 import { Chapters } from './modules/chapters.js';
 import { DesktopMode } from './modules/desktop.js';
+import { FoxRain } from './modules/foxRain.js';
 
 const llm = new LLMClient();
 
@@ -262,6 +263,7 @@ const app = {
         await PluginManager.init();
         await DesktopMode.init(app);
         TransferController.init();
+        FoxRain.init();
         app.updateLangUI();
         lucide.createIcons(); // Re-run for translations
 

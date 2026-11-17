@@ -8,7 +8,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>Aru AI - Local-first Personal AI Assistant with Memory and PWA</title>
     <meta name="description" content="Aru AI is a local-first personal AI assistant and PWA with semantic memory, artifact library, task manager and WebRTC device transfer.">
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
@@ -207,8 +207,8 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                     <i data-lucide="menu"></i>
                 </button>
 
-                <div
-                    class="w-8 h-8 rounded-full bg-aru-100 dark:bg-aru-900 flex items-center justify-center text-aru-600 font-bold select-none">
+                <div id="aru-fox-avatar"
+                    class="w-8 h-8 rounded-full bg-aru-100 dark:bg-aru-900 flex items-center justify-center text-aru-600 font-bold select-none touch-manipulation">
                     🦊
                 </div>
                 <h1 class="text-lg md:text-xl font-bold tracking-tight select-none">Aru <span
@@ -574,6 +574,10 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                     </div>
                 </div>
             </main>
+
+            <!-- Canvas resize handle (desktop only) -->
+            <div id="canvas-resizer" class="canvas-resizer hidden" role="separator" aria-orientation="vertical"
+                tabindex="0" aria-label="Canvas width"></div>
 
             <!-- CANVAS (Right Panel) -->
             <aside id="canvas-panel"

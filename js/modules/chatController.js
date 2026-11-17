@@ -19,6 +19,97 @@ export const ChatController = {
     init(appInstance) {
         ChatController.app = appInstance;
         window.addEventListener('resize', () => ChatController.updateTabNavigation());
+        ChatController.initCanvasResizer();
+    },
+
+    // Desktop-only split handle: drag left/right to resize the canvas pane.
+    initCanvasResizer() {
+        const divider = document.getElementById('canvas-resizer');
+        const panel = document.getElementById('canvas-panel');
+        const screen = document.getElementById('screen-chat');
+        if (!divider || !panel || !screen || divider.dataset.bound === '1') return;
+        divider.dataset.bound = '1';
+
+        const STORAGE_KEY = 'aru_canvas_width';
+        const MIN_WIDTH = 280;
+        const MIN_CHAT_WIDTH = 320;
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const maxWidth = () => {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarW = sidebar && getComputedStyle(sidebar).display !== 'none'
+                ? sidebar.getBoundingClientRect().width
+                : 0;
+            const gap = parseFloat(getComputedStyle(screen).columnGap) || 0;
+            const limit = screen.getBoundingClientRect().width - sidebarW - MIN_CHAT_WIDTH - gap * 2;
+            return Math.max(MIN_WIDTH, Math.round(Math.min(screen.getBoundingClientRect().width * 0.7, limit)));
+        };
+
+        let desired = Number(localStorage.getItem(STORAGE_KEY)) || 0;
+
+        const apply = (width, persist = false) => {
+            const hidden = screen.getBoundingClientRect().width === 0;
+            const next = Math.round(hidden ? Math.max(MIN_WIDTH, width) : clamp(width, MIN_WIDTH, maxWidth()));
+            desired = next;
+            panel.style.setProperty('--aru-canvas-width', `${next}px`);
+            if (persist) localStorage.setItem(STORAGE_KEY, String(next));
+        };
+
+        // Screen-chat starts hidden on the auth screen; re-apply once it has a width.
+        const syncLayout = () => {
+            if (window.innerWidth < 768 || !desired) return;
+            if (screen.getBoundingClientRect().width === 0) return;
+            apply(desired);
+        };
+        if (desired > 0) apply(desired);
+        if (typeof ResizeObserver === 'function') new ResizeObserver(syncLayout).observe(screen);
+
+        let startX = 0;
+        let startWidth = 0;
+        let dragging = false;
+
+        divider.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            startX = event.clientX;
+            startWidth = panel.getBoundingClientRect().width;
+            dragging = true;
+            divider.setPointerCapture(event.pointerId);
+            document.body.classList.add('aru-resizing-canvas');
+        });
+
+        divider.addEventListener('pointermove', (event) => {
+            if (!dragging || !divider.hasPointerCapture(event.pointerId)) return;
+            apply(startWidth + (startX - event.clientX));
+        });
+
+        const finish = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.classList.remove('aru-resizing-canvas');
+            const current = parseFloat(panel.style.getPropertyValue('--aru-canvas-width'));
+            if (current) localStorage.setItem(STORAGE_KEY, String(Math.round(current)));
+        };
+
+        divider.addEventListener('lostpointercapture', finish);
+        divider.addEventListener('pointerup', (event) => {
+            if (divider.hasPointerCapture(event.pointerId)) divider.releasePointerCapture(event.pointerId);
+        });
+
+        divider.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+            event.preventDefault();
+            const current = panel.getBoundingClientRect().width;
+            apply(current + (event.key === 'ArrowLeft' ? 24 : -24), true);
+        });
+
+        window.addEventListener('resize', syncLayout);
+    },
+
+    syncCanvasChrome: (open) => {
+        const panel = document.getElementById('canvas-panel');
+        if (panel) panel.classList.toggle('hidden', !open);
+        const divider = document.getElementById('canvas-resizer');
+        if (divider) divider.classList.toggle('hidden', !open);
     },
 
     loadChatsList: async () => {
@@ -208,15 +299,12 @@ export const ChatController = {
         const panel = document.getElementById('canvas-panel');
         if (!panel) return;
 
-        const isHidden = typeof force === 'boolean' ? !force : !panel.classList.contains('hidden');
-        
-        // If we're closing, just do it. If we're opening, we ideally need a tab, 
-        // but let the UI toggle anyway to avoid "stuck" states.
-        panel.classList.toggle('hidden', isHidden);
-        
+        const open = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
+        ChatController.syncCanvasChrome(open);
+
         const activeTab = state.tabs[state.activeTabIndex];
         if (activeTab) {
-            activeTab.isCanvasOpen = !isHidden;
+            activeTab.isCanvasOpen = open;
         }
     },
 
@@ -310,7 +398,7 @@ export const ChatController = {
 
         if (tab.type === 'plugin') {
             CanvasManager.clearCanvas();
-            document.getElementById('canvas-panel').classList.add('hidden');
+            ChatController.syncCanvasChrome(false);
             if (msgContainer) msgContainer.classList.add('hidden');
             if (placeholder) placeholder.classList.add('hidden');
             if (document.getElementById('chat-input-area')) document.getElementById('chat-input-area').classList.add('hidden');
@@ -365,10 +453,7 @@ export const ChatController = {
         }
 
         // Sync Canvas visibility
-        const panel = document.getElementById('canvas-panel');
-        if (panel) {
-            panel.classList.toggle('hidden', !tab.isCanvasOpen);
-        }
+        ChatController.syncCanvasChrome(!!tab.isCanvasOpen);
 
         // Sync Attachments UI
         UI.renderAttachments(tab.attachments || []);

@@ -62,6 +62,7 @@ const ASSETS_TO_CACHE = [
   './js/modules/desktop.js',
   './js/modules/desktopNotes.js',
   './js/modules/files.js',
+  './js/modules/foxRain.js',
   './js/modules/heuristics.js',
   './js/modules/library.js',
   './js/modules/llm.js',

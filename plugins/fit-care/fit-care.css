@@ -2237,3 +2237,264 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 @media (prefers-reduced-motion: reduce) {
     #fit-care-plugin-root * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- main app skin ---------- */
+/* Flat surfaces, soft shadows, no hairlines — the plugin follows the app shell. */
+
+#fit-care-plugin-root {
+    --fit-bg: var(--aru-surface);
+    --fit-card: var(--aru-surface);
+    --fit-card-2: var(--aru-surface-muted);
+    --fit-text: var(--aru-text);
+    --fit-subtle: var(--aru-text-muted);
+    --fit-faint: var(--aru-text-faint);
+    --fit-border: transparent;
+    --fit-border-strong: transparent;
+    --fit-shadow: var(--aru-shadow-xs);
+    --fit-shadow-lg: var(--aru-shadow-lg);
+    --fit-radius: var(--aru-radius-lg);
+    background: var(--aru-surface);
+}
+
+.dark #fit-care-plugin-root {
+    --fit-bg: var(--aru-surface);
+    --fit-card: var(--aru-surface);
+    --fit-card-2: var(--aru-surface-muted);
+    --fit-text: var(--aru-text);
+    --fit-subtle: var(--aru-text-muted);
+    --fit-faint: var(--aru-text-faint);
+    --fit-border: transparent;
+    --fit-border-strong: transparent;
+    --fit-shadow: var(--aru-shadow-xs);
+    --fit-shadow-lg: var(--aru-shadow-lg);
+}
+
+#fit-care-plugin-root .fit-topbar {
+    border-bottom: 0;
+    box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45);
+}
+
+#fit-care-plugin-root .fit-card,
+#fit-care-plugin-root .fit-calendar-card,
+#fit-care-plugin-root .fit-day-panel,
+#fit-care-plugin-root .fit-actual-card,
+#fit-care-plugin-root .fit-metric,
+#fit-care-plugin-root .fit-kpi,
+#fit-care-plugin-root .fit-plan-banner,
+#fit-care-plugin-root .fit-protocol,
+#fit-care-plugin-root .fit-quick-tile {
+    border: 0;
+    background: var(--fit-card);
+    box-shadow: var(--aru-shadow-sm);
+}
+
+#fit-care-plugin-root .fit-plan-session,
+#fit-care-plugin-root .fit-insight,
+#fit-care-plugin-root .fit-dose,
+#fit-care-plugin-root .fit-disclaimer-bar,
+#fit-care-plugin-root .fit-week-day,
+#fit-care-plugin-root .fit-week-nav,
+#fit-care-plugin-root .fit-icon-btn,
+#fit-care-plugin-root .fit-btn-ghost,
+#fit-care-plugin-root .fit-chip {
+    border: 0;
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-week-nav:hover,
+#fit-care-plugin-root .fit-icon-btn:hover,
+#fit-care-plugin-root .fit-btn-ghost:hover,
+#fit-care-plugin-root .fit-chip:hover {
+    background: var(--aru-surface-hover);
+}
+
+#fit-care-plugin-root .fit-plan-day {
+    border: 0;
+    background: var(--fit-card);
+    box-shadow: var(--aru-shadow-xs);
+}
+
+#fit-care-plugin-root .fit-plan-day:hover {
+    box-shadow: var(--aru-shadow-sm);
+}
+
+#fit-care-plugin-root .fit-plan-day.is-today,
+#fit-care-plugin-root .fit-week-day.is-today,
+#fit-care-plugin-root .fit-week-day.is-selected,
+#fit-care-plugin-root .fit-day.is-selected {
+    border: 0;
+    background: var(--fit-accent-soft);
+}
+
+#fit-care-plugin-root .fit-day {
+    border: 0;
+}
+
+#fit-care-plugin-root .fit-day:hover {
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-day-phase.period.is-forecast {
+    border: 0;
+    background: color-mix(in srgb, var(--fit-accent) 45%, transparent);
+}
+
+#fit-care-plugin-root .fit-day-phase.fertile.is-forecast {
+    border: 0;
+    background: color-mix(in srgb, var(--fit-sky) 45%, transparent);
+}
+
+#fit-care-plugin-root .fit-day-phase.ovulation.is-forecast {
+    border: 0;
+    background: color-mix(in srgb, var(--fit-violet) 45%, transparent);
+}
+
+#fit-care-plugin-root .fit-day-phase.luteal.is-forecast {
+    border: 0;
+    background: color-mix(in srgb, var(--fit-amber) 45%, transparent);
+}
+
+#fit-care-plugin-root .fit-week-session.rest {
+    border: 0;
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-empty,
+#fit-care-plugin-root .fit-privacy-lock {
+    border: 0;
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-day-tabs {
+    border-bottom: 0;
+    gap: 3px;
+}
+
+#fit-care-plugin-root .fit-day-tab {
+    border-bottom: 0;
+    border-radius: 8px;
+    margin-bottom: 0;
+}
+
+#fit-care-plugin-root .fit-day-tab.is-active {
+    border-bottom-color: transparent;
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-alert {
+    border: 0;
+}
+
+#fit-care-plugin-root .fit-dose-check {
+    border: 0;
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-dose.is-missed {
+    border: 0;
+    background: var(--fit-amber-soft);
+}
+
+#fit-care-plugin-root .fit-danger-zone {
+    border: 0;
+    background: #fef2f2;
+}
+
+.dark #fit-care-plugin-root .fit-danger-zone {
+    background: #3a1a1a;
+}
+
+#fit-care-plugin-root .fit-switch-row {
+    border-bottom: 0;
+    padding: 10px 0;
+}
+
+#fit-care-plugin-root .fit-switch {
+    background: #d8d8dd;
+}
+
+.dark #fit-care-plugin-root .fit-switch {
+    background: #3a3a3f;
+}
+
+#fit-care-plugin-root .fit-btn-primary,
+#fit-care-plugin-root .fit-quick-btn {
+    border: 0;
+    box-shadow: none;
+}
+
+#fit-care-plugin-root .fit-btn {
+    background: var(--fit-card-2);
+}
+
+#fit-care-plugin-root .fit-btn:hover {
+    background: var(--aru-surface-hover);
+}
+
+#fit-care-plugin-root .fit-input,
+#fit-care-plugin-root .fit-select,
+#fit-care-plugin-root .fit-textarea,
+#fit-care-plugin-root .fit-note-box,
+#fit-care-plugin-root .fit-exercise-row input {
+    border: 0;
+    background: var(--fit-card-2);
+    box-shadow: none;
+}
+
+#fit-care-plugin-root .fit-input:focus,
+#fit-care-plugin-root .fit-select:focus,
+#fit-care-plugin-root .fit-textarea:focus,
+#fit-care-plugin-root .fit-note-box:focus,
+#fit-care-plugin-root .fit-exercise-row input:focus {
+    border: 0;
+    background: var(--aru-surface-hover);
+    box-shadow: var(--aru-shadow-sm);
+    outline: none;
+}
+
+#fit-care-plugin-root .fit-timeline-line,
+#fit-care-plugin-root .fit-chat-bubble.assistant hr {
+    background: var(--aru-border-subtle);
+}
+
+#fit-care-plugin-root .fit-chart .axis-line {
+    stroke: var(--aru-border);
+}
+
+#fit-care-plugin-root .fit-modal-backdrop {
+    background: var(--aru-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#fit-care-plugin-root .fit-modal-card {
+    border: 0;
+    border-radius: var(--aru-radius-lg);
+    background: var(--fit-card);
+    box-shadow: var(--aru-shadow-lg);
+}
+
+#fit-care-plugin-root .fit-modal-head,
+#fit-care-plugin-root .fit-modal-foot {
+    border: 0;
+    background: var(--fit-card);
+}
+
+#fit-care-plugin-root {
+    scrollbar-color: #c7c7cc transparent;
+}
+
+.dark #fit-care-plugin-root {
+    scrollbar-color: #45454b transparent;
+}
+
+#fit-care-plugin-root .fit-view::-webkit-scrollbar-thumb,
+#fit-care-plugin-root .fit-modal-body::-webkit-scrollbar-thumb {
+    background: #c7c7cc;
+    border: 0;
+}
+
+.dark #fit-care-plugin-root .fit-view::-webkit-scrollbar-thumb,
+.dark #fit-care-plugin-root .fit-modal-body::-webkit-scrollbar-thumb {
+    background: #45454b;
+}
