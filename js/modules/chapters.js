@@ -11,15 +11,17 @@ export const Chapters = {
     _inited: false,
     _open: false,
     _pickChapterId: null,
+    _pickChatId: null,
     _flashTimer: null,
+    _flashEl: null,
 
     init() {
         if (this._inited) return;
-        this._inited = true;
 
         const fab = document.getElementById('chapters-fab');
         const panel = document.getElementById('chapters-panel');
         if (!fab || !panel) return;
+        this._inited = true;
 
         fab.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -90,12 +92,17 @@ export const Chapters = {
     refreshVisibility() {
         const fab = document.getElementById('chapters-fab');
         if (!fab) return;
-        const show = !!Chapters._activeTab();
+        const tab = Chapters._activeTab();
+        const show = !!tab;
         fab.classList.toggle('hidden', !show);
         if (!show) {
+            if (Chapters._pickChapterId) Chapters.cancelPick();
             Chapters.close(true);
-        } else if (Chapters._open) {
-            Chapters.render();
+        } else {
+            if (Chapters._pickChapterId && tab.chatId != Chapters._pickChatId) {
+                Chapters.cancelPick();
+            }
+            if (Chapters._open) Chapters.render();
         }
     },
 
@@ -216,6 +223,11 @@ export const Chapters = {
             if (!(await UI.confirm(question))) return;
             if (rowType === 'section') DB.deleteSection(id);
             else DB.deleteChapter(id);
+            if (Chapters._pickChapterId) {
+                const tab = Chapters._activeTab();
+                const stillExists = tab && DB.getChaptersByChat(tab.chatId).some(c => c.id === Chapters._pickChapterId);
+                if (!stillExists) Chapters.cancelPick();
+            }
             Chapters.render();
             return;
         }
@@ -277,7 +289,9 @@ export const Chapters = {
     // --- Anchor picking ---
 
     startPick(chapterId) {
+        const tab = Chapters._activeTab();
         Chapters._pickChapterId = chapterId;
+        Chapters._pickChatId = tab ? tab.chatId : null;
         const banner = document.getElementById('chapters-pick-banner');
         if (banner) banner.classList.remove('hidden');
         document.body.classList.add('chapters-picking');
@@ -285,6 +299,7 @@ export const Chapters = {
 
     cancelPick() {
         Chapters._pickChapterId = null;
+        Chapters._pickChatId = null;
         const banner = document.getElementById('chapters-pick-banner');
         if (banner) banner.classList.add('hidden');
         document.body.classList.remove('chapters-picking');
@@ -294,6 +309,11 @@ export const Chapters = {
         if (!Chapters._pickChapterId) return;
         const banner = document.getElementById('chapters-pick-banner');
         if (banner && banner.contains(e.target)) return;
+        const tab = Chapters._activeTab();
+        if (!tab || tab.chatId != Chapters._pickChatId) {
+            Chapters.cancelPick();
+            return;
+        }
         const msgEl = e.target.closest ? e.target.closest('[data-msg-id]') : null;
         if (!msgEl) return;
 
@@ -310,10 +330,17 @@ export const Chapters = {
     jumpTo(anchorMessageId) {
         const el = document.querySelector(`#messages-container [data-msg-id="${anchorMessageId}"]`);
         if (!el) return;
+        if (Chapters._flashEl && Chapters._flashEl !== el) {
+            Chapters._flashEl.classList.remove('msg-anchor-flash');
+        }
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('msg-anchor-flash');
+        Chapters._flashEl = el;
         if (Chapters._flashTimer) clearTimeout(Chapters._flashTimer);
-        Chapters._flashTimer = setTimeout(() => el.classList.remove('msg-anchor-flash'), 1900);
+        Chapters._flashTimer = setTimeout(() => {
+            el.classList.remove('msg-anchor-flash');
+            if (Chapters._flashEl === el) Chapters._flashEl = null;
+        }, 1900);
         if (window.innerWidth < 768) Chapters.close();
     },
 };

@@ -29,6 +29,30 @@ function b64Url(bytes) {
     return u8ToB64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function httpError(prefix, status, body = '') {
+    const err = new Error(`${prefix} ${status}: ${String(body || '').slice(0, 300)}`.trim());
+    err.status = status;
+    return err;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+    const ac = new AbortController();
+    const externalSignal = options.signal || null;
+    if (externalSignal?.aborted) {
+        ac.abort(externalSignal.reason);
+    }
+    const onExternalAbort = () => ac.abort(externalSignal?.reason);
+    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    const timer = setTimeout(() => ac.abort(new Error('Request timeout')), timeoutMs);
+    try {
+        const fetchOpts = { ...options, signal: ac.signal };
+        return await fetch(url, fetchOpts);
+    } finally {
+        clearTimeout(timer);
+        if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+    }
+}
+
 // ---------- Profile decryption (AES-GCM, key derived from the master password via PBKDF2) ----------
 
 async function decryptProfile(blob, password) {
@@ -37,7 +61,11 @@ async function decryptProfile(blob, password) {
     const rawKey = await Auth._deriveKey(password, salt);
     const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, b64ToU8(blob.ct));
-    return JSON.parse(new TextDecoder().decode(plain));
+    return {
+        profile: JSON.parse(new TextDecoder().decode(plain)),
+        rawKey,
+        salt
+    };
 }
 
 // ---------- Google Drive adapter (Google Identity Services + Drive API v3, scope drive.file) ----------
@@ -56,6 +84,8 @@ const GoogleDriveAdapter = {
 
     init(profile) {
         this.profile = profile;
+        this._nameIds = new Map();
+        this._folderCheckedAt = 0;
     },
 
     async _ensureGisLoaded() {
@@ -120,41 +150,49 @@ const GoogleDriveAdapter = {
         });
     },
 
-    // Backward-compatibility wrapper
-    async startAuth(clientId, resume) {
-        const tokens = await this.authorize(clientId);
-        return { tokens, clientId, resume };
-    },
-
-    async handleAuthCallback() {
-        return null;
-    },
-
-    async _ensureAccessToken() {
+    async _ensureAccessToken({ signal = null, forceRefresh = false } = {}) {
+        if (signal?.aborted) {
+            throw signal.reason || new DOMException('Aborted', 'AbortError');
+        }
         const p = this.profile;
         const now = Date.now();
-        if (p.accessToken && p.accessTokenExp && p.accessTokenExp - 60000 > now) return;
+        if (!forceRefresh && p.accessToken && p.accessTokenExp && p.accessTokenExp - 60000 > now) return;
 
         // Try silent refresh in the background
         if (p.clientId) {
             try {
                 await this._ensureGisLoaded();
+                if (signal?.aborted) {
+                    throw signal.reason || new DOMException('Aborted', 'AbortError');
+                }
                 const refreshed = await new Promise((resolve, reject) => {
+                    let settled = false;
+                    const finish = (fn, val) => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        if (signal) signal.removeEventListener('abort', onAbort);
+                        fn(val);
+                    };
+                    const onAbort = () => finish(reject, signal.reason || new DOMException('Aborted', 'AbortError'));
+                    const timer = setTimeout(() => finish(reject, new Error('Google silent token refresh timeout')), 20000);
+                    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
                     const client = window.google.accounts.oauth2.initTokenClient({
                         client_id: p.clientId,
                         scope: 'https://www.googleapis.com/auth/drive.file',
                         prompt: '',
                         callback: (resp) => {
                             if (resp.error || !resp.access_token) {
-                                reject(new Error(resp.error_description || resp.error || 'Silent refresh failed'));
+                                finish(reject, new Error(resp.error_description || resp.error || 'Silent refresh failed'));
                                 return;
                             }
-                            resolve({
+                            finish(resolve, {
                                 accessToken: resp.access_token,
                                 expiresIn: parseInt(resp.expires_in) || 3599
                             });
                         },
-                        error_callback: (err) => reject(new Error(err?.message || 'Silent refresh error'))
+                        error_callback: (err) => finish(reject, new Error(err?.message || 'Silent refresh error'))
                     });
                     client.requestAccessToken({ prompt: '' });
                 });
@@ -164,6 +202,7 @@ const GoogleDriveAdapter = {
                 if (RemoteStorage.onProfileChange) await RemoteStorage.onProfileChange(this.profile);
                 return;
             } catch (silentErr) {
+                if (silentErr?.name === 'AbortError' || signal?.aborted) throw silentErr;
                 console.warn('Google silent token refresh unavailable:', silentErr);
             }
         }
@@ -171,55 +210,85 @@ const GoogleDriveAdapter = {
         throw new Error(translations().remote_error_reauth || 'Срок действия сессии Google Drive истёк. Пожалуйста, повторно авторизуйтесь в Настройках → Хранилище.');
     },
 
+    async _authedFetch(url, options = {}) {
+        const signal = options.signal || null;
+        const timeoutMs = options.timeoutMs || 30000;
+        const baseHeaders = { ...(options.headers || {}) };
+        await this._ensureAccessToken({ signal });
+
+        const doFetch = () => {
+            const reqOpts = { cache: 'no-store', ...options };
+            delete reqOpts.timeoutMs;
+            reqOpts.headers = {
+                ...baseHeaders,
+                'Authorization': `Bearer ${this.profile.accessToken}`
+            };
+            return fetchWithTimeout(url, reqOpts, timeoutMs);
+        };
+
+        let res = await doFetch();
+        if (res.status === 401) {
+            this.profile.accessToken = null;
+            this.profile.accessTokenExp = 0;
+            await this._ensureAccessToken({ signal, forceRefresh: true });
+            res = await doFetch();
+        }
+        return res;
+    },
+
     async _api(path, options = {}) {
-        await this._ensureAccessToken();
-        const res = await fetch(this._apiBase + path, {
-            ...options,
-            headers: {
-                'Authorization': `Bearer ${this.profile.accessToken}`,
-                ...(options.headers || {})
-            }
-        });
+        const res = await this._authedFetch(this._apiBase + path, options);
         if (!res.ok) {
             const text = await res.text().catch(() => '');
-            throw new Error(`Google Drive API error ${res.status}: ${text.slice(0, 300)}`);
+            throw httpError('Google Drive API error', res.status, text);
         }
         return res;
     },
 
     // Creates (or reuses) the app-owned "Aru AI" folder
-    async ensureFolder() {
+    async ensureFolder(signal = null) {
         if (this.profile.folderId && Date.now() - this._folderCheckedAt < 10 * 60 * 1000) {
             return this.profile.folderId;
         }
+        const prevFolderId = this.profile.folderId;
         if (this.profile.folderId) {
             try {
-                await this._api(`/files/${this.profile.folderId}?fields=id`);
-                this._folderCheckedAt = Date.now();
-                return this.profile.folderId;
-            } catch (e) { /* folder gone, recreate */ }
+                const res = await this._api(`/files/${this.profile.folderId}?fields=id,trashed`, { signal });
+                const meta = await res.json().catch(() => ({}));
+                if (!meta.trashed) {
+                    this._folderCheckedAt = Date.now();
+                    return this.profile.folderId;
+                }
+            } catch (e) {
+                if (e?.status !== 404) throw e;
+            }
         }
         const q = encodeURIComponent("name='Aru AI' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-        const res = await this._api(`/files?q=${q}&fields=files(id,name)`);
+        const res = await this._api(`/files?q=${q}&fields=files(id,name)&orderBy=createdTime`, { signal });
         const json = await res.json();
         if (json.files && json.files.length) {
             this.profile.folderId = json.files[0].id;
         } else {
             const createRes = await this._api('/files', {
                 method: 'POST',
+                signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: 'Aru AI', mimeType: 'application/vnd.google-apps.folder' })
             });
             const created = await createRes.json();
             this.profile.folderId = created.id;
         }
+        this._folderCheckedAt = Date.now();
+        if (this.profile.folderId !== prevFolderId && RemoteStorage.onProfileChange) {
+            await RemoteStorage.onProfileChange(this.profile);
+        }
         return this.profile.folderId;
     },
 
-    async listFiles() {
-        const folderId = await this.ensureFolder();
+    async listFiles(opts = {}) {
+        const folderId = await this.ensureFolder(opts.signal || null);
         const q = encodeURIComponent(`'${folderId}' in parents and name contains '.sqlite' and trashed=false`);
-        const res = await this._api(`/files?q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`);
+        const res = await this._api(`/files?q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`, { signal: opts.signal });
         const json = await res.json();
         return (json.files || []).map(f => ({
             id: f.id,
@@ -229,9 +298,9 @@ const GoogleDriveAdapter = {
         }));
     },
 
-    async createFile(name) {
-        await this._ensureAccessToken();
-        const folderId = await this.ensureFolder();
+    async createFile(name, opts = {}) {
+        const signal = opts.signal || null;
+        const folderId = await this.ensureFolder(signal);
         const metadata = { name, parents: [folderId] };
         const boundary = 'aru_boundary_' + Date.now();
         const body = new Blob([
@@ -240,46 +309,46 @@ const GoogleDriveAdapter = {
             new Uint8Array(0),
             `\r\n--${boundary}--`
         ]);
-        const res = await fetch(`${this._uploadBase}/files?uploadType=multipart&fields=id,name`, {
+        const res = await this._authedFetch(`${this._uploadBase}/files?uploadType=multipart&fields=id,name`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.profile.accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
+            signal,
+            headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
             body
         });
-        if (!res.ok) throw new Error('Google Drive create file failed: ' + res.status);
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('Google Drive create file failed', res.status, text);
+        }
         const json = await res.json();
         return { id: json.id, name: json.name };
     },
 
-    async load() {
-        const res = await this._api(`/files/${this.profile.fileId}?alt=media`);
+    async load(opts = {}) {
+        const res = await this._api(`/files/${this.profile.fileId}?alt=media`, { signal: opts.signal });
         const buf = await res.arrayBuffer();
         return new Uint8Array(buf);
     },
 
-    async save(bytes) {
-        await this._ensureAccessToken();
-        const res = await fetch(`${this._uploadBase}/files/${this.profile.fileId}?uploadType=media`, {
+    async save(bytes, opts = {}) {
+        const res = await this._authedFetch(`${this._uploadBase}/files/${this.profile.fileId}?uploadType=media`, {
             method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${this.profile.accessToken}`,
-                'Content-Type': 'application/octet-stream',
-                'Content-Length': bytes.length
-            },
+            signal: opts.signal,
+            headers: { 'Content-Type': 'application/octet-stream' },
             body: bytes
         });
-        if (!res.ok) throw new Error('Google Drive upload failed: ' + res.status);
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('Google Drive upload failed', res.status, text);
+        }
     },
 
-    async getRemoteInfo() {
+    async getRemoteInfo(opts = {}) {
         if (!this.profile.fileId) return null;
         let res;
         try {
-            res = await this._api(`/files/${this.profile.fileId}?fields=id,name,modifiedTime,size`);
+            res = await this._api(`/files/${this.profile.fileId}?fields=id,name,modifiedTime,size`, { signal: opts.signal });
         } catch (e) {
-            if (/\b404\b/.test(e.message)) return null; // file deleted or moved away
+            if (e?.status === 404) return null; // file deleted or moved away
             throw e;
         }
         const json = await res.json();
@@ -292,14 +361,14 @@ const GoogleDriveAdapter = {
 
     // ----- Named files used by the v2 sync workspace -----
 
-    async listAllFiles() {
-        const folderId = await this.ensureFolder();
+    async listAllFiles(opts = {}) {
+        const folderId = await this.ensureFolder(opts.signal || null);
         const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
         const files = [];
         let pageToken = '';
         do {
             const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
-            const res = await this._api(`/files?q=${q}&fields=nextPageToken,files(id,name,modifiedTime,size)&pageSize=1000${page}`);
+            const res = await this._api(`/files?q=${q}&fields=nextPageToken,files(id,name,modifiedTime,size)&pageSize=1000${page}`, { signal: opts.signal });
             const json = await res.json();
             for (const f of json.files || []) {
                 files.push({
@@ -311,47 +380,52 @@ const GoogleDriveAdapter = {
             }
             pageToken = json.nextPageToken || '';
         } while (pageToken);
-        this._nameIds = new Map(files.map(f => [f.name, f.id]));
+        files.sort((a, b) => (b.ts - a.ts) || String(a.id).localeCompare(String(b.id)));
+        const nameIds = new Map();
+        for (const f of files) {
+            if (!nameIds.has(f.name)) nameIds.set(f.name, f.id);
+        }
+        this._nameIds = nameIds;
         return files;
     },
 
-    async findNamed(name) {
+    async findNamed(name, opts = {}) {
         const cached = this._nameIds.get(name);
         if (cached) return { id: cached, name };
-        const files = await this.listAllFiles();
+        const files = await this.listAllFiles(opts);
         return files.find(f => f.name === name) || null;
     },
 
-    async readNamed(name) {
-        await this._ensureAccessToken();
+    async readNamed(name, opts = {}) {
         for (let attempt = 0; attempt < 2; attempt++) {
-            const file = await this.findNamed(name);
+            const file = await this.findNamed(name, opts);
             if (!file) return null;
-            const res = await fetch(`${this._apiBase}/files/${file.id}?alt=media`, {
+            const res = await this._authedFetch(`${this._apiBase}/files/${file.id}?alt=media`, {
                 cache: 'no-store',
-                headers: { 'Authorization': `Bearer ${this.profile.accessToken}` }
+                signal: opts.signal
             });
             if (res.status === 404) {
                 this._nameIds.delete(name);
                 continue;
             }
-            if (!res.ok) throw new Error('Google Drive read failed: ' + res.status);
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                throw httpError('Google Drive read failed', res.status, text);
+            }
             return new Uint8Array(await res.arrayBuffer());
         }
         return null;
     },
 
     async writeNamed(name, bytes, opts = {}) {
-        await this._ensureAccessToken();
-        const folderId = await this.ensureFolder();
-        const existing = opts.fresh ? null : await this.findNamed(name);
+        const signal = opts.signal || null;
+        const folderId = await this.ensureFolder(signal);
+        const existing = opts.fresh ? null : await this.findNamed(name, { signal });
         if (existing) {
-            const res = await fetch(`${this._uploadBase}/files/${existing.id}?uploadType=media`, {
+            const res = await this._authedFetch(`${this._uploadBase}/files/${existing.id}?uploadType=media`, {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${this.profile.accessToken}`,
-                    'Content-Type': 'application/octet-stream'
-                },
+                signal,
+                headers: { 'Content-Type': 'application/octet-stream' },
                 body: bytes
             });
             if (res.status === 404) {
@@ -359,7 +433,8 @@ const GoogleDriveAdapter = {
             } else if (res.ok) {
                 return { id: existing.id, name };
             } else {
-                throw new Error('Google Drive update failed: ' + res.status);
+                const text = await res.text().catch(() => '');
+                throw httpError('Google Drive update failed', res.status, text);
             }
         }
         const boundary = 'aru_boundary_' + Date.now();
@@ -370,29 +445,71 @@ const GoogleDriveAdapter = {
             bytes,
             `\r\n--${boundary}--`
         ]);
-        const res = await fetch(`${this._uploadBase}/files?uploadType=multipart&fields=id,name`, {
+        const res = await this._authedFetch(`${this._uploadBase}/files?uploadType=multipart&fields=id,name`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.profile.accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
+            signal,
+            headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
             body
         });
-        if (!res.ok) throw new Error('Google Drive create failed: ' + res.status);
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('Google Drive create failed', res.status, text);
+        }
         const json = await res.json();
-        this._nameIds.set(json.name || name, json.id);
-        return { id: json.id, name: json.name };
+        let chosenId = json.id;
+        let chosenName = json.name || name;
+
+        // Deduplicate singleton control files if two devices raced to create them
+        if (name === 'aru_sync_head.json' || name === 'aru_sync_keyfile.json') {
+            try {
+                const dupQ = encodeURIComponent(`'${folderId}' in parents and name='${name}' and trashed=false`);
+                const dupRes = await this._api(`/files?q=${dupQ}&fields=files(id,name)`, { signal });
+                const dupJson = await dupRes.json();
+                const dupes = (dupJson.files || []).filter(f => f.id);
+                if (dupes.length > 1) {
+                    dupes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+                    const canonical = dupes[0];
+                    if (canonical.id !== json.id) {
+                        const patchRes = await this._authedFetch(`${this._uploadBase}/files/${canonical.id}?uploadType=media`, {
+                            method: 'PATCH',
+                            signal,
+                            headers: { 'Content-Type': 'application/octet-stream' },
+                            body: bytes
+                        });
+                        if (patchRes.ok) {
+                            await this.removeFile(json.id, { signal }).catch(e => { if (e?.status !== 404) console.warn(e); });
+                            chosenId = canonical.id;
+                            chosenName = canonical.name || name;
+                        }
+                    } else {
+                        for (const extra of dupes.slice(1)) {
+                            await this.removeFile(extra.id, { signal }).catch(e => { if (e?.status !== 404) console.warn(e); });
+                        }
+                    }
+                }
+            } catch (e) {
+                if (e?.name === 'AbortError' || signal?.aborted) throw e;
+            }
+        }
+
+        this._nameIds.set(chosenName, chosenId);
+        return { id: chosenId, name: chosenName };
     },
 
-    async removeNamed(name) {
-        const file = await this.findNamed(name);
+    async removeNamed(name, opts = {}) {
+        const file = await this.findNamed(name, opts);
         if (!file) return;
-        await this.removeFile(file.id);
+        await this.removeFile(file.id, opts);
         this._nameIds.delete(name);
     },
 
-    async removeFile(fileId) {
-        await this._api(`/files/${fileId}`, { method: 'DELETE' });
+    async removeFile(fileId, opts = {}) {
+        try {
+            await this._api(`/files/${fileId}`, { method: 'DELETE', signal: opts.signal });
+        } catch (e) {
+            if (e?.status === 404) return;
+            throw e;
+        }
     }
 };
 
@@ -401,18 +518,27 @@ const GoogleDriveAdapter = {
 const WebDAVAdapter = {
     type: 'webdav',
     profile: null,
+    _collectionReady: false,
 
     init(profile) {
         this.profile = profile;
+        this._collectionReady = false;
     },
 
     _baseUrl() {
         return (this.profile.url || '').replace(/\/+$/, '');
     },
 
+    _encodePath(pathname) {
+        return String(pathname || '')
+            .split('/')
+            .map(seg => (seg ? encodeURIComponent(seg) : ''))
+            .join('/');
+    },
+
     async _dav(pathname, options = {}) {
         const settings = window.aruState?.userSettings || {};
-        const url = this._baseUrl() + pathname;
+        const url = this._baseUrl() + this._encodePath(pathname);
         const headers = { ...(options.headers || {}) };
         if (!options.skipAuth && this.profile.username) {
             const creds = u8ToB64(new TextEncoder().encode(`${this.profile.username}:${this.profile.password || ''}`));
@@ -422,17 +548,21 @@ const WebDAVAdapter = {
         // Support custom proxy configured on the profile itself or in Network settings
         const customProxy = this.profile.proxyUrl || (settings.proxy_strategy === 'custom' ? settings.proxy_custom_url : null);
         // Never let the browser HTTP cache serve a stale head or snapshot.
+        const timeoutMs = options.timeoutMs || 30000;
         const fetchOpts = { cache: 'no-store', ...options, headers };
+        delete fetchOpts.timeoutMs;
+        delete fetchOpts.skipAuth;
         let res;
         if (customProxy) {
             const proxyUrl = customProxy.includes('%URL%')
                 ? customProxy.replace('%URL%', encodeURIComponent(url))
                 : customProxy + encodeURIComponent(url);
-            res = await fetch(proxyUrl, fetchOpts);
+            res = await fetchWithTimeout(proxyUrl, fetchOpts, timeoutMs);
         } else {
             try {
-                res = await fetch(url, fetchOpts);
+                res = await fetchWithTimeout(url, fetchOpts, timeoutMs);
             } catch (e) {
+                if (e?.name === 'AbortError' || options.signal?.aborted) throw e;
                 const t = translations();
                 const isCors = e.name === 'TypeError' || /fetch/i.test(e.message);
                 if (isCors) {
@@ -442,10 +572,10 @@ const WebDAVAdapter = {
             }
         }
 
-        if (options.method === 'PROPFIND') return res; // 404 expected when probing
+        if (options.method === 'PROPFIND') return res; // callers inspect 404 vs other failures explicitly
         if (!res.ok) {
             const text = await res.text().catch(() => '');
-            throw new Error(`WebDAV error ${res.status}: ${text.slice(0, 300)}`);
+            throw httpError('WebDAV error', res.status, text);
         }
         return res;
     },
@@ -456,22 +586,37 @@ const WebDAVAdapter = {
     },
 
     // Ensures the collection path exists, creating segments with MKCOL as needed
-    async ensureCollection() {
+    async ensureCollection(opts = {}) {
+        if (this._collectionReady) return;
+        const signal = opts.signal || null;
         const segments = (this.profile.davPath || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
         let current = '';
         for (const seg of segments) {
             current += '/' + seg;
-            const probe = await this._dav(current + '/', { method: 'PROPFIND', headers: { Depth: '0' }, skipAuth: false }).catch(() => null);
-            if (probe && probe.ok) continue;
-            await this._dav(current, { method: 'MKCOL' }).catch(() => ({ ok: true })); // 405 = already exists
+            const probe = await this._dav(current + '/', { method: 'PROPFIND', headers: { Depth: '0' }, skipAuth: false, signal });
+            if (probe.ok) continue;
+            if (probe.status !== 404 && probe.status !== 409) {
+                const text = await probe.text().catch(() => '');
+                throw httpError('WebDAV PROPFIND error', probe.status, text);
+            }
+            try {
+                await this._dav(current, { method: 'MKCOL', signal });
+            } catch (err) {
+                if (err?.status !== 405 && err?.status !== 301) throw err; // 405/301 = already exists
+            }
         }
+        this._collectionReady = true;
     },
 
-    async listFiles() {
+    async listFiles(opts = {}) {
         const dir = (this.profile.davPath || '').replace(/^\/+|\/+$/g, '');
         const path = dir ? '/' + dir + '/' : '/';
-        const res = await this._dav(path, { method: 'PROPFIND', headers: { Depth: '1' } });
-        if (!res.ok && res.status === 404) return [];
+        const res = await this._dav(path, { method: 'PROPFIND', headers: { Depth: '1' }, signal: opts.signal });
+        if (res.status === 404) return [];
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('WebDAV PROPFIND error', res.status, text);
+        }
         const xmlText = await res.text();
         const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
         const parserError = doc.querySelector('parsererror');
@@ -482,7 +627,8 @@ const WebDAVAdapter = {
             const hrefEl = resp.getElementsByTagNameNS('*', 'href')[0];
             const isCollection = resp.getElementsByTagNameNS('*', 'collection').length > 0;
             if (!hrefEl || isCollection) continue;
-            const href = decodeURIComponent(hrefEl.textContent);
+            let href = hrefEl.textContent || '';
+            try { href = decodeURIComponent(href); } catch (_) {}
             if (!href.endsWith('.sqlite') && !href.endsWith('.db')) continue;
             const lastmodEl = resp.getElementsByTagNameNS('*', 'getlastmodified')[0];
             const sizeEl = resp.getElementsByTagNameNS('*', 'getcontentlength')[0];
@@ -497,27 +643,35 @@ const WebDAVAdapter = {
         return files;
     },
 
-    async createFile(name) {
-        await this.ensureCollection();
+    async createFile(name, opts = {}) {
+        await this.ensureCollection(opts);
         this.profile.fileName = name;
-        await this._dav(this._filePath(), { method: 'PUT', body: new Uint8Array(0), headers: { 'Content-Type': 'application/x-sqlite3' } });
+        await this._dav(this._filePath(), { method: 'PUT', body: new Uint8Array(0), headers: { 'Content-Type': 'application/x-sqlite3' }, signal: opts.signal });
         return { id: this._filePath(), name };
     },
 
-    async load() {
-        const res = await this._dav(this._filePath(), { method: 'GET' });
+    async load(opts = {}) {
+        const res = await this._dav(this._filePath(), { method: 'GET', signal: opts.signal });
         const buf = await res.arrayBuffer();
         return new Uint8Array(buf);
     },
 
-    async save(bytes) {
-        const res = await this._dav(this._filePath(), { method: 'PUT', body: bytes, headers: { 'Content-Type': 'application/x-sqlite3' } });
-        if (!res.ok) throw new Error('WebDAV PUT failed: ' + res.status);
+    async save(bytes, opts = {}) {
+        try {
+            await this._dav(this._filePath(), { method: 'PUT', body: bytes, headers: { 'Content-Type': 'application/x-sqlite3' }, signal: opts.signal });
+        } catch (e) {
+            if (e?.status === 404 || e?.status === 409) this._collectionReady = false;
+            throw e;
+        }
     },
 
-    async getRemoteInfo() {
-        const res = await this._dav(this._filePath(), { method: 'PROPFIND', headers: { Depth: '0' } });
-        if (!res.ok) return null; // file not created yet
+    async getRemoteInfo(opts = {}) {
+        const res = await this._dav(this._filePath(), { method: 'PROPFIND', headers: { Depth: '0' }, signal: opts.signal });
+        if (res.status === 404) return null; // file not created yet
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('WebDAV PROPFIND error', res.status, text);
+        }
         const xmlText = await res.text();
         const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
         const lastmodEl = doc.getElementsByTagNameNS('*', 'getlastmodified')[0];
@@ -536,11 +690,15 @@ const WebDAVAdapter = {
         return (dir ? '/' + dir : '') + '/' + name;
     },
 
-    async listAllFiles() {
+    async listAllFiles(opts = {}) {
         const dir = (this.profile.davPath || '').replace(/^\/+|\/+$/g, '');
         const path = dir ? '/' + dir + '/' : '/';
-        const res = await this._dav(path, { method: 'PROPFIND', headers: { Depth: '1' } });
-        if (!res.ok && res.status === 404) return [];
+        const res = await this._dav(path, { method: 'PROPFIND', headers: { Depth: '1' }, signal: opts.signal });
+        if (res.status === 404) return [];
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw httpError('WebDAV PROPFIND error', res.status, text);
+        }
         const xmlText = await res.text();
         const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
         if (doc.querySelector('parsererror')) {
@@ -552,7 +710,8 @@ const WebDAVAdapter = {
             const hrefEl = resp.getElementsByTagNameNS('*', 'href')[0];
             const isCollection = resp.getElementsByTagNameNS('*', 'collection').length > 0;
             if (!hrefEl || isCollection) continue;
-            const href = decodeURIComponent(hrefEl.textContent);
+            let href = hrefEl.textContent || '';
+            try { href = decodeURIComponent(href); } catch (_) {}
             const name = href.split('/').filter(Boolean).pop();
             if (!name) continue;
             const lastmodEl = resp.getElementsByTagNameNS('*', 'getlastmodified')[0];
@@ -568,36 +727,42 @@ const WebDAVAdapter = {
         return files;
     },
 
-    async findNamed(name) {
-        const files = await this.listAllFiles();
+    async findNamed(name, opts = {}) {
+        const files = await this.listAllFiles(opts);
         return files.find(f => f.name === name) || null;
     },
 
-    async readNamed(name) {
+    async readNamed(name, opts = {}) {
         try {
-            const res = await this._dav(this._namedPath(name), { method: 'GET' });
+            const res = await this._dav(this._namedPath(name), { method: 'GET', signal: opts.signal });
             return new Uint8Array(await res.arrayBuffer());
         } catch (e) {
-            if (/\b404\b/.test(e.message)) return null;
+            if (e?.status === 404) return null;
             throw e;
         }
     },
 
-    async writeNamed(name, bytes) {
-        await this.ensureCollection();
-        await this._dav(this._namedPath(name), {
-            method: 'PUT',
-            body: bytes,
-            headers: { 'Content-Type': 'application/octet-stream' }
-        });
+    async writeNamed(name, bytes, opts = {}) {
+        await this.ensureCollection(opts);
+        try {
+            await this._dav(this._namedPath(name), {
+                method: 'PUT',
+                body: bytes,
+                headers: { 'Content-Type': 'application/octet-stream' },
+                signal: opts.signal
+            });
+        } catch (e) {
+            if (e?.status === 404 || e?.status === 409) this._collectionReady = false;
+            throw e;
+        }
         return { id: name, name };
     },
 
-    async removeNamed(name) {
+    async removeNamed(name, opts = {}) {
         try {
-            await this._dav(this._namedPath(name), { method: 'DELETE' });
+            await this._dav(this._namedPath(name), { method: 'DELETE', signal: opts.signal });
         } catch (e) {
-            if (!/\b404\b/.test(e.message)) throw e;
+            if (e?.status !== 404) throw e;
         }
     }
 };
@@ -692,19 +857,22 @@ export const RemoteStorage = {
     async unlock(password) {
         const blob = await localforage.getItem(this._profileKey());
         if (!blob) throw new Error(translations().remote_error_not_configured || 'Remote storage is not configured.');
-        const profile = await decryptProfile(blob, password);
-        const salt = b64ToU8(blob.salt);
-        this._keyCache = { rawKey: await Auth._deriveKey(password, salt), salt };
+        const { profile, rawKey, salt } = await decryptProfile(blob, password);
+        this._keyCache = { rawKey, salt };
         this.profile = profile;
         this.locked = false;
         this.adapter = profile.type === 'gdrive' ? GoogleDriveAdapter : WebDAVAdapter;
         this.adapter.init(profile);
-        this.onProfileChange = async () => this._persistUnlockedProfile();
+        this.onProfileChange = async () => {
+            await this._persistUnlockedProfile();
+            await window.SyncEngine?._saveTrusted?.();
+        };
         this._notifyStatus('cloud-paused');
         return profile;
     },
 
     lock() {
+        if (this._pushTimer) { clearTimeout(this._pushTimer); this._pushTimer = null; }
         this.profile = null;
         this.adapter = null;
         this._keyCache = null;
@@ -734,11 +902,15 @@ export const RemoteStorage = {
         this.locked = false;
         this.adapter = profile.type === 'gdrive' ? GoogleDriveAdapter : WebDAVAdapter;
         this.adapter.init(profile);
-        this.onProfileChange = async () => this._persistUnlockedProfile();
+        this.onProfileChange = async () => {
+            await this._persistUnlockedProfile();
+            await window.SyncEngine?._saveTrusted?.();
+        };
         return profile;
     },
 
     async disconnect() {
+        if (this._pushTimer) { clearTimeout(this._pushTimer); this._pushTimer = null; }
         this.stopPolling();
         await localforage.removeItem(this._profileKey());
         localStorage.removeItem(this._metaKey());
@@ -746,11 +918,6 @@ export const RemoteStorage = {
         this.adapter = null;
         this._keyCache = null;
         this.locked = true;
-    },
-
-    // Entry point for app.init: completes the Google redirect round-trip if we just came back
-    handleGoogleAuthCallback() {
-        return GoogleDriveAdapter.handleAuthCallback();
     },
 
     // Public API used by db.js — debounced push of the exported DB bytes
@@ -826,10 +993,9 @@ export const RemoteStorage = {
     async createRemoteFile(name) {
         if (!this.isUnlocked() || !this.adapter) throw new Error('Remote storage locked');
         const created = await this.adapter.createFile(name);
-        if (created.id && !this.profile.fileId) {
-            this.profile.fileId = created.id;
-            if (this.onProfileChange) await this.onProfileChange(this.profile);
-        }
+        if (created.id) this.profile.fileId = created.id;
+        this.profile.fileName = created.name || name;
+        if (this.onProfileChange) await this.onProfileChange(this.profile);
         return created;
     },
 
@@ -865,42 +1031,63 @@ export const RemoteStorage = {
 
     // 3-way conflict dialog. Resolves to 'local' | 'remote' | 'copy'
     showConflictDialog(remoteInfo) {
+        if (typeof document === 'undefined' || !document.body) return Promise.resolve('local');
         const t = translations();
-        const container = document.getElementById('modal-container');
-        if (!container) return Promise.resolve('local');
+        let host = document.getElementById('aru-dialog-host');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'aru-dialog-host';
+            document.body.appendChild(host);
+        }
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         return new Promise((resolve) => {
-            const done = (choice) => {
-                container.innerHTML = '';
-                resolve(choice);
-            };
+            let settled = false;
+            const root = document.createElement('div');
+            root.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm fade-in p-4';
             const dateStr = remoteInfo && remoteInfo.ts ? new Date(remoteInfo.ts).toLocaleString() : '—';
-            container.innerHTML = `
-            <div class="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm fade-in p-4">
-                <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md p-6 shadow-2xl">
+            root.innerHTML = `
+                <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md p-6 shadow-2xl" role="dialog" aria-modal="true">
                     <div class="flex items-center gap-3 mb-4">
                         <div class="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
                             <i data-lucide="git-compare" class="w-5 h-5 text-amber-600"></i>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold dark:text-white">${t.remote_conflict_title || 'Remote copy is newer'}</h3>
-                            <p class="text-xs text-gray-400">${t.remote_conflict_hint || 'The database file on the server was changed from another device.'}</p>
+                            <h3 class="text-lg font-bold dark:text-white">${esc(t.remote_conflict_title || 'Remote copy is newer')}</h3>
+                            <p class="text-xs text-gray-400">${esc(t.remote_conflict_hint || 'The database file on the server was changed from another device.')}</p>
                         </div>
                     </div>
                     <div class="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl text-xs text-gray-500 dark:text-gray-400 mb-5">
-                        ${t.remote_conflict_remote_ts || 'Remote modified:'} <b>${dateStr}</b>
+                        ${esc(t.remote_conflict_remote_ts || 'Remote modified:')} <b>${esc(dateStr)}</b>
                     </div>
                     <div class="space-y-2">
-                        <button id="rc-local" class="w-full py-3 px-4 rounded-xl bg-aru-500 hover:bg-aru-600 text-white font-bold text-sm transition">${t.remote_conflict_keep_local || 'Keep local (upload mine)'}</button>
-                        <button id="rc-remote" class="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold text-sm transition">${t.remote_conflict_take_remote || 'Take remote (download)'}</button>
-                        <button id="rc-copy" class="w-full py-3 px-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400 font-bold text-sm transition">${t.remote_conflict_save_copy || 'Download remote as a copy'}</button>
+                        <button id="rc-local" class="w-full py-3 px-4 rounded-xl bg-aru-500 hover:bg-aru-600 text-white font-bold text-sm transition">${esc(t.remote_conflict_keep_local || 'Keep local (upload mine)')}</button>
+                        <button id="rc-remote" class="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold text-sm transition">${esc(t.remote_conflict_take_remote || 'Take remote (download)')}</button>
+                        <button id="rc-copy" class="w-full py-3 px-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400 font-bold text-sm transition">${esc(t.remote_conflict_save_copy || 'Download remote as a copy')}</button>
                     </div>
-                </div>
-            </div>`;
+                </div>`;
+            const onKey = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    done('local');
+                }
+            };
+            const done = (choice) => {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('keydown', onKey, true);
+                if (root.parentNode) root.parentNode.removeChild(root);
+                resolve(choice);
+            };
+            host.appendChild(root);
             if (window.lucide) lucide.createIcons();
-            container.querySelector('#rc-local').onclick = () => done('local');
-            container.querySelector('#rc-remote').onclick = () => done('remote');
-            container.querySelector('#rc-copy').onclick = () => done('copy');
+            document.addEventListener('keydown', onKey, true);
+            const btnLocal = root.querySelector('#rc-local');
+            const btnRemote = root.querySelector('#rc-remote');
+            const btnCopy = root.querySelector('#rc-copy');
+            if (btnLocal) btnLocal.onclick = () => done('local');
+            if (btnRemote) btnRemote.onclick = () => done('remote');
+            if (btnCopy) btnCopy.onclick = () => done('copy');
         });
     },
 

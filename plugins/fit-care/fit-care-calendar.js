@@ -9,7 +9,6 @@ Object.assign(window.FitCarePlugin, {
     renderCalendarView() {
         const container = document.getElementById('fit-view');
         if (!container) return;
-        const date = this.state.selectedDate || this.todayKey();
         const summary = this.calendarSummary();
         container.innerHTML = `
             <div class="fit-page">
@@ -49,7 +48,6 @@ Object.assign(window.FitCarePlugin, {
         if (this.state.dayTab === 'aru') {
             setTimeout(() => this.scrollChatToBottom(), 40);
         }
-        void date;
     },
 
     calendarTitle() {
@@ -62,11 +60,22 @@ Object.assign(window.FitCarePlugin, {
     },
 
     calendarSummary() {
-        const range = this.state.range;
+        const cursor = this.state.cursor;
+        let activeFrom;
+        let activeTo;
+        if (this.state.calendarMode === 'week') {
+            activeFrom = this.dateKey(this.startOfWeek(cursor));
+            activeTo = this.addDays(activeFrom, 6);
+        } else {
+            activeFrom = this.dateKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+            activeTo = this.dateKey(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0));
+        }
         const daily = Array.from(this.state.dailyMap.values());
-        const weighed = daily.filter((log) => log.weight !== null && log.weight !== undefined);
-        const latest = weighed.length ? weighed[weighed.length - 1] : null;
-        const workouts = Array.from(this.state.workoutsByDate.values()).flat().filter((workout) => workout.status === 'done');
+        const weighed = daily.filter((log) => log.weight !== null && log.weight !== undefined && log.log_date);
+        const latest = weighed.reduce((best, item) => (!best || item.log_date > best.log_date ? item : best), null);
+        const workouts = Array.from(this.state.workoutsByDate.values()).flat().filter((workout) => (
+            workout.status === 'done' && workout.log_date >= activeFrom && workout.log_date <= activeTo
+        ));
         const cycle = this.getCycleInfo(this.todayKey());
         const badges = [];
         if (latest) {
@@ -80,7 +89,6 @@ Object.assign(window.FitCarePlugin, {
         if (this.state.activePlan) {
             badges.push(`<span class="fit-badge"><i data-lucide="target"></i>${this.esc(this.state.activePlan.title)}</span>`);
         }
-        void range;
         return badges.join('');
     },
 
@@ -114,7 +122,7 @@ Object.assign(window.FitCarePlugin, {
             ['pill', 'cal_mark_med', 'med']
         ];
         if (this.cycleEnabled()) items.push(['droplet', 'cal_mark_cycle', 'cycle']);
-        if (this.intimacyEnabled()) items.push(['lock', 'cal_mark_intimacy', 'intimacy']);
+        if (this.state.showPrivate && this.intimacyEnabled()) items.push(['lock', 'cal_mark_intimacy', 'intimacy']);
         return `
             <div class="fit-chart-legend" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--fit-border)">
                 ${items.map(([icon, label, cls]) => `<span class="fit-legend-item"><span class="fit-mark ${cls}"><i data-lucide="${icon}"></i></span>${this.esc(this.t(label))}</span>`).join('')}
@@ -185,7 +193,7 @@ Object.assign(window.FitCarePlugin, {
         const phaseDot = cycle.tracking && cycle.hasData
             ? `<i class="fit-day-phase ${cycle.phase === 'menstrual' ? 'period' : cycle.phase}${forecast ? ' is-forecast' : ''}" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"></i>`
             : '';
-        const intimacyEntries = this.intimacyEnabled() ? (this.getIntimacy(key) || []) : [];
+        const intimacyEntries = (this.state.showPrivate && this.intimacyEnabled()) ? (this.getIntimacy(key) || []) : [];
         const unsafeIntimacy = intimacyEntries.some((entry) => !entry.protection);
         const lockBadge = intimacyEntries.length
             ? `<span class="fit-day-lock ${unsafeIntimacy ? 'is-red' : ''}" title="${this.esc(this.t('intimacy_title'))}${intimacyEntries.length > 1 ? ` ×${intimacyEntries.length}` : ''}"><i data-lucide="lock"></i></span>`
@@ -257,7 +265,7 @@ Object.assign(window.FitCarePlugin, {
                 key === today ? 'is-today' : '',
                 key === this.state.selectedDate ? 'is-selected' : ''
             ].filter(Boolean).join(' ');
-            const weekIntimacy = this.intimacyEnabled() ? (this.getIntimacy(key) || []) : [];
+            const weekIntimacy = (this.state.showPrivate && this.intimacyEnabled()) ? (this.getIntimacy(key) || []) : [];
             const weekLock = weekIntimacy.length
                 ? `<span class="fit-day-lock ${weekIntimacy.some((entry) => !entry.protection) ? 'is-red' : ''}" title="${this.esc(this.t('intimacy_title'))}"><i data-lucide="lock"></i></span>`
                 : '';
@@ -351,7 +359,7 @@ Object.assign(window.FitCarePlugin, {
             ${this.renderTimelineSection(date)}
             <section class="fit-day-section">
                 <div class="fit-day-section-head"><h4><i data-lucide="notebook-pen"></i>${this.esc(this.t('day_note'))}</h4></div>
-                <textarea id="fit-day-note" class="fit-note-box" placeholder="${this.esc(this.t('note_placeholder'))}">${this.esc(log.note || '')}</textarea>
+                <textarea id="fit-day-note" class="fit-note-box" data-date="${date}" placeholder="${this.esc(this.t('note_placeholder'))}">${this.esc((this.state.noteDrafts && Object.prototype.hasOwnProperty.call(this.state.noteDrafts, date)) ? this.state.noteDrafts[date] : (log.note || ''))}</textarea>
                 <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="save-note" data-date="${date}"><i data-lucide="save"></i>${this.esc(this.t('save_note'))}</button>
             </section>
         `;
@@ -368,7 +376,7 @@ Object.assign(window.FitCarePlugin, {
             const exercises = this.parseExercises(session.day.exercises);
             const existing = workouts.find((workout) => Number(workout.plan_day_id) === Number(session.day.id));
             const badges = [
-                `<span class="fit-badge fit-badge-accent">${this.esc(this.t('plan_week'))} ${session.week}/${session.plan.weeks}</span>`,
+                `<span class="fit-badge fit-badge-accent">${this.esc(this.t('plan_week'))} ${this.esc(session.week)}/${this.esc(session.plan.weeks)}</span>`,
                 session.fromTemplate ? `<span class="fit-badge">${this.esc(this.t('plan_template_badge'))}</span>` : `<span class="fit-badge fit-badge-violet">${this.esc(this.t('plan_override_badge'))}</span>`
             ];
             if (existing) {
@@ -491,7 +499,9 @@ Object.assign(window.FitCarePlugin, {
         const symptoms = this.parseJson(log.symptoms, []);
         const grid = metrics.map((metric) => {
             const value = log[metric.key];
-            const shown = value !== null && value !== undefined ? `${this.fmt(value, metric.digits)}${metric.unit ? ' ' + this.t(metric.unit) : ''}` : '—';
+            const shown = value !== null && value !== undefined
+                ? `${this.fmt(value, metric.digits)}${metric.unit ? (metric.unit === '%' || metric.unit === '/5' ? metric.unit : ' ' + this.t(metric.unit)) : ''}`
+                : '—';
             return `<div class="fit-metric"><span>${this.esc(this.t(metric.label))}</span><b>${this.esc(shown)}</b></div>`;
         }).join('');
         return `
@@ -543,7 +553,7 @@ Object.assign(window.FitCarePlugin, {
         const events = [];
         for (const meal of this.getMeals(date)) {
             const tilde = Number(meal.estimated) ? '~' : '';
-            const macros = [meal.calories ? `${tilde}${this.fmt(meal.calories, 0)} ${this.t('kcal')}` : '', meal.protein ? `${tilde}P ${this.fmt(meal.protein, 0)} ${this.t('g')}` : ''].filter(Boolean).join(' · ');
+            const macros = [meal.calories ? `${tilde}${this.fmt(meal.calories, 0)} ${this.t('kcal')}` : '', meal.protein ? `${tilde}${this.t('protein_short')} ${this.fmt(meal.protein, 0)} ${this.t('g')}` : ''].filter(Boolean).join(' · ');
             events.push({
                 time: meal.meal_time || '',
                 icon: 'utensils',
@@ -766,7 +776,7 @@ Object.assign(window.FitCarePlugin, {
         this.state.chatError = '';
         this.loadAll();
         this.render();
-        if (window.innerWidth <= 1080) {
+        if ((document.getElementById('fit-view')?.clientWidth || window.innerWidth) <= 1080) {
             setTimeout(() => {
                 const panel = document.getElementById('fit-day-panel');
                 if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -806,7 +816,7 @@ Object.assign(window.FitCarePlugin, {
         if (container) container.scrollTop = 0;
         setTimeout(() => {
             const panel = document.getElementById('fit-day-panel');
-            if (panel && window.innerWidth <= 1080) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (panel && (document.getElementById('fit-view')?.clientWidth || window.innerWidth) <= 1080) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
             if (this.state.dayTab === 'aru') {
                 this.scrollChatToBottom();
                 const input = document.getElementById('fit-chat-input');

@@ -31,22 +31,27 @@ window.SkillsPlugin = {
     },
     MAX_ATTACH: 10,
     _dbReady: false,
+    _domMounted: false,
     _llmMod: null,
     _filesMod: null,
     _searchMod: null,
     _fileTarget: 'composer',
+    _abortController: null,
+    _runStopped: false,
+    _trackSortable: null,
 
     init() {
+        this.bindGlobals();
         const root = document.getElementById('skills-plugin-root');
-        if (!root) return; // Preload pass: no DOM yet, init runs again from the injected skills.html
+        if (!root) return; // Preload pass: no DOM yet, init runs again when pane mounts
 
         if (!(window.DB && window.DB.db)) {
-            window.addEventListener('aru-db-initialized', () => this.init(), { once: true });
+            this._domMounted = false;
             return;
         }
         this._dbReady = true;
+        this._domMounted = true;
 
-        this.bindGlobals();
         this.applyI18n();
         this.state.railOpen = window.innerWidth > 900;
         const saved = parseInt(localStorage.getItem('aru_skills_project') || '', 10);
@@ -54,21 +59,39 @@ window.SkillsPlugin = {
         if (window.lucide) lucide.createIcons();
     },
 
-    // The script re-executes on every injection of skills.html, so window-level
-    // listeners are bound once and delegate to whatever instance is current.
+    // Kept once at window level so switching panes never duplicates listeners.
     bindGlobals() {
         if (!window._skillsGlobalsBound) {
             window._skillsGlobalsBound = true;
             document.addEventListener('keydown', (e) => {
                 if (e.key !== 'Escape') return;
+                if (document.querySelector('#aru-dialog-host .aru-dialog-root')) return;
                 const modal = document.getElementById('skills-modal');
                 if (modal && !modal.classList.contains('hidden') && window.SkillsPlugin) {
                     window.SkillsPlugin.closeModal();
                 }
             });
             window.addEventListener('resize', () => {
-                if (window.SkillsPlugin) window.SkillsPlugin.applyRailState();
+                if (window.SkillsPlugin && window.SkillsPlugin._domMounted) window.SkillsPlugin.applyRailState();
             });
+            window.addEventListener('aru-lang-changed', () => {
+                if (window.SkillsPlugin && window.SkillsPlugin._domMounted) {
+                    window.SkillsPlugin.applyI18n();
+                    window.SkillsPlugin.render();
+                }
+            });
+            const onDataReady = () => {
+                const sp = window.SkillsPlugin;
+                if (!sp) return;
+                if (!sp._domMounted && document.getElementById('skills-plugin-root')) {
+                    sp.init();
+                } else if (sp._domMounted && window.DB && window.DB.db) {
+                    sp._dbReady = true;
+                    sp.refresh();
+                }
+            };
+            window.addEventListener('aru-db-initialized', onDataReady);
+            window.addEventListener('aru-sync-applied', onDataReady);
         }
 
         const thread = document.getElementById('skills-thread');
@@ -191,7 +214,7 @@ window.SkillsPlugin = {
         if (p) {
             titleEl.innerText = p.title;
             const active = this.state.steps.filter(s => s.enabled).length;
-            subEl.innerText = `${active}/${this.state.steps.length} · ctx ${this.fmtTokens(p.context_limit)}`;
+            subEl.innerText = `${active}/${this.state.steps.length} · ${this.getT('skills_badge_ctx', 'ctx')} ${this.fmtTokens(p.context_limit)}`;
         } else {
             titleEl.innerText = this.getT('plugin_skills_name', 'Aru Skills');
             subEl.innerText = this.getT('plugin_skills_desc', 'Build skills and agent relays');
@@ -378,12 +401,25 @@ window.SkillsPlugin = {
                 <i data-lucide="message-square-text" class="w-4 h-4"></i>
                 <span>${this.esc(this.getT('skills_run_answer', 'Answer'))}</span>
                 <span class="skills-chip">${this.esc(label)}${meta.stepTitle ? ' · ' + this.esc(meta.stepTitle) : ''}</span>
-                <span class="skills-msg-time">${this.esc(this.fmtTime(m, meta))}</span>
+                <span class="skills-answer-actions">
+                    ${m.content ? `<button type="button" class="btn-skills btn-skills-icon" title="${this.esc(this.getT('skills_copy_answer', 'Copy answer'))}" onclick="SkillsPlugin.copyAnswer(${m.id})"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>` : ''}
+                    <span class="skills-msg-time">${this.esc(this.fmtTime(m, meta))}</span>
+                </span>
             </div>
             ${warn}
             ${m.content ? `<div class="skills-answer-body">${this.renderRich(m.content)}</div>` : ''}
             ${arts ? `<div class="skills-answer-arts">${arts}</div>` : ''}
         </div>`;
+    },
+
+    copyAnswer(id) {
+        const m = this.state.messages.find(x => x.id === id);
+        if (!m || !m.content) return;
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(m.content)
+                .then(() => this.toast('skills_copied', 'copy', 'Copied to clipboard'))
+                .catch(() => {});
+        }
     },
 
     renderArtifactCard(art) {
@@ -394,7 +430,7 @@ window.SkillsPlugin = {
             doc: { icon: 'file-text', label: this.getT('skills_art_doc', 'Aru Doc') }
         }[art.type] || { icon: 'file-text', label: this.getT('skills_art_doc', 'Aru Doc') };
         return `
-        <div class="skills-artifact-card" onclick="SkillsPlugin.openArtifact(${art.id})" role="button" tabindex="0">
+        <div class="skills-artifact-card" onclick="SkillsPlugin.openArtifact(${art.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();SkillsPlugin.openArtifact(${art.id});}" role="button" tabindex="0">
             <span class="skills-artifact-icon"><i data-lucide="${cfg.icon}" class="w-5 h-5"></i></span>
             <span class="min-w-0 flex-1" style="text-align: left;">
                 <span class="skills-artifact-title">${this.esc(art.title)}</span>
@@ -415,10 +451,12 @@ window.SkillsPlugin = {
         const rail = document.getElementById('skills-rail');
         const toggle = document.getElementById('skills-rail-toggle');
         const backdrop = document.getElementById('skills-rail-backdrop');
+        const layout = document.getElementById('skills-layout');
         if (!rail) return;
         rail.classList.toggle('open', this.state.railOpen);
         if (toggle) toggle.classList.toggle('active', this.state.railOpen);
-        if (backdrop) backdrop.classList.toggle('hidden', !(this.state.railOpen && window.innerWidth <= 900));
+        const isNarrow = (layout ? layout.clientWidth <= 820 : false) || window.innerWidth <= 900;
+        if (backdrop) backdrop.classList.toggle('hidden', !(this.state.railOpen && isNarrow));
     },
 
     renderRail() {
@@ -477,9 +515,14 @@ window.SkillsPlugin = {
                     onclick="SkillsPlugin.toggleFinal(${st.id})">
                     <i data-lucide="flag" class="w-3.5 h-3.5"></i> ${this.esc(this.getT('skills_step_final', 'Final'))}
                 </button>
-                <button type="button" class="btn-skills btn-skills-icon hover:!text-red-500" title="${this.esc(this.getT('skills_remove_step', 'Remove step'))}" onclick="SkillsPlugin.removeStep(${st.id})">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
+                <span class="skills-step-bottom-right">
+                    <button type="button" class="btn-skills btn-skills-icon" title="${this.esc(this.getT('skills_edit_skill', 'Edit skill'))}" onclick="SkillsPlugin.openSkillModal(${st.skill_id})">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" class="btn-skills btn-skills-icon hover:!text-red-500" title="${this.esc(this.getT('skills_remove_step', 'Remove step'))}" onclick="SkillsPlugin.removeStep(${st.id})">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </span>
             </div>
         </div>`;
     },
@@ -552,13 +595,25 @@ window.SkillsPlugin = {
     },
 
     initTrackSortable() {
+        if (this._trackSortable) {
+            try { this._trackSortable.destroy(); } catch (_) {}
+            this._trackSortable = null;
+        }
         const track = document.getElementById('skills-relay-track');
         if (!track || typeof Sortable === 'undefined') return;
-        Sortable.create(track, {
+        this._trackSortable = Sortable.create(track, {
             animation: 150,
+            delay: 200,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 5,
             handle: '.skills-step-drag',
             draggable: '.skills-step-card',
             onEnd: () => {
+                if (this.state.isRunning) {
+                    this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+                    this.render();
+                    return;
+                }
                 const ids = Array.from(track.querySelectorAll('.skills-step-card'))
                     .map(el => parseInt(el.getAttribute('data-step-id'), 10));
                 window.DB.setPipelineOrder(this.state.activeProjectId, ids);
@@ -569,6 +624,18 @@ window.SkillsPlugin = {
     },
 
     // ---------- composer ----------
+
+    onSendClick() {
+        if (this.state.isRunning) this.stopRun();
+        else this.send();
+    },
+
+    stopRun() {
+        this._runStopped = true;
+        if (this._abortController) {
+            try { this._abortController.abort(); } catch (_) {}
+        }
+    },
 
     syncComposer() {
         const input = document.getElementById('skills-composer-input');
@@ -586,11 +653,17 @@ window.SkillsPlugin = {
         this.autogrow(input);
 
         if (sendBtn) {
-            sendBtn.disabled = !!p && this.state.isRunning ? true : (!p || draft.trim().length === 0);
-            sendBtn.innerHTML = this.state.isRunning
-                ? '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>'
-                : '<i data-lucide="arrow-up" class="w-4 h-4"></i>';
-            sendBtn.title = this.getT('skills_send', 'Send');
+            if (this.state.isRunning) {
+                sendBtn.disabled = false;
+                sendBtn.classList.add('is-stop');
+                sendBtn.innerHTML = '<i data-lucide="square" class="w-4 h-4"></i>';
+                sendBtn.title = this.getT('skills_stop', 'Stop relay');
+            } else {
+                sendBtn.classList.remove('is-stop');
+                sendBtn.disabled = !p || (draft.trim().length === 0 && this.state.attachments.length === 0);
+                sendBtn.innerHTML = '<i data-lucide="arrow-up" class="w-4 h-4"></i>';
+                sendBtn.title = this.getT('skills_send', 'Send');
+            }
         }
 
         if (searchBtn) {
@@ -634,7 +707,9 @@ window.SkillsPlugin = {
         }
         this.autogrow(el);
         const sendBtn = document.getElementById('skills-send-btn');
-        if (sendBtn) sendBtn.disabled = this.state.isRunning || !el.value.trim();
+        if (sendBtn && !this.state.isRunning) {
+            sendBtn.disabled = !el.value.trim() && this.state.attachments.length === 0;
+        }
         this.updateEstimate();
     },
 
@@ -817,6 +892,10 @@ window.SkillsPlugin = {
     },
 
     async deleteProject(id) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         if (!(await window.UI.confirm(this.getT('skills_confirm_delete_project', 'Delete this project with all its files, pipeline and run history?')))) return;
         window.DB.deleteSkillProject(id);
         this.toast('skills_deleted', 'trash-2', 'Deleted');
@@ -840,6 +919,10 @@ window.SkillsPlugin = {
     },
 
     async clearThread() {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         const p = this.activeProject();
         if (!p) return;
         if (!(await window.UI.confirm(this.getT('skills_confirm_clear_thread', 'Delete the whole chat, runs and artifacts of this project?')))) return;
@@ -852,7 +935,12 @@ window.SkillsPlugin = {
         this.toast('skills_deleted', 'trash-2', 'Deleted');
     },
 
-    deleteItem(id) {
+    async deleteItem(id) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
+        if (!(await window.UI.confirm(this.getT('skills_confirm_delete_item', 'Remove this material from the project?')))) return;
         window.DB.deleteSkillProjectItem(id);
         const p = this.activeProject();
         if (p) this.state.items = window.DB.getSkillProjectItems(p.id);
@@ -862,6 +950,10 @@ window.SkillsPlugin = {
     },
 
     addStep() {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         const sel = document.getElementById('sk-add-step-skill');
         const p = this.activeProject();
         if (!sel || !sel.value || !p) return;
@@ -872,6 +964,10 @@ window.SkillsPlugin = {
     },
 
     addToRelay(skillId) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         const p = this.activeProject();
         if (!p) return;
         window.DB.addPipelineStep(p.id, skillId);
@@ -888,12 +984,21 @@ window.SkillsPlugin = {
     },
 
     toggleStep(id, enabled) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            this.renderRail();
+            return;
+        }
         window.DB.updatePipelineStep(id, { enabled: enabled ? 1 : 0 });
         this.reloadSteps();
         this.render();
     },
 
     toggleFinal(id) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         const st = this.state.steps.find(x => x.id === id);
         if (!st) return;
         window.DB.updatePipelineStep(id, { is_final: st.is_final ? 0 : 1 });
@@ -902,6 +1007,10 @@ window.SkillsPlugin = {
     },
 
     removeStep(id) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         window.DB.deletePipelineStep(id);
         this.toast('skills_deleted', 'trash-2', 'Deleted');
         this.reloadSteps();
@@ -963,7 +1072,7 @@ window.SkillsPlugin = {
                     <i data-lucide="${p.id === this.state.activeProjectId ? 'folder-open' : 'folder-kanban'}" class="w-4 h-4 shrink-0"></i>
                     <span class="min-w-0 flex-1" style="text-align: left;">
                         <span class="skills-modal-row-title">${this.esc(p.title)}</span>
-                        <span class="skills-modal-row-meta">${active}/${steps.length} · ctx ${this.fmtTokens(p.context_limit)}</span>
+                        <span class="skills-modal-row-meta">${active}/${steps.length} · ${this.esc(this.getT('skills_badge_ctx', 'ctx'))} ${this.fmtTokens(p.context_limit)}</span>
                     </span>
                 </button>
                 <button type="button" class="btn-skills btn-skills-icon" title="${this.esc(this.getT('skills_rename', 'Rename'))}" onclick="SkillsPlugin.renameProject(${p.id})">
@@ -993,6 +1102,10 @@ window.SkillsPlugin = {
             const key = { gemini: 'skills_prov_gemini', openrouter: 'skills_prov_openrouter', custom: 'skills_prov_custom' }[s.llm_type] || 'skills_provider';
             return this.getT(key, s.llm_type || '');
         };
+        const tTemp = this.esc(this.getT('skills_badge_temp', 'temp'));
+        const tIn = this.esc(this.getT('skills_badge_in', 'in'));
+        const tOut = this.esc(this.getT('skills_badge_out', 'out'));
+        const tKey = this.esc(this.getT('skills_badge_aru_key', 'aru key'));
         const cards = skills.map(s => `
             <div class="skills-card">
                 <div class="skills-card-head">
@@ -1003,10 +1116,10 @@ window.SkillsPlugin = {
                     </div>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                    <span class="skills-chip">temp ${this.esc(String(s.temperature))}</span>
-                    <span class="skills-chip">in ${this.esc(String(s.input_limit))}</span>
-                    <span class="skills-chip">out ${this.esc(String(s.max_output))}</span>
-                    ${s.api_key ? '' : `<span class="skills-chip" title="${this.esc(this.getT('skills_api_key_hint', 'Leave empty to use the key from Aru settings.'))}">aru key</span>`}
+                    <span class="skills-chip">${tTemp} ${this.esc(String(s.temperature))}</span>
+                    <span class="skills-chip">${tIn} ${this.esc(String(s.input_limit))}</span>
+                    <span class="skills-chip">${tOut} ${this.esc(String(s.max_output))}</span>
+                    ${s.api_key ? '' : `<span class="skills-chip" title="${this.esc(this.getT('skills_api_key_hint', 'Leave empty to use the key from Aru settings.'))}">${tKey}</span>`}
                 </div>
                 <p class="skills-card-preview">${this.esc(s.system_prompt || '')}</p>
                 <div class="skills-card-actions">
@@ -1037,6 +1150,13 @@ window.SkillsPlugin = {
 
     // ---------- skills ----------
 
+    _defaultModelForProvider(type) {
+        const us = (window.aruState && window.aruState.userSettings) || {};
+        if (type === 'gemini') return us.gemini_model || '';
+        if (type === 'openrouter') return us.openrouter_model || '';
+        return us.custom_model || '';
+    },
+
     openSkillModal(id) {
         this.state.editingSkillId = id;
         this.state.modalKind = 'skill';
@@ -1054,12 +1174,8 @@ window.SkillsPlugin = {
             max_output: 2048
         };
         if (!s) {
-            if (defaults.llm_type === 'gemini') defaults.model_name = us.gemini_model || '';
-            else if (defaults.llm_type === 'openrouter') defaults.model_name = us.openrouter_model || '';
-            else {
-                defaults.model_name = us.custom_model || '';
-                defaults.base_url = us.custom_url || '';
-            }
+            defaults.model_name = this._defaultModelForProvider(defaults.llm_type);
+            if (defaults.llm_type === 'custom') defaults.base_url = us.custom_url || '';
         }
         const v = s || defaults;
 
@@ -1091,14 +1207,14 @@ window.SkillsPlugin = {
                 </div>
                 <div id="sk-f-base-url-wrap" class="${v.llm_type === 'custom' ? '' : 'hidden'}">
                     <label class="skills-modal-label" for="sk-f-base-url">${this.esc(this.getT('skills_base_url', 'Base URL'))}</label>
-                    <input type="text" id="sk-f-base-url" class="skills-modal-input" value="${this.esc(v.base_url)}" placeholder="http://localhost:11434/v1">
+                    <input type="text" id="sk-f-base-url" class="skills-modal-input" value="${this.esc(v.base_url)}" placeholder="http://localhost:11434/v1/chat/completions">
                 </div>
                 <div>
                     <label class="skills-modal-label" for="sk-f-key">${this.esc(this.getT('skills_api_key', 'API key'))}</label>
                     <input type="password" id="sk-f-key" class="skills-modal-input" value="${this.esc(v.api_key)}" autocomplete="off">
                     <p class="skills-field-hint">${this.esc(this.getT('skills_api_key_hint', 'Leave empty to use the key from Aru settings.'))}</p>
                 </div>
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label class="skills-modal-label" for="sk-f-temp">${this.esc(this.getT('skills_temperature', 'Temperature'))}</label>
                         <input type="number" id="sk-f-temp" class="skills-modal-input" min="0" max="2" step="0.1" value="${this.esc(String(v.temperature))}">
@@ -1131,20 +1247,40 @@ window.SkillsPlugin = {
     onProviderChange() {
         const type = document.getElementById('sk-f-provider').value;
         const wrap = document.getElementById('sk-f-base-url-wrap');
+        const urlEl = document.getElementById('sk-f-base-url');
+        const modelEl = document.getElementById('sk-f-model');
         if (wrap) wrap.classList.toggle('hidden', type !== 'custom');
+        if (urlEl) {
+            if (type === 'custom' && !urlEl.value) {
+                const us = (window.aruState && window.aruState.userSettings) || {};
+                urlEl.value = us.custom_url || '';
+            } else if (type !== 'custom') {
+                urlEl.value = '';
+            }
+        }
+        if (modelEl) {
+            const cur = modelEl.value.trim();
+            const us = (window.aruState && window.aruState.userSettings) || {};
+            const knownDefaults = [us.gemini_model || '', us.openrouter_model || '', us.custom_model || ''].filter(Boolean);
+            if (!cur || knownDefaults.includes(cur)) {
+                modelEl.value = this._defaultModelForProvider(type);
+            }
+        }
     },
 
     saveSkill() {
         const title = document.getElementById('sk-f-title').value.trim();
         if (!title) return window.UI.showToast(this.getT('skills_title_required', 'Name is required'), 'alert-circle');
+        const llmType = document.getElementById('sk-f-provider').value;
+        const rawTemp = parseFloat(document.getElementById('sk-f-temp').value);
         const data = {
             title,
             system_prompt: document.getElementById('sk-f-prompt').value,
-            llm_type: document.getElementById('sk-f-provider').value,
+            llm_type: llmType,
             api_key: document.getElementById('sk-f-key').value.trim(),
-            base_url: document.getElementById('sk-f-base-url').value.trim(),
+            base_url: llmType === 'custom' ? document.getElementById('sk-f-base-url').value.trim() : '',
             model_name: document.getElementById('sk-f-model').value.trim(),
-            temperature: Math.min(2, Math.max(0, parseFloat(document.getElementById('sk-f-temp').value) || 0)),
+            temperature: Math.min(2, Math.max(0, Number.isFinite(rawTemp) ? rawTemp : 0)),
             input_limit: Math.max(256, parseInt(document.getElementById('sk-f-in').value, 10) || 4096),
             max_output: Math.max(256, parseInt(document.getElementById('sk-f-out').value, 10) || 2048)
         };
@@ -1181,6 +1317,10 @@ window.SkillsPlugin = {
     },
 
     async deleteSkill(id) {
+        if (this.state.isRunning) {
+            this.toast('skills_busy_wait', 'loader', 'Wait for the active relay to finish');
+            return;
+        }
         if (!(await window.UI.confirm(this.getT('skills_confirm_delete_skill', 'Delete this skill? It will be removed from all project pipelines.')))) return;
         window.DB.deleteSkill(id);
         this.toast('skills_deleted', 'trash-2', 'Deleted');
@@ -1193,7 +1333,13 @@ window.SkillsPlugin = {
     // ---------- relay engine ----------
 
     estTokens(text) {
-        return text ? Math.ceil(String(text).length / 4) : 0;
+        if (!text) return 0;
+        const s = String(text);
+        if (window.app && typeof window.app.tokenEstimator === 'function') {
+            return window.app.tokenEstimator(s);
+        }
+        const cyr = (s.match(/[\u0400-\u04FF]/g) || []).length;
+        return Math.ceil(cyr / 2.5 + (s.length - cyr) / 4);
     },
 
     // Keeps head and tail: a plan loses its structure if the head is cut, and code
@@ -1417,7 +1563,7 @@ window.SkillsPlugin = {
             if (!code) continue;
             found.push({
                 type: normalizedType,
-                title: this.artifactAttribute(m[1], 'title') || 'Artifact',
+                title: this.artifactAttribute(m[1], 'title') || this.getT('skills_default_artifact', 'Artifact'),
                 code,
                 full: m[0]
             });
@@ -1452,8 +1598,8 @@ window.SkillsPlugin = {
         for (const a of (found || [])) {
             if (a.full) out = out.split(a.full).join('');
         }
-        out = out.replace(/\[\[\s*ARU_ARTIFACT[\s\S]*?\]\]/gi, '')
-            .replace(/\[\[?\s*\/ARU_ARTIFACT\s*\]?\]/gi, '');
+        out = out.replace(/\[{1,2}\s*ARU[\s_-]*ARTIFACT[\s\S]*?\]{1,2}/gi, '')
+            .replace(/\[{1,2}\s*\/\s*ARU[\s_-]*ARTIFACT\s*\]{1,2}/gi, '');
         return out.replace(/\n{3,}/g, '\n\n').trim();
     },
 
@@ -1471,7 +1617,7 @@ window.SkillsPlugin = {
         });
 
         // 300 ≈ relay protocol + section headers of the baton
-        const baseTokens = this.estTokens(input) + this.estTokens(materials) + 300;
+        const baseTokens = this.estTokens(input) + this.estTokens(materials) + this.estTokens(this.buildProjectContext()) + 300;
 
         // Each next step also carries every previous output, so the load grows along the chain
         let totalIn = 0, carried = 0;
@@ -1519,15 +1665,12 @@ window.SkillsPlugin = {
     // Step output and answers are inserted as HTML by the markdown renderer, and they
     // are built from project materials that can come from any web page. Raw tags in
     // prose are never meant to be live markup (artifact code goes to the canvas), so
-    // "<" is escaped outside code spans. ">" stays: blockquotes need it.
+    // "<" is escaped outside code spans and math delimiters. ">" stays: blockquotes need it.
     neutralizeHtml(text) {
         let source = String(text || '');
-        // A model that reaches its output cap can leave one opening fence behind.
-        // Close it only for presentation, so marked renders the partial source as
-        // code rather than consuming the rest of the answer in a malformed block.
         if ((source.match(/```/g) || []).length % 2 === 1) source += '\n```';
         return source
-            .split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+            .split(/(```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\s](?:[^$\n]*[^$\s])?\$)/g)
             .map((part, i) => (i % 2 === 1) ? part : part.replace(/</g, '&lt;'))
             .join('');
     },
@@ -1606,16 +1749,39 @@ window.SkillsPlugin = {
         const art = window.DB.getSkillArtifact(id);
         if (!art || !window.CanvasManager) return;
         this.state.lastArtifactId = art.id;
+        const st = window.aruState;
+        const tab = st && st.tabs[st.activeTabIndex];
+        if (tab) {
+            tab.artifact = { type: art.type, title: art.title, code: art.code };
+            tab.isCanvasOpen = true;
+        }
         window.CanvasManager.renderArtifact(art.type, art.title, art.code);
     },
 
-    // Returning to the plugin tab hides the shared canvas iframe; put it back
-    // when the user had the canvas open.
-    onActivate() {
-        const panel = document.getElementById('canvas-panel');
-        if (panel && !panel.classList.contains('hidden') && this.state.lastArtifactId) {
+    onActivate(payload = {}) {
+        if (!this._domMounted || !document.getElementById('skills-plugin-root')) {
+            this.init();
+        } else {
+            this.applyI18n();
+            this.render();
+        }
+        if (payload && payload.tab && payload.tab.isCanvasOpen && this.state.lastArtifactId) {
             this.openArtifact(this.state.lastArtifactId);
         }
+    },
+
+    onDeactivate() {
+        this.closeModal();
+    },
+
+    onClose() {
+        this.closeModal();
+        this.stopRun();
+        if (this._trackSortable) {
+            try { this._trackSortable.destroy(); } catch (_) {}
+            this._trackSortable = null;
+        }
+        this._domMounted = false;
     },
 
     // ---------- send ----------
@@ -1625,7 +1791,8 @@ window.SkillsPlugin = {
         const p = this.activeProject();
         if (!p) return;
         const input = (this.state.drafts[p.id] || '').trim();
-        if (!input) return;
+        const attachments = this.state.attachments.slice();
+        if (!input && attachments.length === 0) return;
 
         const activeSteps = this.state.steps.filter(s => s.enabled);
         if (activeSteps.length === 0) {
@@ -1634,7 +1801,6 @@ window.SkillsPlugin = {
             return;
         }
 
-        const attachments = this.state.attachments.slice();
         const searchOn = this.state.searchOn;
         // Capture context before the new user row is added, so only completed
         // project work (rather than the current request duplicated twice) is sent.
@@ -1644,13 +1810,17 @@ window.SkillsPlugin = {
         this.state.runError = '';
         this.state.isRunning = true;
         this.state.stickToBottom = true;
+
+        const controller = new AbortController();
+        this._abortController = controller;
+        this._runStopped = false;
         this.syncComposer();
 
         const files = attachments.filter(a => a.kind === 'file').map(a => a.name);
         const links = attachments.filter(a => a.kind === 'link').map(a => a.name);
 
-        window.DB.addSkillProjectMessage(p.id, 'user', input, { ts: Date.now(), files, links, search: searchOn });
-        const runId = window.DB.createSkillRun(p.id, input);
+        window.DB.addSkillProjectMessage(p.id, 'user', input || (files.concat(links).join(', ')), { ts: Date.now(), files, links, search: searchOn });
+        const runId = window.DB.createSkillRun(p.id, input || (files.concat(links).join(', ')));
         const runMsgId = window.DB.addSkillProjectMessage(p.id, 'run', '', {
             ts: Date.now(), runId, status: 'running', total: activeSteps.length, index: 0, note: ''
         });
@@ -1667,129 +1837,163 @@ window.SkillsPlugin = {
         const total = activeSteps.length;
         const hasFinalFlag = activeSteps.some(s => s.is_final);
         let last = null, final = null;
-        let errorStep = null, errorText = '';
+        let errorStep = null, errorText = '', aborted = false;
         let searchBlock = '';
 
         try {
-            if (searchOn) {
+            if (searchOn && input) {
                 this.setMsgMeta(runMsgId, { note: this.getT('skills_searching', 'Searching the web') + '…' });
                 this.updateMsg(runMsgId);
                 try {
                     const mod = await this.getSearchModule();
-                    const res = await mod.Search.query(input);
+                    const searchQuery = input.replace(/\s+/g, ' ').trim().slice(0, 300);
+                    const res = await mod.Search.query(searchQuery, { signal: controller.signal });
                     searchBlock = res || '';
-                    if (!searchBlock) this.toast('skills_search_empty', 'globe', 'No search results');
+                    if (!searchBlock && !this._runStopped && !controller.signal.aborted) {
+                        this.toast('skills_search_empty', 'globe', 'No search results');
+                    }
                 } catch (e) {
-                    console.warn('Skills: web search failed', e);
-                    this.toast('skills_search_failed', 'globe', 'Web search failed');
+                    if (this._runStopped || controller.signal.aborted || (e && e.name === 'AbortError')) {
+                        aborted = true;
+                    } else {
+                        console.warn('Skills: web search failed', e);
+                        this.toast('skills_search_failed', 'globe', 'Web search failed');
+                    }
                 }
             }
 
-            const mod = await this.getLLMModule();
-            const LLMClient = mod.LLMClient;
-            const materials = this.buildMaterialsBlock(attachments);
+            if (!aborted && !this._runStopped && !controller.signal.aborted) {
+                const mod = await this.getLLMModule();
+                const LLMClient = mod.LLMClient;
+                const materials = this.buildMaterialsBlock(attachments);
 
-            for (let i = 0; i < total; i++) {
-                const step = activeSteps[i];
-                const skill = skillById[step.skill_id];
-                if (!skill) {
-                    errorStep = step.skill_title || '#' + step.skill_id;
-                    errorText = this.getT('skills_skill_missing', 'Skill not found');
-                    break;
-                }
-                const isFinal = hasFinalFlag ? !!step.is_final : (i === total - 1);
-                const baton = this.buildStepBaton(p, skill, input, done, isFinal, {
-                    materials,
-                    search: searchBlock,
-                    projectContext
-                });
+                for (let i = 0; i < total; i++) {
+                    if (this._runStopped || controller.signal.aborted) {
+                        aborted = true;
+                        break;
+                    }
+                    const step = activeSteps[i];
+                    const skill = skillById[step.skill_id];
+                    if (!skill) {
+                        errorStep = step.skill_title || '#' + step.skill_id;
+                        errorText = this.getT('skills_skill_missing', 'Skill not found');
+                        break;
+                    }
+                    const isFinal = hasFinalFlag ? !!step.is_final : (i === total - 1);
+                    const baton = this.buildStepBaton(p, skill, input, done, isFinal, {
+                        materials,
+                        search: searchBlock,
+                        projectContext
+                    });
 
-                this.setMsgMeta(runMsgId, { index: i + 1, title: skill.title, note: '' });
-                delete this.state.runStepsCache[runId];
-                this.updateMsg(runMsgId);
-                this.setStepStatus(step.id, 'running');
-                this.scrollThreadToBottom();
+                    this.setMsgMeta(runMsgId, { index: i + 1, title: skill.title, note: '' });
+                    delete this.state.runStepsCache[runId];
+                    this.updateMsg(runMsgId);
+                    this.setStepStatus(step.id, 'running');
+                    this.scrollThreadToBottom();
 
-                const stepRowId = window.DB.addSkillRunStep(runId, {
-                    step_id: step.id,
-                    step_order: i,
-                    skill_id: skill.id,
-                    skill_title: skill.title,
-                    provider: skill.llm_type,
-                    model: skill.model_name,
-                    input_text: baton,
-                    status: 'running'
-                });
-
-                try {
                     const cfg = this.resolveSkillLLM(skill);
-                    const client = new LLMClient();
-                    // A final artifact is a complete deliverable, not a handoff.
-                    // The old 2K default cut a one-file game before its closing
-                    // tags; reserve a practical minimum while preserving a higher
-                    // limit explicitly chosen for the skill.
-                    const outputCap = isFinal ? Math.max(4096, skill.max_output || 0) : skill.max_output;
-                    client.setLLMConfig({
-                        llmType: cfg.type,
-                        apiKey: cfg.apiKey,
-                        baseUrl: cfg.baseUrl,
-                        modelName: cfg.modelName,
-                        maxOutputTokens: outputCap,
-                        aiTemp: skill.temperature
+                    const stepRowId = window.DB.addSkillRunStep(runId, {
+                        step_id: step.id,
+                        step_order: i,
+                        skill_id: skill.id,
+                        skill_title: skill.title,
+                        provider: cfg.type,
+                        model: cfg.modelName || skill.model_name || '',
+                        input_text: baton,
+                        status: 'running'
                     });
-                    client.setSystemInstruction(
-                        this.relayProtocol(i + 1, total, skill.title, isFinal) + '\n\n' + (skill.system_prompt || '')
-                    );
 
-                    const out = await client.sendMessage([], baton);
-                    const text = out == null ? '' : String(out).trim();
-                    if (!text) throw new Error(this.getT('skills_empty_response', 'Empty response from model'));
+                    try {
+                        const client = new LLMClient();
+                        const outputCap = isFinal ? Math.max(4096, skill.max_output || 0) : skill.max_output;
+                        client.setLLMConfig({
+                            llmType: cfg.type,
+                            apiKey: cfg.apiKey,
+                            baseUrl: cfg.baseUrl,
+                            modelName: cfg.modelName,
+                            maxOutputTokens: outputCap,
+                            aiTemp: skill.temperature
+                        });
+                        client.setSystemInstruction(
+                            this.relayProtocol(i + 1, total, skill.title, isFinal) + '\n\n' + (skill.system_prompt || '')
+                        );
 
-                    const truncated = this.looksTruncated(text, outputCap);
-                    window.DB.updateSkillRunStep(stepRowId, {
-                        output_text: text,
-                        status: 'done',
-                        truncated: truncated ? 1 : 0,
-                        tokens_est: this.estTokens(baton) + this.estTokens(text)
-                    });
-                    this.setStepStatus(step.id, 'done',
-                        truncated ? this.getT('skills_status_truncated', 'Done — answer cut off') : '');
+                        const out = await client.sendMessage([], baton, { signal: controller.signal });
+                        if (this._runStopped || controller.signal.aborted) {
+                            const stopMsg = this.getT('skills_run_stopped', 'Relay stopped by user');
+                            window.DB.updateSkillRunStep(stepRowId, { status: 'error', error: stopMsg });
+                            this.setStepStatus(step.id, 'error');
+                            aborted = true;
+                            break;
+                        }
+                        const text = out == null ? '' : String(out).trim();
+                        if (!text) throw new Error(this.getT('skills_empty_response', 'Empty response from model'));
 
-                    const record = { title: skill.title, text, truncated, isFinal };
-                    done.push(record);
-                    last = record;
-                    if (isFinal) final = record;
-                } catch (err) {
-                    const msg = String((err && err.message) || err);
-                    window.DB.updateSkillRunStep(stepRowId, { status: 'error', error: msg });
-                    this.setStepStatus(step.id, 'error');
-                    errorStep = skill.title;
-                    errorText = msg;
-                    break;
+                        const truncated = this.looksTruncated(text, outputCap);
+                        window.DB.updateSkillRunStep(stepRowId, {
+                            output_text: text,
+                            status: 'done',
+                            truncated: truncated ? 1 : 0,
+                            tokens_est: this.estTokens(baton) + this.estTokens(text)
+                        });
+                        this.setStepStatus(step.id, 'done',
+                            truncated ? this.getT('skills_status_truncated', 'Done — answer cut off') : '');
+
+                        const record = { title: skill.title, text, truncated, isFinal };
+                        done.push(record);
+                        last = record;
+                        if (isFinal) final = record;
+                    } catch (err) {
+                        if (this._runStopped || controller.signal.aborted || (err && err.name === 'AbortError')) {
+                            const stopMsg = this.getT('skills_run_stopped', 'Relay stopped by user');
+                            window.DB.updateSkillRunStep(stepRowId, { status: 'error', error: stopMsg });
+                            this.setStepStatus(step.id, 'error');
+                            aborted = true;
+                            break;
+                        }
+                        const msg = String((err && err.message) || err);
+                        window.DB.updateSkillRunStep(stepRowId, { status: 'error', error: msg });
+                        this.setStepStatus(step.id, 'error');
+                        errorStep = skill.title;
+                        errorText = msg;
+                        break;
+                    }
+                    delete this.state.runStepsCache[runId];
+                    this.updateMsg(runMsgId);
+                    this.scrollThreadToBottom();
                 }
-                delete this.state.runStepsCache[runId];
-                this.updateMsg(runMsgId);
-                this.scrollThreadToBottom();
             }
         } catch (err) {
-            errorStep = errorStep || 'LLM';
-            errorText = errorText || String((err && err.message) || err);
+            if (this._runStopped || controller.signal.aborted || (err && err.name === 'AbortError')) {
+                aborted = true;
+            } else {
+                errorStep = errorStep || 'LLM';
+                errorText = errorText || String((err && err.message) || err);
+            }
+        } finally {
+            this._abortController = null;
+            this._runStopped = false;
+            this.state.isRunning = false;
+            this.state.liveRun = null;
         }
 
-        const failed = !!errorStep;
+        const failed = aborted || !!errorStep;
         window.DB.updateSkillRun(runId, { status: failed ? 'error' : 'done' });
         window.DB.trimSkillRuns(p.id, 30);
-
-        this.state.isRunning = false;
-        this.state.liveRun = null;
         delete this.state.runStepsCache[runId];
 
-        if (failed || !last) {
-            this.setMsgMeta(runMsgId, { status: 'error', error: errorText, note: '' });
-            this.state.runError = this.getT('skills_step_failed', 'Step "%s" failed — relay stopped').replace('%s', errorStep)
-                + (errorText ? ': ' + errorText : '');
+        if (aborted) {
+            const stopMsg = this.getT('skills_run_stopped', 'Relay stopped by user');
+            this.setMsgMeta(runMsgId, { status: 'error', error: stopMsg, note: '' });
             this.state.expandedRuns[runMsgId] = true;
-            this.toast('skills_step_failed', 'alert-triangle', 'Step failed');
+            this.toast('skills_run_stopped', 'square', 'Relay stopped by user');
+        } else if (failed || !last) {
+            this.setMsgMeta(runMsgId, { status: 'error', error: errorText, note: '' });
+            const failedLabel = this.getT('skills_step_failed', 'Step "%s" failed — relay stopped').replace('%s', errorStep || 'LLM');
+            this.state.runError = failedLabel + (errorText ? ': ' + errorText : '');
+            this.state.expandedRuns[runMsgId] = true;
+            if (window.UI && UI.showToast) UI.showToast(failedLabel, 'alert-triangle');
         } else {
             const source = final || last;
             const raw = source.text;

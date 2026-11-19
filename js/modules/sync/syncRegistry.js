@@ -16,7 +16,7 @@ export const SYNC_TABLES = [
     { name: 'chats', identity: 'uid', refs: { folder_id: 'folders' } },
     { name: 'messages', identity: 'uid', refs: { chat_id: 'chats' }, requiredRefs: ['chat_id'] },
     { name: 'memory_facts', identity: 'uid' },
-    { name: 'modules_data', identity: 'uid' },
+    { name: 'modules_data', identity: ['type', 'name'] },
     { name: 'personality_state', identity: ['key'] },
     { name: 'chat_sections', identity: 'uid', refs: { chat_id: 'chats' }, requiredRefs: ['chat_id'] },
     {
@@ -25,7 +25,7 @@ export const SYNC_TABLES = [
         refs: { chat_id: 'chats', section_id: 'chat_sections', anchor_message_id: 'messages' },
         requiredRefs: ['chat_id']
     },
-    { name: 'chat_artifacts', identity: 'uid', refs: { chat_id: 'chats' }, requiredRefs: ['chat_id'] },
+    { name: 'chat_artifacts', identity: 'uid', refs: { chat_id: 'chats' }, requiredRefs: ['chat_id'], uniqueKeys: [['chat_id', 'title']] },
     { name: 'skills', identity: 'uid' },
     { name: 'skill_projects', identity: 'uid' },
     { name: 'skill_project_items', identity: 'uid', refs: { project_id: 'skill_projects' }, requiredRefs: ['project_id'] },
@@ -42,7 +42,7 @@ export const SYNC_TABLES = [
         refs: { run_id: 'skill_runs', step_id: 'skill_pipeline_steps', skill_id: 'skills' },
         requiredRefs: ['run_id']
     },
-    { name: 'skill_artifacts', identity: 'uid', refs: { project_id: 'skill_projects', run_id: 'skill_runs' }, requiredRefs: ['project_id'] },
+    { name: 'skill_artifacts', identity: 'uid', refs: { project_id: 'skill_projects', run_id: 'skill_runs' }, requiredRefs: ['project_id'], uniqueKeys: [['project_id', 'title']] },
     { name: 'skill_project_messages', identity: 'uid', refs: { project_id: 'skill_projects' }, requiredRefs: ['project_id'] },
     { name: 'fit_profiles', identity: ['id'] },
     { name: 'fit_daily_logs', identity: ['log_date'] },
@@ -64,7 +64,7 @@ export const TABLE_BY_NAME = Object.fromEntries(SYNC_TABLES.map(t => [t.name, t]
 export const SYNC_META_COLUMNS = new Set(['id', 'uid', 'rev', 'rev_device']);
 
 // Device-specific settings must not travel between devices.
-export const LOCAL_ONLY_SETTINGS = new Set(['last_save_ts']);
+export const LOCAL_ONLY_SETTINGS = new Set(['last_save_ts', 'biometrics_enabled']);
 
 export function rowIdentity(tableName, row) {
     const reg = TABLE_BY_NAME[tableName];

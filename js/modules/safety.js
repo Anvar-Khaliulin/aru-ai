@@ -7,13 +7,20 @@ rendering, in child profiles. Prompts alone cannot be trusted on weak local mode
 import { aruGlobalState as state } from './aruState.js';
 
 // Letters/digits that form words across ru/kk/en; used for match boundaries
-// (JS \b does not work for Cyrillic, so explicit lookarounds are required)
+// (JS \b does not work for Cyrillic, and lookbehinds fail on Safari < 16.4)
 const L = 'a-zа-яёәіңөұүқғһ0-9';
-const rx = (s) => new RegExp(`(?<![${L}])${s}(?![${L}])`, 'i');
+const rx = (s) => new RegExp(`(?:^|[^${L}])(?:${s})(?![${L}])`, 'i');
 
 export const Safety = {
 
     isChildMode: () => (state.userSettings.user_mode || 'adult') === 'child',
+
+    _normalize(text) {
+        return String(text || '')
+            .replace(/[*_`~]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    },
 
     // Requests for ready-made homework answers (ru / kk / en)
     HOMEWORK_PATTERNS: [
@@ -21,7 +28,7 @@ export const Safety = {
         /сделай(те)? (это )?за меня/i,
         /(дай|дайте|покажи|покажите)( мне)? готов(ый|ое|ую)/i,
         /гдз/i,
-        /спис(ать|ывать|иши)( у| у |ать у)?/i,
+        new RegExp(`(?:^|[^${L}])(?:спиши(?![${L}])|спис(?:ать|ывать)\\s+(?:[ус](?![${L}])|домаш|задач|ответ|контрольн|работ))`, 'i'),
         /готов(ый|ая|ые) (домашн|ответ|решени)/i,
         /напиши(те)? (за меня|мне (сочинение|реферат|доклад))/i,
         /дайын (жауап|шешім|жазба)/i,
@@ -36,17 +43,16 @@ export const Safety = {
         /как (сделать|приготовить|сварить|получить|купить) (бомбу|взрывчатку|оружие|пистолет|наркотик|самогон|спайс)/i,
         /как (взломать|украсть|обмануть|ограбить|отравить)/i,
         /как убить (человека|кого)/i,
-        /(кокаин|героин|марихуана|амфетамин|метамфетамин|экстази|гашиш)/i,
-        rx('лсд'), rx('спайс'), rx('порно'),
-        rx('секс'),
+        /(кокаин|героин|марихуан|амфетамин|метамфетамин|экстази|гашиш)/i,
+        rx('лсд'), rx('спайс[а-яё]*'), rx('порно[а-яё]*'),
+        rx('секс[а-яё]*'),
         /есірткі/i,
-        /порно/i,
         /бомба(ны)? (жасау|жару)/i,
         /how to (make|build) (a |an )?(bomb|gun|weapon|drug)/i,
         /how to (hack|steal|poison)/i,
         /\b(cocaine|heroin|marijuana|meth(amphetamine)?|lsd)\b/i,
         /\bporn(o|ography)?\b/i,
-        /\bsex\b(?![a-z])/i
+        /\bsex\b/i
     ],
 
     // Crisis signals get a supportive answer, not a plain refusal
@@ -58,7 +64,6 @@ export const Safety = {
         /(порежу|порезать|причиню) себе/i,
         /причин(ить|ю) (себе )?вред/i,
         /өзім(ді)? өлтір/i,
-        /суицид/i,
         /(i )?(want to|wanna) (die|kill myself|end (it|my life|everything))/i,
         /\b(kill (myself|me)|suicide|hurt(ing)? myself|self[- ]?harm)\b/i
     ],
@@ -67,8 +72,8 @@ export const Safety = {
     OUTPUT_PATTERNS: [
         /порно|порнограф/i,
         /эротик/i,
-        rx('кокаин'), rx('героин'), rx('марихуана'), rx('амфетамин'),
-        rx('метамфетамин'), rx('экстази'), rx('гашиш'), rx('спайс'), rx('лсд'),
+        rx('кокаин[а-яё]*'), rx('героин[а-яё]*'), rx('марихуан[а-яё]*'), rx('амфетамин[а-яё]*'),
+        rx('метамфетамин[а-яё]*'), rx('экстази'), rx('гашиш[а-яё]*'), rx('спайс[а-яё]*'), rx('лсд'),
         /есірткі/i,
         /\b(porn(o|ography)?|cocaine|heroin|marijuana|meth(amphetamine)?|ecstasy|lsd)\b/i
     ],
@@ -79,18 +84,22 @@ export const Safety = {
      */
     checkInput(text) {
         if (!Safety.isChildMode() || !text || typeof text !== 'string') return null;
-        if (Safety.CRISIS_PATTERNS.some(p => p.test(text))) return 'crisis';
-        if (Safety.ADULT_PATTERNS.some(p => p.test(text))) return 'adult';
-        if (Safety.HOMEWORK_PATTERNS.some(p => p.test(text))) return 'homework';
+        const normalized = Safety._normalize(text);
+        if (!normalized) return null;
+        if (Safety.CRISIS_PATTERNS.some(p => p.test(normalized))) return 'crisis';
+        if (Safety.ADULT_PATTERNS.some(p => p.test(normalized))) return 'adult';
+        if (Safety.HOMEWORK_PATTERNS.some(p => p.test(normalized))) return 'homework';
         return null;
     },
 
     /** Screens a model reply in child mode. @returns {boolean} true = filter hit */
     checkOutput(text) {
-        if (!text || typeof text !== 'string') return false;
+        if (!Safety.isChildMode() || !text || typeof text !== 'string') return false;
+        const normalized = Safety._normalize(text);
+        if (!normalized) return false;
         return Safety.OUTPUT_PATTERNS.some(p => {
             p.lastIndex = 0;
-            return p.test(text);
+            return p.test(normalized);
         });
     },
 

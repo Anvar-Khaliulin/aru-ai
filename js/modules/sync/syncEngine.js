@@ -53,7 +53,10 @@ export const SyncEngine = {
     // merged snapshot swaps the live database and can drop the in-flight reply.
     _generationBusy() {
         const tabs = window.aruState?.tabs;
-        return Array.isArray(tabs) && tabs.some(t => t && t.isSending);
+        if (Array.isArray(tabs) && tabs.some(t => t && t.isSending)) return true;
+        if (window.FitCarePlugin?.state?.chatBusy) return true;
+        if (window.SkillsPlugin?.state?.isRunning) return true;
+        return false;
     },
 
     _scheduleAfterGeneration() {
@@ -241,12 +244,27 @@ export const SyncEngine = {
             await window.DB.save();
         } catch (e) { console.warn('Sync: failed to persist v2 settings', e); }
 
-        this._saveTrusted();
+        await this._saveTrusted();
         this._startPolling();
         this._setStatus('cloud-syncing');
-        if (replacing) await this._replaceHead(transport, head);
-        else if (head) await this.syncNow('enable');
-        else await this._initialUpload();
+        try {
+            if (replacing) await this._replaceHead(transport, head);
+            else if (head) {
+                const res = await this.syncNow('enable');
+                if (res && res.error) throw new Error(res.error);
+            } else {
+                await this._initialUpload();
+            }
+        } catch (err) {
+            this.stop();
+            try {
+                window.DB?.saveSetting?.('sync_v2_enabled', '0', false);
+                await window.DB?.save?.();
+            } catch (_) { /* ignore rollback save errors */ }
+            await this.forgetTrusted();
+            this._setStatus('cloud-error');
+            throw err;
+        }
         this._setStatus('cloud-synced');
         return true;
     },
@@ -298,7 +316,13 @@ export const SyncEngine = {
 
         const transport = this._makeTransport();
         let head = null;
-        try { head = await transport.readHead(); } catch (e) { console.warn('Sync: head read failed', e); }
+        let headReadFailed = false;
+        try {
+            head = await transport.readHead();
+        } catch (e) {
+            headReadFailed = true;
+            console.warn('Sync: head read failed', e);
+        }
 
         const profile = RS.profile || {};
         let key = profile.workspaceKey || null;
@@ -331,15 +355,16 @@ export const SyncEngine = {
             await window.DB.save();
         } catch (e) { /* settings are best-effort */ }
 
-        this._saveTrusted();
+        await this._saveTrusted();
         this._startPolling();
-        if (head) await this.syncNow('start');
+        if (head || headReadFailed) await this.syncNow('start');
         else await this._initialUpload();
         return true;
     },
 
     // Called after a session starts; unlocks a trusted device and resumes v2 silently.
     async autoStart() {
+        if (localStorage.getItem('aru_authorized') !== 'true' && !window.aruState?.isAuth) return false;
         if (this._started) return true;
         try {
             if (!(await window.RemoteStorage?.isConfigured?.())) return false;
@@ -356,13 +381,26 @@ export const SyncEngine = {
         }
     },
 
-    disable() {
+    stop() {
         this._started = false;
         this._workspaceKey = null;
         this._baseId = null;
         this._transport = null;
+        this._pending = false;
+        this._failures = 0;
+        this._nextAllowedAt = 0;
         this._stopPolling();
-        try { window.DB.saveSetting('sync_v2_enabled', '0', false); } catch (e) { /* ignore */ }
+    },
+
+    async disable() {
+        this.stop();
+        try {
+            window.DB?.saveSetting?.('sync_v2_enabled', '0', false);
+            await window.DB?.save?.();
+        } catch (e) { /* ignore */ }
+        await this.forgetTrusted();
+        try { await localforage.removeItem(BASE_PREFIX + dbKey()); } catch (e) { /* ignore */ }
+        try { localStorage.removeItem(META_PREFIX + dbKey()); } catch (e) { /* ignore */ }
     },
 
     _initialUpload() {
@@ -443,11 +481,20 @@ export const SyncEngine = {
             return { queued: true };
         }
         const manual = reason === 'manual';
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), ENSURE_TIMEOUT));
+        const ac = new AbortController();
+        let timer = null;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                ac.abort();
+                reject(new Error('Sync timeout'));
+            }, ENSURE_TIMEOUT);
+        });
 
         try {
+            const runPromise = this._withLock(() => this._runCycle(reason, ac.signal));
+            runPromise.catch(() => {});
             const result = await Promise.race([
-                this._withLock(() => this._runCycle(reason)),
+                runPromise,
                 timeout
             ]);
             this._failures = 0;
@@ -465,34 +512,39 @@ export const SyncEngine = {
             else this._setStatus('cloud-synced');
             if (manual) await window.UI?.alert?.('Не удалось синхронизировать: ' + e.message);
             return { error: e.message };
+        } finally {
+            if (timer) clearTimeout(timer);
         }
     },
 
-    async _runCycle(reason) {
+    async _runCycle(reason, signal = null) {
         if (!this.isEnabled()) return { skipped: true };
         const DB = window.DB;
         const transport = this._transport;
+        const reqOpts = signal ? { signal } : undefined;
         this._syncing = true;
         this._setStatus('cloud-syncing');
 
         try {
             for (let attempt = 0; attempt < 3; attempt++) {
+                if (signal?.aborted) throw new Error('Sync timeout');
                 if (this._generationBusy()) {
                     this._scheduleAfterGeneration();
                     this._setStatus('cloud-synced');
                     return { deferred: true };
                 }
                 const meta = this._meta();
-                let head = await transport.readHead();
+                let head = await transport.readHead(reqOpts);
                 const dirty = readDirtyState(DB.db);
 
                 if (!head) {
                     // A flaky read must not fork the workspace: only a device that
                     // never synced this DB is allowed to create the first head.
                     if (meta.lastHead) {
-                        head = await transport.readHead();
+                        head = await transport.readHead(reqOpts);
                         if (!head) throw new Error('Указатель синхронизации пропал из облака');
                     } else {
+                        const seqAtExport = readDirtyState(DB.db).seq;
                         const bytes = DB.db.export();
                         const rev = SyncCore.nextRev();
                         const desc = await transport.writeSnapshot(bytes, {
@@ -504,10 +556,10 @@ export const SyncEngine = {
                             deviceId: SyncCore.deviceId(),
                             deviceName: SyncCore.deviceName(),
                             rev
-                        });
-                        await transport.writeHead(desc);
+                        }, reqOpts);
+                        await transport.writeHead(desc, reqOpts);
                         await this._storeBase(bytes);
-                        clearDirtyIfUnchanged(DB.db, dirty.seq);
+                        clearDirtyIfUnchanged(DB.db, seqAtExport);
                         this._saveMeta({ lastHead: desc.head, lastSyncAt: Date.now(), lastRev: rev, baseId: this._baseId });
                         this._setStatus('cloud-synced');
                         return { ok: true, created: true };
@@ -528,6 +580,7 @@ export const SyncEngine = {
                         this._setStatus('cloud-synced');
                         return { deferred: true };
                     }
+                    const seqBeforePush = readDirtyState(DB.db).seq;
                     const bytes = DB.db.export();
                     const rev = SyncCore.nextRev();
                     const desc = await transport.writeSnapshot(bytes, {
@@ -539,15 +592,15 @@ export const SyncEngine = {
                         deviceId: SyncCore.deviceId(),
                         deviceName: SyncCore.deviceName(),
                         rev
-                    });
-                    await transport.writeHead(desc);
-                    const confirmed = await transport.readHead();
+                    }, reqOpts);
+                    await transport.writeHead(desc, reqOpts);
+                    const confirmed = await transport.readHead(reqOpts);
                     if (!confirmed || confirmed.head !== desc.head) {
                         // Another device advanced the head while we uploaded; merge again.
                         continue;
                     }
                     await this._storeBase(bytes);
-                    clearDirtyIfUnchanged(DB.db, dirty.seq);
+                    clearDirtyIfUnchanged(DB.db, seqBeforePush);
                     this._saveMeta({ lastHead: desc.head, lastSyncAt: Date.now(), lastRev: rev });
                     this._cleanup(transport, desc.head);
                     this._setStatus('cloud-synced');
@@ -555,7 +608,7 @@ export const SyncEngine = {
                 }
 
                 // Remote advanced: download, merge, then push or adopt.
-                const remoteBytes = await transport.readSnapshot(head.head, this._workspaceKey);
+                const remoteBytes = await transport.readSnapshot(head.head, this._workspaceKey, reqOpts);
                 if (!remoteBytes) {
                     // The snapshot may have been cleaned up while we were reading
                     // the head; retry with a fresh head before reporting an error.
@@ -576,7 +629,8 @@ export const SyncEngine = {
                     return { deferred: true };
                 }
                 const localBytes = DB.db.export();
-                const seqAtExport = readDirtyState(DB.db).seq;
+                const dirtyAtExport = readDirtyState(DB.db);
+                const seqAtExport = dirtyAtExport.seq;
                 let merged = mergeDatabases({
                     SQL: DB.SQL,
                     baseBytes,
@@ -584,8 +638,8 @@ export const SyncEngine = {
                     remoteBytes
                 });
 
-                if (!dirty.dirty && baseValid) {
-                    // No local edits: adopt the remote head without writing a new snapshot.
+                if (!dirty.dirty && !dirtyAtExport.dirty && dirtyAtExport.seq === dirty.seq && baseValid) {
+                    // No local edits before or during snapshot download: adopt the remote head without writing a new snapshot.
                     if (!merged.stats.changed) {
                         try { merged.db.close(); } catch (e) { /* ignore */ }
                     } else {
@@ -610,9 +664,9 @@ export const SyncEngine = {
                     deviceId: SyncCore.deviceId(),
                     deviceName: SyncCore.deviceName(),
                     rev
-                });
-                await transport.writeHead(desc);
-                const confirmed = await transport.readHead();
+                }, reqOpts);
+                await transport.writeHead(desc, reqOpts);
+                const confirmed = await transport.readHead(reqOpts);
                 if (!confirmed || confirmed.head !== desc.head) {
                     try { merged.db.close(); } catch (e) { /* ignore */ }
                     continue;

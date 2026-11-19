@@ -35,6 +35,7 @@ Object.assign(window.FitCarePlugin, {
         chatBusy: false,
         chatError: '',
         chatDraft: '',
+        noteDrafts: {},
         showPrivate: false,
         planViewId: null,
         planWeek: null,
@@ -46,6 +47,14 @@ Object.assign(window.FitCarePlugin, {
     MAX_CHAT_HISTORY: 16,
 
     async onActivate() {
+        const root = document.getElementById('fit-care-plugin-root');
+        if (this._initialized && root && this._root === root && window.DB && window.DB.db) {
+            this.state.lang = this.currentLang();
+            this.applyI18n();
+            this.loadAll();
+            this.render();
+            return;
+        }
         await this.init();
     },
 
@@ -77,19 +86,22 @@ Object.assign(window.FitCarePlugin, {
         this.state.lang = this.currentLang();
         this.applyI18n();
 
-        const savedView = localStorage.getItem('aru_fit_view');
-        if (['calendar', 'dashboard', 'plan', 'health', 'settings'].includes(savedView)) {
-            this.state.view = savedView;
+        if (!this._initialized) {
+            const savedView = localStorage.getItem('aru_fit_view');
+            if (['calendar', 'dashboard', 'plan', 'health', 'settings'].includes(savedView)) {
+                this.state.view = savedView;
+            }
+            const savedMode = localStorage.getItem('aru_fit_cal_mode');
+            if (savedMode === 'week' || savedMode === 'month') this.state.calendarMode = savedMode;
+            const savedRange = Number(localStorage.getItem('aru_fit_dash_range'));
+            if ([30, 90, 365].includes(savedRange)) this.state.dashRange = savedRange;
         }
-        const savedMode = localStorage.getItem('aru_fit_cal_mode');
-        if (savedMode === 'week' || savedMode === 'month') this.state.calendarMode = savedMode;
-        const savedRange = Number(localStorage.getItem('aru_fit_dash_range'));
-        if ([30, 90, 365].includes(savedRange)) this.state.dashRange = savedRange;
 
-        this.state.selectedDate = this.todayKey();
+        if (!this.state.selectedDate) this.state.selectedDate = this.todayKey();
         this.state.cursor = this.dateFromKey(this.state.selectedDate);
         this.loadAll();
         this.render();
+        this._initialized = true;
 
         if (this.state.profile && !Number(this.state.profile.disclaimer_accepted)) {
             this.openDisclaimer();
@@ -115,16 +127,34 @@ Object.assign(window.FitCarePlugin, {
                 this.handleForm(form.dataset.fitForm, form);
             });
             root.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter' || event.shiftKey) return;
-                if (!event.target || event.target.id !== 'fit-chat-input') return;
+                if (event.target && event.target.id === 'fit-chat-input') {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        void this.sendChat();
+                    }
+                    return;
+                }
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const tag = event.target && event.target.tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+                const actionEl = event.target && event.target.closest ? event.target.closest('[role="button"][data-fit-action]') : null;
+                if (!actionEl || !root.contains(actionEl) || actionEl.disabled) return;
                 event.preventDefault();
-                void this.sendChat();
+                this.handleAction(actionEl.dataset.fitAction, actionEl, event);
             });
             root.addEventListener('input', (event) => {
                 const el = event.target;
-                if (!el || el.id !== 'fit-chat-input') return;
-                el.style.height = 'auto';
-                el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
+                if (!el) return;
+                if (el.id === 'fit-chat-input') {
+                    this.state.chatDraft = el.value;
+                    el.style.height = 'auto';
+                    el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
+                    return;
+                }
+                if (el.id === 'fit-day-note') {
+                    const key = (el.dataset && el.dataset.date) || this.state.selectedDate || this.todayKey();
+                    this.state.noteDrafts[key] = el.value;
+                }
             });
         }
         if (!this._langListenerBound) {
@@ -134,6 +164,31 @@ Object.assign(window.FitCarePlugin, {
                 this.applyI18n();
                 if (this._root) this.render();
             });
+            window.addEventListener('aru-db-initialized', () => {
+                this.state.noteDrafts = {};
+                this.state.chatDraft = '';
+                this.state.showPrivate = false;
+                this._cycleStatsCache = null;
+                this.state.selectedDate = this.todayKey();
+                this.state.cursor = this.dateFromKey(this.state.selectedDate);
+                if (this._root && window.DB && window.DB.db) {
+                    this.loadAll();
+                    this.render();
+                }
+            });
+            window.addEventListener('aru-sync-applied', () => {
+                if (this._root && window.DB && window.DB.db && !this.state.chatBusy) {
+                    this.loadAll();
+                    this.render();
+                }
+            });
+            window.addEventListener('aru-user-mode-changed', () => {
+                if (!this.isAdult()) this.state.showPrivate = false;
+                if (this._root && window.DB && window.DB.db) {
+                    this.loadAll();
+                    this.render();
+                }
+            });
         }
         if (!window._fitGlobalKeysBound) {
             window._fitGlobalKeysBound = true;
@@ -141,6 +196,8 @@ Object.assign(window.FitCarePlugin, {
                 if (event.key !== 'Escape') return;
                 const plugin = window.FitCarePlugin;
                 if (!plugin || !plugin._root) return;
+                const dialogHost = document.getElementById('aru-dialog-host');
+                if (dialogHost && !dialogHost.classList.contains('hidden') && dialogHost.childElementCount > 0) return;
                 const modal = document.getElementById('fit-modal');
                 if (modal && !modal.classList.contains('hidden')) {
                     plugin.closeModal();
@@ -210,25 +267,38 @@ Object.assign(window.FitCarePlugin, {
             .replace(/'/g, '&#39;');
     },
 
-    // Model replies arrive as markdown; text is escaped before parsing so a reply
-    // can never inject markup, and the result is stripped down to formatting tags.
+    // Model replies arrive as markdown; raw markdown is parsed first so blockquotes
+    // and code blocks work, then strictly sanitized via DOMParser allowlists.
     renderChatMarkdown(text) {
         const raw = String(text === null || text === undefined ? '' : text);
         if (typeof marked === 'undefined' || typeof marked.parse !== 'function') return this.esc(raw);
         let html;
         try {
-            html = marked.parse(this.esc(raw), { gfm: true, breaks: true });
+            html = marked.parse(raw, { gfm: true, breaks: true });
         } catch (error) {
             return this.esc(raw);
         }
         if (typeof DOMParser === 'undefined') return this.esc(raw);
+        const ALLOWED_TAGS = new Set([
+            'P', 'BR', 'STRONG', 'B', 'EM', 'I', 'DEL', 'S', 'CODE', 'PRE',
+            'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+            'HR', 'A', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN', 'DIV'
+        ]);
         let root;
         try {
             const doc = new DOMParser().parseFromString(`<div id="fit-md-root">${html}</div>`, 'text/html');
             root = doc.getElementById('fit-md-root');
             if (!root) return this.esc(raw);
-            root.querySelectorAll('script,style,iframe,object,embed,form,input,button,textarea,select,link,meta,base,svg,math,img,video,audio,source').forEach((node) => node.remove());
-            root.querySelectorAll('*').forEach((el) => {
+            root.querySelectorAll('script,style,iframe,object,embed,form,input,button,textarea,select,link,meta,base,svg,math,img,video,audio,source,template,noscript').forEach((node) => node.remove());
+            Array.from(root.querySelectorAll('*')).reverse().forEach((el) => {
+                if (!ALLOWED_TAGS.has(String(el.tagName || '').toUpperCase())) {
+                    const parent = el.parentNode;
+                    if (parent) {
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        parent.removeChild(el);
+                    }
+                    return;
+                }
                 Array.from(el.attributes).forEach((attr) => {
                     if (!/^(href|title|colspan|rowspan)$/i.test(attr.name)) el.removeAttribute(attr.name);
                 });
@@ -402,8 +472,10 @@ Object.assign(window.FitCarePlugin, {
             from = this.addDays(today, -7);
             to = today;
         }
-        if (selected < from) from = selected;
-        if (selected > to) to = selected;
+        if (this.state.view === 'calendar') {
+            if (selected < from) from = selected;
+            if (selected > to) to = selected;
+        }
         return { from, to };
     },
 
@@ -440,8 +512,7 @@ Object.assign(window.FitCarePlugin, {
     refresh() {
         if (!this._root || !(window.DB && window.DB.db)) return;
         this.loadAll();
-        if (this.state.view === 'calendar') this.render();
-        else this.render();
+        this.render();
     },
 
     getDaily(date) {
@@ -557,6 +628,9 @@ Object.assign(window.FitCarePlugin, {
     getDosesForDate(date) {
         const weekday = this.weekdayIndex(date);
         const logs = this.getHealthLogs(date).filter((log) => log.type === 'medication');
+        const keyOf = (entry) => (entry && entry.id !== undefined && entry.id !== null ? entry.id : entry);
+        const usedLogKeys = new Set();
+        const protocolById = new Map((this.state.protocols || []).map((p) => [Number(p.id), p]));
         const doses = [];
         for (const protocol of this.state.protocols || []) {
             if (!Number(protocol.active)) continue;
@@ -566,14 +640,50 @@ Object.assign(window.FitCarePlugin, {
             const times = Array.isArray(schedule.times) ? schedule.times.map((time) => String(time).trim()).filter(Boolean) : [];
             const protocolLogs = logs.filter((log) => Number(log.protocol_id) === Number(protocol.id));
             if (!times.length) {
-                const log = protocolLogs[0] || null;
-                doses.push({ protocol, time: '', log, status: log ? log.status : '' });
+                const log = protocolLogs.find((entry) => !usedLogKeys.has(keyOf(entry))) || null;
+                if (log) usedLogKeys.add(keyOf(log));
+                doses.push({ protocol, time: log ? (log.log_time || '') : '', log, status: log ? log.status : '' });
                 continue;
             }
-            for (const time of times) {
-                const log = protocolLogs.find((entry) => entry.log_time === time) || null;
-                doses.push({ protocol, time, log, status: log ? log.status : '' });
+            const matchedByIndex = new Array(times.length).fill(null);
+            for (let i = 0; i < times.length; i++) {
+                const exact = protocolLogs.find((entry) => !usedLogKeys.has(keyOf(entry)) && entry.log_time === times[i]);
+                if (exact) {
+                    usedLogKeys.add(keyOf(exact));
+                    matchedByIndex[i] = exact;
+                }
             }
+            for (let i = 0; i < times.length; i++) {
+                if (matchedByIndex[i]) continue;
+                const schedMin = this.timeToMinutes(times[i]);
+                if (schedMin === null) continue;
+                let best = null;
+                let bestDiff = 181;
+                for (const entry of protocolLogs) {
+                    if (usedLogKeys.has(keyOf(entry))) continue;
+                    const entryMin = this.timeToMinutes(entry.log_time);
+                    if (entryMin === null) continue;
+                    const diff = Math.abs(entryMin - schedMin);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        best = entry;
+                    }
+                }
+                if (best) {
+                    usedLogKeys.add(keyOf(best));
+                    matchedByIndex[i] = best;
+                }
+            }
+            for (let i = 0; i < times.length; i++) {
+                const log = matchedByIndex[i];
+                doses.push({ protocol, time: times[i], log, status: log ? log.status : '' });
+            }
+        }
+        for (const log of logs) {
+            if (usedLogKeys.has(keyOf(log))) continue;
+            const found = log.protocol_id ? protocolById.get(Number(log.protocol_id)) : null;
+            const protocol = found || { id: Number(log.protocol_id) || 0, name: log.name || this.t('med_protocol'), dosage: '' };
+            doses.push({ protocol, time: log.log_time || '', log, status: log.status || 'taken', extra: true });
         }
         return doses.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     },
@@ -658,7 +768,7 @@ Object.assign(window.FitCarePlugin, {
         };
         const method = renderers[this.state.view] ? this[renderers[this.state.view]] : this.renderCalendarView;
         if (typeof method !== 'function') {
-            container.innerHTML = `<div class="fit-page"><div class="fit-empty"><strong>Fit & Care</strong><span>This section is still loading.</span></div></div>`;
+            container.innerHTML = `<div class="fit-page"><div class="fit-empty"><strong>Fit &amp; Care</strong><span>${this.esc(this.t('loading_section'))}</span></div></div>`;
             return;
         }
         try {
@@ -761,9 +871,6 @@ Object.assign(window.FitCarePlugin, {
             case 'delete-health':
                 this.confirmDelete(() => window.DB.deleteFitHealthLog(el.dataset.id));
                 return;
-            case 'delete-intimacy':
-                this.confirmDelete(() => window.DB.deleteFitIntimacyLog(el.dataset.id));
-                return;
             case 'delete-cycle-log':
                 this.confirmDelete(() => window.DB.deleteFitCycleLog(date));
                 return;
@@ -810,6 +917,7 @@ Object.assign(window.FitCarePlugin, {
 
     toggleDose(date, data) {
         const taken = data.taken === '1' || data.taken === 'true';
+        const markingTaken = !(taken && data.logId);
         if (taken && data.logId) {
             window.DB.deleteFitHealthLog(data.logId);
         } else if (data.logId) {
@@ -818,6 +926,16 @@ Object.assign(window.FitCarePlugin, {
             window.DB.saveFitHealthLog({ log_date: date, log_time: data.time || '', protocol_id: Number(data.protocol), type: 'medication', name: data.name || '', status: 'taken' });
         }
         this.refresh();
+        if (markingTaken && window.DB && typeof window.DB.getFitMealConflicts === 'function') {
+            for (const meal of this.getMeals(date)) {
+                let conflicts = [];
+                try { conflicts = window.DB.getFitMealConflicts(meal) || []; } catch (error) { conflicts = []; }
+                if (conflicts.length) {
+                    this.toast(this.t('conflict_med_toast'), 'warn');
+                    break;
+                }
+            }
+        }
     },
 
     confirmDelete(callback, title) {
@@ -1242,12 +1360,10 @@ Object.assign(window.FitCarePlugin, {
         const patch = { log_date: date };
         const fields = ['weight', 'body_fat', 'muscle_mass', 'water_pct', 'bone_mass', 'visceral_fat', 'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein'];
         for (const field of fields) {
-            const value = this.fieldNumber(form, field);
-            if (value !== null) patch[field] = value;
+            patch[field] = this.fieldNumber(form, field);
         }
         patch.symptoms = JSON.stringify(this.splitList(this.fieldValue(form, 'symptoms')).slice(0, 20));
-        const note = this.fieldValue(form, 'measurement_note');
-        if (note) patch.measurement_note = note;
+        patch.measurement_note = this.fieldValue(form, 'measurement_note');
         window.DB.saveFitDailyLog(patch);
         this.closeModal();
         this.refresh();
@@ -1326,7 +1442,7 @@ Object.assign(window.FitCarePlugin, {
         const selectedType = log ? log.type : presetType;
         const types = ['measurement', 'glucose', 'pressure', 'symptom', 'temperature', 'other'];
         const body = `
-            <form id="fit-form-health" data-fit-form="health" data-date="${date}" data-id="${log ? log.id : ''}" class="fit-form-grid">
+            <form id="fit-form-health" data-fit-form="health" data-date="${this.esc(date)}" data-id="${log ? this.esc(log.id) : ''}" class="fit-form-grid">
                 <label class="fit-field"><span>${this.esc(this.t('type'))}</span>
                     <select class="fit-select" name="type">
                         ${types.map((type) => `<option value="${type}" ${selectedType === type ? 'selected' : ''}>${this.esc(this.t(`health_type_${type}`))}</option>`).join('')}
@@ -1345,10 +1461,10 @@ Object.assign(window.FitCarePlugin, {
                     <input class="fit-input" name="value2" type="number" step="0.01" value="${this.esc(log && log.value2 !== null && log.value2 !== undefined ? log.value2 : '')}">
                 </label>
                 <label class="fit-field"><span>${this.esc(this.t('unit'))}</span>
-                    <input class="fit-input" name="unit" maxlength="24" value="${this.esc(log ? log.unit : '')}" placeholder="mmol/L, mmHg…">
+                    <input class="fit-input" name="unit" maxlength="24" value="${this.esc(log ? log.unit : '')}" placeholder="${this.esc(this.t('health_unit_placeholder'))}">
                 </label>
                 <label class="fit-field"><span>${this.esc(this.t('tags'))} <small>${this.esc(this.t('optional'))}</small></span>
-                    <input class="fit-input" name="tags" value="${this.esc(log ? this.parseJson(log.tags, []).join(', ') : '')}" placeholder="fasting, after meal…">
+                    <input class="fit-input" name="tags" value="${this.esc(log ? this.parseJson(log.tags, []).join(', ') : '')}" placeholder="${this.esc(this.t('health_tags_placeholder'))}">
                 </label>
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('note'))} <small>${this.esc(this.t('optional'))}</small></span>
                     <textarea class="fit-textarea" name="note" rows="3">${this.esc(log ? log.note : '')}</textarea>
@@ -1512,6 +1628,7 @@ Object.assign(window.FitCarePlugin, {
     offerCycleStart(date) {
         if (!this.cycleEnabled()) return;
         const key = date || this.state.selectedDate || this.todayKey();
+        if (key > this.todayKey()) return;
         const cycles = (this.state.cycles || []).filter((cycle) => cycle.start_date);
         const recent = cycles.some((cycle) => {
             const gap = this.diffDays(cycle.start_date, key);
@@ -1656,6 +1773,7 @@ Object.assign(window.FitCarePlugin, {
 
     saveDayNote(date, value) {
         window.DB.patchFitDailyLog(date, { note: String(value || '') });
+        if (this.state.noteDrafts) delete this.state.noteDrafts[date];
         this.state.dailyMap.set(date, Object.assign({}, this.getDaily(date) || {}, { log_date: date, note: value }));
         this.toast(this.t('toast_saved'), 'success');
     },
@@ -1666,14 +1784,16 @@ Object.assign(window.FitCarePlugin, {
         try { return window.DB.getFitChatMessages(date, 80) || []; } catch (error) { return []; }
     },
 
-    buildChatContext(date) {
+    buildChatContext(date, hasSystemSnapshot = false) {
         const lines = [];
         lines.push('You are Aru inside the Fit & Care plugin, discussing one specific day. Answer in the user\'s language, briefly and supportively.');
         lines.push(`The day being discussed is ${date}. In every FIT command you emit, always pass date="${date}" unless the user explicitly names another day.`);
         lines.push(`This chat is a full interface to the journal: use the [[FIT: ...]] commands from your system instruction to read and write${this.cycleEnabled() ? ' (cycle included)' : ''}. Record casual mentions the same way as in the main chat — food, training, body measurements, sleep, water, steps, mood, symptoms, medication. When the user names food without numbers, estimate calories/protein/carbs/fat yourself and set estimated="1".`);
         lines.push('Use only the journal facts below. Never diagnose, prescribe, suggest doses, or present cycle predictions as contraception. For worrying symptoms, calmly suggest a qualified clinician. Do not output TOOL tags in this chat.');
-        const snapshot = window.DB.getFitAruSnapshot(true);
-        if (snapshot) lines.push('', snapshot);
+        if (!hasSystemSnapshot) {
+            const snapshot = window.DB.getFitAruSnapshot(true);
+            if (snapshot) lines.push('', snapshot);
+        }
         const log = this.getDaily(date) || {};
         const dayBits = [];
         const labels = {
@@ -1751,14 +1871,21 @@ Object.assign(window.FitCarePlugin, {
         try {
             // The system prompt carries the journal snapshot and the FIT command
             // contract, so it has to be current before this chat sends anything.
-            if (window.app && typeof window.app.updateSystemPrompt === 'function') window.app.updateSystemPrompt();
+            const sys = window.app && typeof window.app.updateSystemPrompt === 'function'
+                ? window.app.updateSystemPrompt({ type: 'plugin', pluginId: 'fit-care', isPrivate: false })
+                : null;
             const history = previous
                 .filter((message) => message.role === 'user' || message.role === 'assistant')
                 .slice(-this.MAX_CHAT_HISTORY)
                 .map((message) => ({ role: message.role, content: message.content }));
-            const context = this.buildChatContext(date);
+            const hasSystemSnapshot = Boolean(sys && sys.prompt && sys.prompt.includes('[FIT & CARE'));
+            const context = this.buildChatContext(date, hasSystemSnapshot);
             const prompt = `${context}\n\n[USER QUESTION]\n${text}`;
-            let raw = await llm.sendMessage(history, prompt);
+            let raw = await llm.sendMessage(
+                history,
+                prompt,
+                sys && sys.prompt ? { systemInstruction: sys.prompt, ageMode: sys.mode } : {}
+            );
             if (raw === null || raw === undefined) throw new Error('Empty response');
             raw = String(raw);
             const triggers = window.Triggers;

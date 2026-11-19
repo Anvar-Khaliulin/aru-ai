@@ -34,15 +34,19 @@ export const Library = {
     renderModal() {
         const appState = window.aruState || {};
         const t = appState.translations || {};
+        const ft = this.state.filterType || 'all';
+        const activeTabCls = 'px-3 py-2 text-sm font-medium rounded-md bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white transition';
+        const idleTabCls = 'px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 transition';
+        const viewIcon = this.state.viewMode === 'list' ? 'layout-grid' : 'list';
         const html = `
-        <div class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center bg-white/5 dark:bg-black/5 backdrop-blur-md fade-in p-2 md:p-4">
-            <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
+        <div id="modal-library-overlay" class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center bg-white/5 dark:bg-black/5 backdrop-blur-md fade-in p-2 md:p-4" onclick="if (event.target === this) document.getElementById('modal-container').innerHTML=''">
+            <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl h-[85dvh] flex flex-col shadow-2xl relative overflow-hidden" role="dialog" aria-modal="true">
                 <!-- Header -->
                 <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                     <h3 class="text-lg font-bold dark:text-white flex items-center gap-2">
                         <i data-lucide="library" class="w-5 h-5 text-aru-500"></i> ${t.lib_title || 'Aru Library'}
                     </h3>
-                    <button onclick="document.getElementById('modal-container').innerHTML=''" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
+                    <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" aria-label="${UI.escapeHTML(t.btn_close || 'Close')}" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
                         <i data-lucide="x" class="w-6 h-6"></i>
                     </button>
                 </div>
@@ -50,20 +54,20 @@ export const Library = {
                 <!-- Toolbar -->
                 <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row gap-4 items-center bg-white dark:bg-gray-900">
                     <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                        <button onclick="window.Library.setFilter('all')" id="lib-filter-all" class="px-3 py-2 text-sm font-medium rounded-md bg-white dark:bg-gray-700 shadow-sm transition">${t.lib_filter_all || 'All'}</button>
-                        <button onclick="window.Library.setFilter('apps')" id="lib-filter-apps" class="px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 transition">${t.lib_filter_apps || 'Aru Apps'}</button>
-                        <button onclick="window.Library.setFilter('docs')" id="lib-filter-docs" class="px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 transition">${t.lib_filter_docs || 'Aru Docs'}</button>
+                        <button type="button" onclick="window.Library.setFilter('all')" id="lib-filter-all" class="${ft === 'all' ? activeTabCls : idleTabCls}">${t.lib_filter_all || 'All'}</button>
+                        <button type="button" onclick="window.Library.setFilter('apps')" id="lib-filter-apps" class="${ft === 'apps' ? activeTabCls : idleTabCls}">${t.lib_filter_apps || 'Aru Apps'}</button>
+                        <button type="button" onclick="window.Library.setFilter('docs')" id="lib-filter-docs" class="${ft === 'docs' ? activeTabCls : idleTabCls}">${t.lib_filter_docs || 'Aru Docs'}</button>
                     </div>
                     <div class="flex items-center gap-2 w-full md:w-auto">
-                        <button onclick="window.Library.toggleViewMode()" id="lib-view-toggle" class="w-10 h-10 flex shrink-0 items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-xl transition-all shadow-sm active:scale-95" title="${t.lib_toggle_view || 'Toggle View'}">
-                            <i data-lucide="list" class="w-5 h-5"></i>
+                        <button type="button" onclick="window.Library.toggleViewMode()" id="lib-view-toggle" class="w-10 h-10 flex shrink-0 items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-xl transition-all shadow-sm active:scale-95" title="${t.lib_toggle_view || 'Toggle View'}">
+                            <i data-lucide="${viewIcon}" class="w-5 h-5"></i>
                         </button>
-                        <button onclick="window.Library.openAddModal()" class="w-10 h-10 flex items-center justify-center bg-aru-500 hover:bg-aru-600 text-white rounded-xl shadow-md transition-all active:scale-95" title="${t.lib_add_artifact || 'Add Artifact'}">
+                        <button type="button" onclick="window.Library.openAddModal()" class="w-10 h-10 flex items-center justify-center bg-aru-500 hover:bg-aru-600 text-white rounded-xl shadow-md transition-all active:scale-95" title="${t.lib_add_artifact || 'Add Artifact'}">
                             <i data-lucide="plus" class="w-5 h-5"></i>
                         </button>
                         <div class="relative flex-1 md:w-64">
                             <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-                            <input type="text" oninput="window.Library.search(this.value)" placeholder="${t.lib_search_placeholder || 'Search...'}" class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-aru-500 outline-none dark:text-white">
+                            <input type="text" value="${UI.escapeHTML(this.state.searchQuery || '')}" oninput="window.Library.search(this.value)" placeholder="${t.lib_search_placeholder || 'Search...'}" class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-aru-500 outline-none dark:text-white">
                         </div>
                     </div>
                 </div>
@@ -81,7 +85,7 @@ export const Library = {
                            <h3 class="text-xl font-bold dark:text-white flex items-center gap-2">
                                 <i data-lucide="plus-circle" class="w-6 h-6 text-aru-500"></i> ${t.lib_add_title || 'New Artifact'}
                             </h3>
-                            <button onclick="document.getElementById('lib-add-overlay').classList.add('hidden')" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
+                            <button type="button" onclick="document.getElementById('lib-add-overlay').classList.add('hidden')" aria-label="${UI.escapeHTML(t.btn_close || 'Close')}" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
                                 <i data-lucide="x" class="w-6 h-6"></i>
                             </button>
                         </div>
@@ -108,10 +112,10 @@ export const Library = {
                                 <div>
                                     <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.lib_label_file || 'HTML File'}</label>
                                     <div class="relative group">
-                                        <input type="file" name="file" id="lib-file-input" accept=".html,.htm" required onchange="this.nextElementSibling.querySelector('span').textContent = this.files[0] ? this.files[0].name : '${t.lib_file_select || 'Select file'}'" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                                        <input type="file" name="file" id="lib-file-input" accept=".html,.htm,.md,.markdown,.txt" required data-empty-label="${UI.escapeHTML(t.lib_file_select || 'Select file')}" onchange="this.nextElementSibling.querySelector('span').textContent = this.files[0] ? this.files[0].name : this.dataset.emptyLabel" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                                         <div class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center gap-3 group-hover:border-aru-400 transition-all">
                                             <i data-lucide="upload-cloud" class="w-5 h-5 text-gray-400 group-hover:text-aru-500"></i>
-                                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">${t.lib_file_select || 'Select .html file'}</span>
+                                            <span id="lib-file-label" class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">${t.lib_file_select || 'Select file'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -130,6 +134,23 @@ export const Library = {
         document.getElementById('modal-container').innerHTML = html;
         lucide.createIcons();
         window.Library = this; // Exposes library reference to the global object for DOM event bindings
+        const onLibKey = (e) => {
+            const ov = document.getElementById('modal-library-overlay');
+            if (!ov || !ov.isConnected) {
+                document.removeEventListener('keydown', onLibKey);
+                return;
+            }
+            if (e.key === 'Escape') {
+                const addOv = document.getElementById('lib-add-overlay');
+                if (addOv && !addOv.classList.contains('hidden')) {
+                    addOv.classList.add('hidden');
+                } else {
+                    document.removeEventListener('keydown', onLibKey);
+                    UI.closeModal();
+                }
+            }
+        };
+        document.addEventListener('keydown', onLibKey);
     },
 
     setFilter(type) {
@@ -234,8 +255,8 @@ export const Library = {
                         <i data-lucide="${item.icon}" class="w-5 h-5"></i>
                     </div>
                     <div class="flex-1 min-w-0 pr-2">
-                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate" title="${m.name}">${shortName}</h4>
-                        <p class="text-[11px] text-gray-400 dark:text-gray-500 truncate" title="${rawTags}">${shortTags}</p>
+                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate" title="${UI.escapeHTML(m.name)}">${UI.escapeHTML(shortName)}</h4>
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500 truncate" title="${UI.escapeHTML(rawTags)}">${UI.escapeHTML(shortTags)}</p>
                     </div>
                     <div class="hidden sm:block shrink-0 pr-2">
                         <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg">${item.label}</span>
@@ -251,9 +272,6 @@ export const Library = {
                     </div>
                 </div>`;
             } else {
-                const shortName = m.name.length > 15 ? m.name.substring(0, 15) + '...' : m.name;
-                const shortTags = rawTags.length > 15 ? rawTags.substring(0, 15) + '...' : rawTags;
-
                 return `
                 <div class="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-aru-500 dark:hover:border-aru-500 transition-all duration-300 group flex flex-col gap-4 min-h-[12rem] relative shadow-sm hover:shadow-xl hover:-translate-y-1">
                     <div class="flex items-start justify-between gap-3">
@@ -263,8 +281,8 @@ export const Library = {
                         <span class="shrink-0 text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg">${item.label}</span>
                     </div>
                     <div class="flex-1 min-h-0 flex flex-col">
-                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight" title="${m.name}">${shortName}</h4>
-                        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed font-medium italic" title="${rawTags}">${shortTags}</p>
+                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight line-clamp-2 break-words" title="${UI.escapeHTML(m.name)}">${UI.escapeHTML(m.name)}</h4>
+                        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed font-medium italic truncate" title="${UI.escapeHTML(rawTags)}">${UI.escapeHTML(rawTags)}</p>
                     </div>
 
                     <div class="mt-auto flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-3 opacity-100 md:opacity-0 transition-all duration-300 translate-y-0 md:translate-y-2 group-hover:opacity-100 group-hover:translate-y-0">
@@ -293,6 +311,11 @@ export const Library = {
         const m = [...apps, ...games, ...docs, ...analytics].find(x => x.id == id);
 
         if (m) {
+            const activeTab = state.tabs[state.activeTabIndex];
+            if (activeTab) {
+                activeTab.artifact = { type: m.type, title: m.name, code: m.content };
+                activeTab.isCanvasOpen = true;
+            }
             CanvasManager.renderArtifact(m.type, m.name, m.content);
         }
     },
@@ -323,6 +346,7 @@ export const Library = {
 
     async handleAddArtifact(event) {
         event.preventDefault();
+        const t = state.translations || {};
         const form = event.target;
         const name = form.name.value;
         const tags = form.tags.value;
@@ -340,6 +364,9 @@ export const Library = {
                 DB.saveModule(type, name, content, tags);
                 document.getElementById('lib-add-overlay').classList.add('hidden');
                 form.reset();
+                const fileInput = document.getElementById('lib-file-input');
+                const fileLabel = document.getElementById('lib-file-label');
+                if (fileInput && fileLabel) fileLabel.textContent = fileInput.dataset.emptyLabel || '';
                 this.loadModules(); // Triggers a grid regeneration to reflect updated states
             } catch (err) {
                 console.error("Failed to save artifact", err);

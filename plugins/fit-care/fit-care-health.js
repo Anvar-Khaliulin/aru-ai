@@ -178,8 +178,8 @@ Object.assign(window.FitCarePlugin, {
                     ${event.note ? `<small style="display:block;margin-top:3px">${this.esc(event.note)}</small>` : ''}
                 </div>
                 <div class="fit-row" style="gap:1px;flex:none">
-                    <button type="button" class="fit-btn-icon" data-fit-action="health-edit-event" data-id="${event.id}" data-date="${event.log_date}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
-                    <button type="button" class="fit-btn-icon" data-fit-action="delete-health" data-id="${event.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
+                    <button type="button" class="fit-btn-icon" data-fit-action="health-edit-event" data-id="${this.esc(event.id)}" data-date="${this.esc(event.log_date)}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
+                    <button type="button" class="fit-btn-icon" data-fit-action="delete-health" data-id="${this.esc(event.id)}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
         `;
@@ -209,11 +209,12 @@ Object.assign(window.FitCarePlugin, {
         const regularityLabel = lengths.length < 2 ? 'cycle_not_enough' : (irregular ? 'cycle_irregular' : 'cycle_regular');
         const periodLength = cycle.periodLength;
         const ovulationDay = cycle.ovulationDay;
-        const follicularEnd = Math.max(periodLength, cycle.fertileStart - 1);
+        const hasFertile = cycle.fertileStart >= 1 && cycle.fertileStart <= cycle.fertileEnd && cycle.fertileStart <= cycle.avg;
+        const follicularEnd = hasFertile ? Math.max(periodLength, cycle.fertileStart - 1) : Math.max(periodLength, cycle.avg);
         const phaseRanges = {
             menstrual: `1–${periodLength}`,
-            follicular: cycle.fertileStart > periodLength + 1 ? `${periodLength + 1}–${follicularEnd}` : '—',
-            fertile: `${cycle.fertileStart}–${cycle.fertileEnd}`,
+            follicular: (hasFertile ? cycle.fertileStart : cycle.avg) > periodLength + 1 ? `${periodLength + 1}–${follicularEnd}` : '—',
+            fertile: hasFertile ? `${cycle.fertileStart}–${cycle.fertileEnd}` : '—',
             ovulation: `${ovulationDay}`,
             luteal: `${Math.min(cycle.fertileEnd + 1, cycle.avg)}–${cycle.avg}`
         };
@@ -257,7 +258,7 @@ Object.assign(window.FitCarePlugin, {
                     </div>
                     <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
                         <b style="font-size:.84rem">${nextPeriodLine}</b>
-                        <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_fertile'))}: ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileStart - 1)))} – ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileEnd - 1)))}</span>
+                        ${hasFertile ? `<span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_fertile'))}: ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileStart - 1)))} – ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileEnd - 1)))}</span>` : ''}
                         <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_avg'))}: ${cycle.avg} · ${this.esc(this.t(regularityLabel))}${lengths.length ? ` (${lengths.length})` : ''}</span>
                     </div>
                 </div>
@@ -268,7 +269,7 @@ Object.assign(window.FitCarePlugin, {
                     <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="cycle-end" data-date="${this.todayKey()}"><i data-lucide="square"></i>${this.esc(this.t('cycle_end'))}</button>
                     <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_log_title'))}</button>
                 </div>
-                ${cycles.length ? `<div class="fit-section-title" style="margin-top:14px"><i data-lucide="history"></i>${this.esc(this.t('cycle_history'))}</div><div class="fit-cycle-history">${history}</div>${this.renderPager('cyclesPage', cycles.length, 5)}` : ''}
+                ${cycles.length ? `<div class="fit-section-title" style="margin-top:14px"><i data-lucide="history"></i><span>${this.esc(this.t('cycle_history'))}</span><small class="fit-muted" style="margin-left:auto;font-weight:500">${this.esc(this.t('cycle_days_header'))}</small></div><div class="fit-cycle-history">${history}</div>${this.renderPager('cyclesPage', cycles.length, 5)}` : ''}
                 <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.45">${this.esc(this.t('cycle_prediction_note'))}</p>
             </section>
         `;
@@ -298,16 +299,15 @@ Object.assign(window.FitCarePlugin, {
                 </section>
             `;
         }
-        const monthKey = this.todayKey().slice(0, 7);
         const logs = (allLogs || [])
-            .filter((entry) => String(entry.log_date || '').slice(0, 7) === monthKey)
+            .slice()
             .sort((a, b) => `${b.log_date} ${b.log_time || ''}`.localeCompare(`${a.log_date} ${a.log_time || ''}`));
         return `
             <section class="fit-card">
                 ${head}
                 <div class="fit-row" style="justify-content:space-between;margin-bottom:9px">
                     <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="add-intimacy" data-date="${this.todayKey()}"><i data-lucide="plus"></i>${this.esc(this.t('intimacy_add'))}</button>
-                    <span class="fit-muted" style="font-size:.64rem">${this.esc(this.t('intimacy_month_hint'))}</span>
+                    ${logs.length ? `<span class="fit-muted" style="font-size:.64rem">${logs.length}</span>` : ''}
                 </div>
                 ${logs.length ? `
                     <div class="fit-stack" style="gap:5px">
@@ -353,7 +353,7 @@ Object.assign(window.FitCarePlugin, {
                     </select>
                 </label>
                 <label class="fit-field"><span>${this.esc(this.t('protocol_dosage'))}</span>
-                    <input class="fit-input" name="dosage" maxlength="80" value="${this.esc(existing ? existing.dosage : '')}" placeholder="1 tab, 500 mg…">
+                    <input class="fit-input" name="dosage" maxlength="80" value="${this.esc(existing ? existing.dosage : '')}" placeholder="${this.esc(this.t('protocol_dosage_placeholder'))}">
                 </label>
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('protocol_times'))} <small>${this.esc(this.t('protocol_times_hint'))}</small></span>
                     <input class="fit-input" name="times" value="${this.esc(times)}" placeholder="08:00, 20:00">
@@ -411,7 +411,11 @@ Object.assign(window.FitCarePlugin, {
             .split(/[,\s]+/)
             .map((value) => {
                 const match = /^(\d{1,2}):(\d{2})$/.exec(value);
-                return match ? `${String(Number(match[1])).padStart(2, '0')}:${match[2]}` : '';
+                if (!match) return '';
+                const hh = Number(match[1]);
+                const mm = Number(match[2]);
+                if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return '';
+                return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
             })
             .filter(Boolean);
         const days = this.fieldValue(form, 'days')

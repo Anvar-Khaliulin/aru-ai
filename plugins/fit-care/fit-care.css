@@ -1,9 +1,10 @@
 /*
 ---ARU-LAB.SPACE---ALMATY---2026---
-Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
+Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care-plugin-root.
 ---chat.aru-lab.space---PWA---
 */
-#fit-care-plugin-root {
+#fit-care-plugin-root,
+.fit-care-plugin-root {
     --fit-accent: #e11d48;
     --fit-accent-strong: #be123c;
     --fit-accent-soft: #fff1f2;
@@ -24,6 +25,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     --fit-faint: #a1a1aa;
     --fit-border: #e4e4e7;
     --fit-border-strong: #d4d4d8;
+    --fit-grid-line: rgba(24, 24, 27, 0.11);
     --fit-shadow: 0 1px 2px rgba(24, 24, 27, 0.05);
     --fit-shadow-lg: 0 18px 45px rgba(24, 24, 27, 0.16);
     --fit-radius: 18px;
@@ -32,6 +34,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     height: 100%;
     overflow: hidden;
     position: relative;
+    container-type: inline-size;
+    container-name: fitroot;
     background: var(--fit-bg);
     color: var(--fit-text);
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -40,7 +44,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     -webkit-font-smoothing: antialiased;
 }
 
-.dark #fit-care-plugin-root {
+.dark #fit-care-plugin-root,
+.dark .fit-care-plugin-root {
     --fit-accent: #fb7185;
     --fit-accent-strong: #f43f5e;
     --fit-accent-soft: #3f1d29;
@@ -53,25 +58,26 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     --fit-amber-soft: #3a2f14;
     --fit-sky: #38bdf8;
     --fit-sky-soft: #122c3d;
-    --fit-bg: #18181b;
-    --fit-card: #1f1f23;
-    --fit-card-2: #27272b;
+    --fit-bg: var(--aru-surface, #1c1c1e);
+    --fit-card: #232328;
+    --fit-card-2: #2c2c32;
     --fit-text: #f4f4f5;
     --fit-subtle: #a1a1aa;
     --fit-faint: #71717a;
     --fit-border: #333338;
     --fit-border-strong: #44444a;
+    --fit-grid-line: rgba(255, 255, 255, 0.11);
     --fit-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     --fit-shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.55);
 }
 
-#fit-care-plugin-root *,
-#fit-care-plugin-root *::before,
-#fit-care-plugin-root *::after {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) *,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) *::before,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) *::after {
     box-sizing: border-box;
 }
 
-#fit-care-plugin-root button {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) button {
     font: inherit;
     color: inherit;
 }
@@ -406,7 +412,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-btn-ghost:hover { color: var(--fit-text); border-color: var(--fit-border-strong); background: transparent; }
 
 .fit-btn-danger { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-btn-danger { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-btn-danger, .dark .fit-care-plugin-root .fit-btn-danger { background: #3a1a1a; color: #f87171; }
 .fit-btn-danger:hover { background: #fee2e2; }
 
 .fit-btn-xs { padding: 5px 9px; font-size: 0.68rem; border-radius: 8px; }
@@ -451,7 +457,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-badge-amber { background: var(--fit-amber-soft); color: var(--fit-amber); }
 .fit-badge-sky { background: var(--fit-sky-soft); color: var(--fit-sky); }
 .fit-badge-danger { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-badge-danger { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-badge-danger, .dark .fit-care-plugin-root .fit-badge-danger { background: #3a1a1a; color: #f87171; }
 
 .fit-chip {
     display: inline-flex;
@@ -695,7 +701,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-mark.cycle { background: var(--fit-accent-soft); color: var(--fit-accent); }
 .fit-mark.intimacy { background: var(--fit-card-2); color: var(--fit-subtle); }
 
-.dark #fit-care-plugin-root .fit-mark.workout-skipped { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-mark.workout-skipped, .dark .fit-care-plugin-root .fit-mark.workout-skipped { background: #3a1a1a; color: #f87171; }
 
 /* week view */
 .fit-week {
@@ -748,7 +754,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-week-session.rest { background: transparent; border: 1px dashed var(--fit-border); color: var(--fit-faint); font-weight: 600; }
 .fit-week-session.is-done { background: var(--fit-emerald-soft); color: var(--fit-emerald); }
 .fit-week-session.is-skipped { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-week-session.is-skipped { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-week-session.is-skipped, .dark .fit-care-plugin-root .fit-week-session.is-skipped { background: #3a1a1a; color: #f87171; }
 
 .fit-week-meta {
     margin-top: auto;
@@ -772,7 +778,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     display: flex;
     flex-direction: column;
     min-height: 0;
-    max-height: calc(100vh - 150px);
+    max-height: calc(100dvh - 150px);
 }
 
 .fit-day-head {
@@ -925,7 +931,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 }
 
 .fit-actual-card.is-skipped .fit-actual-icon { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon, .dark .fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon { background: #3a1a1a; color: #f87171; }
 
 .fit-actual-card .fit-actual-icon svg { width: 14px; height: 14px; }
 .fit-actual-card strong { display: block; font-size: 0.78rem; }
@@ -982,9 +988,9 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 
 .fit-alert svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
 .fit-alert-warn { border-color: #fde68a; background: var(--fit-amber-soft); color: #92400e; }
-.dark #fit-care-plugin-root .fit-alert-warn { border-color: #5a4718; color: #fbbf24; }
+.dark #fit-care-plugin-root .fit-alert-warn, .dark .fit-care-plugin-root .fit-alert-warn { border-color: #5a4718; color: #fbbf24; }
 .fit-alert-danger { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
-.dark #fit-care-plugin-root .fit-alert-danger { border-color: #572a2a; background: #3a1a1a; color: #fca5a5; }
+.dark #fit-care-plugin-root .fit-alert-danger, .dark .fit-care-plugin-root .fit-alert-danger { border-color: #572a2a; background: #3a1a1a; color: #fca5a5; }
 .fit-alert-info { border-color: var(--fit-border); background: var(--fit-card-2); color: var(--fit-subtle); }
 
 .fit-timeline {
@@ -1261,7 +1267,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     transition: background 0.16s;
 }
 
-.fit-chat-composer:focus-within { background: var(--fit-accent-soft); }
+.fit-chat-composer:focus-within {
+    background: var(--fit-card-2);
+    box-shadow: inset 0 0 0 1.5px var(--fit-accent-ring);
+}
 
 .fit-chat-composer textarea {
     flex: 1;
@@ -1278,8 +1287,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 }
 
 /* The app-wide focus rule paints a gray fill; the composer keeps its own background. */
-#fit-care-plugin-root .fit-chat-composer textarea:focus,
-#fit-care-plugin-root .fit-chat-composer textarea:focus-visible {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-composer textarea:focus,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-composer textarea:focus-visible {
     background: transparent !important;
     box-shadow: none !important;
     outline: none !important;
@@ -1566,7 +1575,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     margin-bottom: 14px;
 }
 
-.dark #fit-care-plugin-root .fit-plan-banner {
+.dark #fit-care-plugin-root .fit-plan-banner, .dark .fit-care-plugin-root .fit-plan-banner {
     background: linear-gradient(135deg, rgba(251, 113, 133, 0.09), var(--fit-card) 60%);
 }
 
@@ -1807,7 +1816,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 .fit-dose-check.is-taken { border-color: transparent; background: var(--fit-emerald-soft); color: var(--fit-emerald); }
 .fit-dose-check svg { width: 13px; height: 13px; }
 .fit-dose.is-missed { border-color: #fde68a; }
-.dark #fit-care-plugin-root .fit-dose.is-missed { border-color: #5a4718; }
+.dark #fit-care-plugin-root .fit-dose.is-missed, .dark .fit-care-plugin-root .fit-dose.is-missed { border-color: #5a4718; }
 
 .fit-cycle-card {
     display: flex;
@@ -1976,7 +1985,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     background: linear-gradient(180deg, #fff5f5, var(--fit-card));
 }
 
-.dark #fit-care-plugin-root .fit-danger-zone { border-color: #572a2a; background: var(--fit-card); }
+.dark #fit-care-plugin-root .fit-danger-zone, .dark .fit-care-plugin-root .fit-danger-zone { border-color: #572a2a; background: var(--fit-card); }
 
 .fit-privacy-note {
     display: flex;
@@ -2216,10 +2225,23 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
     .fit-exercise-row .fit-ex-weight { display: none; }
 }
 
+@container fitroot (max-width: 760px) {
+    .fit-topbar { gap: 8px 12px; padding: 9px 12px 8px; }
+    .fit-brand-mark { width: 34px; height: 34px; }
+    .fit-quick-btn { padding: 7px 10px; font-size: 0.7rem; }
+}
+
+@container fitroot (max-width: 620px) {
+    .fit-brand-copy p { display: none; }
+}
+
+@container fitroot (max-width: 420px) {
+    .fit-brand-copy h1 { font-size: 0.9rem; }
+}
+
 @media (max-width: 760px) {
     .fit-topbar { gap: 8px 12px; padding: 9px 12px 8px; }
     .fit-brand-mark { width: 34px; height: 34px; }
-    .fit-icon-btn { display: none; }
     .fit-quick-btn { padding: 7px 10px; font-size: 0.7rem; }
     .fit-modal { padding: 8px; }
     .fit-modal-card { max-height: calc(100% - 16px); border-radius: 16px; }
@@ -2235,266 +2257,271 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root.
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #fit-care-plugin-root * { animation: none !important; transition: none !important; }
+    #fit-care-plugin-root *,
+    .fit-care-plugin-root * { animation: none !important; transition: none !important; }
 }
 
-/* ---------- main app skin ---------- */
-/* Flat surfaces, soft shadows, no hairlines — the plugin follows the app shell. */
+/* ---------- main app skin (specificity-safe via :where) ---------- */
 
-#fit-care-plugin-root {
-    --fit-bg: var(--aru-surface);
-    --fit-card: var(--aru-surface);
-    --fit-card-2: var(--aru-surface-muted);
-    --fit-text: var(--aru-text);
-    --fit-subtle: var(--aru-text-muted);
-    --fit-faint: var(--aru-text-faint);
-    --fit-border: transparent;
-    --fit-border-strong: transparent;
-    --fit-shadow: var(--aru-shadow-xs);
-    --fit-shadow-lg: var(--aru-shadow-lg);
-    --fit-radius: var(--aru-radius-lg);
-    background: var(--aru-surface);
-}
-
-.dark #fit-care-plugin-root {
-    --fit-bg: var(--aru-surface);
-    --fit-card: var(--aru-surface);
-    --fit-card-2: var(--aru-surface-muted);
-    --fit-text: var(--aru-text);
-    --fit-subtle: var(--aru-text-muted);
-    --fit-faint: var(--aru-text-faint);
-    --fit-border: transparent;
-    --fit-border-strong: transparent;
-    --fit-shadow: var(--aru-shadow-xs);
-    --fit-shadow-lg: var(--aru-shadow-lg);
-}
-
-#fit-care-plugin-root .fit-topbar {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-topbar {
     border-bottom: 0;
     box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45);
 }
 
-#fit-care-plugin-root .fit-card,
-#fit-care-plugin-root .fit-calendar-card,
-#fit-care-plugin-root .fit-day-panel,
-#fit-care-plugin-root .fit-actual-card,
-#fit-care-plugin-root .fit-metric,
-#fit-care-plugin-root .fit-kpi,
-#fit-care-plugin-root .fit-plan-banner,
-#fit-care-plugin-root .fit-protocol,
-#fit-care-plugin-root .fit-quick-tile {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-card, .fit-calendar-card, .fit-day-panel, .fit-actual-card,
+    .fit-metric, .fit-kpi, .fit-protocol, .fit-quick-tile
+) {
     border: 0;
     background: var(--fit-card);
-    box-shadow: var(--aru-shadow-sm);
+    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
 }
 
-#fit-care-plugin-root .fit-plan-session,
-#fit-care-plugin-root .fit-insight,
-#fit-care-plugin-root .fit-dose,
-#fit-care-plugin-root .fit-disclaimer-bar,
-#fit-care-plugin-root .fit-week-day,
-#fit-care-plugin-root .fit-week-nav,
-#fit-care-plugin-root .fit-icon-btn,
-#fit-care-plugin-root .fit-btn-ghost,
-#fit-care-plugin-root .fit-chip {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-banner {
+    border: 0;
+    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-plan-session, .fit-insight, .fit-dose, .fit-disclaimer-bar,
+    .fit-week-day, .fit-week-nav, .fit-icon-btn, .fit-btn-ghost, .fit-chip
+) {
     border: 0;
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-week-nav:hover,
-#fit-care-plugin-root .fit-icon-btn:hover,
-#fit-care-plugin-root .fit-btn-ghost:hover,
-#fit-care-plugin-root .fit-chip:hover {
-    background: var(--aru-surface-hover);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-week-nav, .fit-icon-btn, .fit-btn-ghost, .fit-chip
+):hover {
+    background: var(--aru-surface-hover, #e4e4e7);
 }
 
-#fit-care-plugin-root .fit-plan-day {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-day {
     border: 0;
     background: var(--fit-card);
-    box-shadow: var(--aru-shadow-xs);
+    box-shadow: var(--aru-shadow-xs, 0 1px 2px rgba(24, 24, 27, 0.05));
 }
 
-#fit-care-plugin-root .fit-plan-day:hover {
-    box-shadow: var(--aru-shadow-sm);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-day:hover {
+    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
 }
 
-#fit-care-plugin-root .fit-plan-day.is-today,
-#fit-care-plugin-root .fit-week-day.is-today,
-#fit-care-plugin-root .fit-week-day.is-selected,
-#fit-care-plugin-root .fit-day.is-selected {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day {
+    border: 0;
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day:hover:not(.is-selected) {
+    background: var(--fit-card-2);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-week-day.is-today:not(.is-selected) {
+    border: 0;
+    background: var(--fit-card);
+    box-shadow: inset 0 0 0 1.5px var(--fit-accent);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-plan-day.is-today, .fit-week-day.is-selected, .fit-day.is-selected, .fit-day.is-selected:hover
+) {
     border: 0;
     background: var(--fit-accent-soft);
 }
 
-#fit-care-plugin-root .fit-day {
-    border: 0;
-}
-
-#fit-care-plugin-root .fit-day:hover {
-    background: var(--fit-card-2);
-}
-
-#fit-care-plugin-root .fit-day-phase.period.is-forecast {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.period.is-forecast {
     border: 0;
     background: color-mix(in srgb, var(--fit-accent) 45%, transparent);
 }
 
-#fit-care-plugin-root .fit-day-phase.fertile.is-forecast {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.fertile.is-forecast {
     border: 0;
     background: color-mix(in srgb, var(--fit-sky) 45%, transparent);
 }
 
-#fit-care-plugin-root .fit-day-phase.ovulation.is-forecast {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.ovulation.is-forecast {
     border: 0;
     background: color-mix(in srgb, var(--fit-violet) 45%, transparent);
 }
 
-#fit-care-plugin-root .fit-day-phase.luteal.is-forecast {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.luteal.is-forecast {
     border: 0;
     background: color-mix(in srgb, var(--fit-amber) 45%, transparent);
 }
 
-#fit-care-plugin-root .fit-week-session.rest {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-week-session.rest {
     border: 0;
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-empty,
-#fit-care-plugin-root .fit-privacy-lock {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(.fit-empty, .fit-privacy-lock) {
     border: 0;
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-day-tabs {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tabs {
     border-bottom: 0;
     gap: 3px;
 }
 
-#fit-care-plugin-root .fit-day-tab {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tab {
     border-bottom: 0;
     border-radius: 8px;
     margin-bottom: 0;
 }
 
-#fit-care-plugin-root .fit-day-tab.is-active {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tab.is-active {
     border-bottom-color: transparent;
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-alert {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-alert {
     border: 0;
 }
 
-#fit-care-plugin-root .fit-dose-check {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose-check {
     border: 0;
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-dose.is-missed {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose-check.is-taken {
+    border: 0;
+    background: var(--fit-emerald-soft);
+    color: var(--fit-emerald);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose.is-missed {
     border: 0;
     background: var(--fit-amber-soft);
 }
 
-#fit-care-plugin-root .fit-danger-zone {
-    border: 0;
-    background: #fef2f2;
-}
-
-.dark #fit-care-plugin-root .fit-danger-zone {
-    background: #3a1a1a;
-}
-
-#fit-care-plugin-root .fit-switch-row {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch-row {
     border-bottom: 0;
     padding: 10px 0;
 }
 
-#fit-care-plugin-root .fit-switch {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch {
     background: #d8d8dd;
 }
 
-.dark #fit-care-plugin-root .fit-switch {
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch {
     background: #3a3a3f;
 }
 
-#fit-care-plugin-root .fit-btn-primary,
-#fit-care-plugin-root .fit-quick-btn {
-    border: 0;
-    box-shadow: none;
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch.is-on {
+    background: var(--fit-emerald);
 }
 
-#fit-care-plugin-root .fit-btn {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn:not(.fit-btn-primary):not(.fit-btn-soft):not(.fit-btn-danger):not(.fit-btn-ghost) {
     background: var(--fit-card-2);
 }
 
-#fit-care-plugin-root .fit-btn:hover {
-    background: var(--aru-surface-hover);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn:not(.fit-btn-primary):not(.fit-btn-soft):not(.fit-btn-danger):not(.fit-btn-ghost):hover {
+    background: var(--aru-surface-hover, #e4e4e7);
 }
 
-#fit-care-plugin-root .fit-input,
-#fit-care-plugin-root .fit-select,
-#fit-care-plugin-root .fit-textarea,
-#fit-care-plugin-root .fit-note-box,
-#fit-care-plugin-root .fit-exercise-row input {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-primary,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-quick-btn {
+    border: 0;
+    background: var(--fit-accent);
+    color: #fff;
+    box-shadow: none;
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-primary:hover,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-quick-btn:hover {
+    background: var(--fit-accent-strong);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-soft {
+    border: 0;
+    background: var(--fit-accent-soft);
+    color: var(--fit-accent);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-soft:hover {
+    background: var(--fit-accent-soft);
+    color: var(--fit-accent-strong);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-danger {
+    border: 0;
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-danger {
+    background: #3a1a1a;
+    color: #f87171;
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-input, .fit-select, .fit-textarea, .fit-note-box, .fit-exercise-row input
+) {
     border: 0;
     background: var(--fit-card-2);
     box-shadow: none;
 }
 
-#fit-care-plugin-root .fit-input:focus,
-#fit-care-plugin-root .fit-select:focus,
-#fit-care-plugin-root .fit-textarea:focus,
-#fit-care-plugin-root .fit-note-box:focus,
-#fit-care-plugin-root .fit-exercise-row input:focus {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-input, .fit-select, .fit-textarea, .fit-note-box, .fit-exercise-row input
+):focus {
     border: 0;
-    background: var(--aru-surface-hover);
-    box-shadow: var(--aru-shadow-sm);
+    background: var(--aru-surface-hover, var(--fit-card-2));
+    box-shadow: var(--aru-shadow-sm, 0 0 0 2px var(--fit-accent-ring)) !important;
     outline: none;
 }
 
-#fit-care-plugin-root .fit-timeline-line,
-#fit-care-plugin-root .fit-chat-bubble.assistant hr {
-    background: var(--aru-border-subtle);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-timeline-line,
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-bubble.assistant hr {
+    background: var(--aru-border-subtle, var(--fit-border));
 }
 
-#fit-care-plugin-root .fit-chart .axis-line {
-    stroke: var(--aru-border);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chart .axis-line {
+    stroke: var(--aru-border, var(--fit-border-strong));
 }
 
-#fit-care-plugin-root .fit-modal-backdrop {
-    background: var(--aru-overlay);
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chart .grid-line {
+    stroke: var(--fit-grid-line);
+}
+
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-modal-backdrop {
+    background: var(--aru-overlay, rgba(24, 24, 27, 0.46));
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
 
-#fit-care-plugin-root .fit-modal-card {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-modal-card {
     border: 0;
-    border-radius: var(--aru-radius-lg);
+    border-radius: var(--aru-radius-lg, 20px);
     background: var(--fit-card);
-    box-shadow: var(--aru-shadow-lg);
+    box-shadow: var(--fit-shadow-lg);
 }
 
-#fit-care-plugin-root .fit-modal-head,
-#fit-care-plugin-root .fit-modal-foot {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(.fit-modal-head, .fit-modal-foot) {
     border: 0;
     background: var(--fit-card);
 }
 
-#fit-care-plugin-root {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-view {
     scrollbar-color: #c7c7cc transparent;
 }
 
-.dark #fit-care-plugin-root {
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-view {
     scrollbar-color: #45454b transparent;
 }
 
-#fit-care-plugin-root .fit-view::-webkit-scrollbar-thumb,
-#fit-care-plugin-root .fit-modal-body::-webkit-scrollbar-thumb {
+:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-view, .fit-modal-body, .fit-day-body, .fit-chat-thread
+)::-webkit-scrollbar-thumb {
     background: #c7c7cc;
     border: 0;
 }
 
-.dark #fit-care-plugin-root .fit-view::-webkit-scrollbar-thumb,
-.dark #fit-care-plugin-root .fit-modal-body::-webkit-scrollbar-thumb {
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
+    .fit-view, .fit-modal-body, .fit-day-body, .fit-chat-thread
+)::-webkit-scrollbar-thumb {
     background: #45454b;
+}
+
+#aru-desktop .fit-day-panel {
+    max-height: calc(100% - 16px);
 }

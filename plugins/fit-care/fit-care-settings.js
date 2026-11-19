@@ -46,7 +46,7 @@ Object.assign(window.FitCarePlugin, {
                         </div>
                         <form data-fit-form="profile" class="fit-settings-grid">
                             <label class="fit-field">
-                                <span>${this.esc(this.t('name'))}</span>
+                                <span>${this.esc(this.t('profile_name'))}</span>
                                 <input class="fit-input" name="display_name" maxlength="80" autocomplete="name"
                                     value="${this.esc(profile.display_name || '')}">
                             </label>
@@ -76,7 +76,7 @@ Object.assign(window.FitCarePlugin, {
                                 <small>${this.esc(latestWeightRow ? this.t('weight_logged_at', { date: this.formatShortDate(latestWeightRow.log_date) }) : this.t('current_weight_hint'))}</small>
                             </label>
                             <label class="fit-field">
-                                <span>${this.esc(this.t('activity'))}</span>
+                                <span>${this.esc(this.t('activity_level_label'))}</span>
                                 <select class="fit-select" name="activity_level">
                                     ${option('sedentary', this.t('activity_sedentary'), profile.activity_level)}
                                     ${option('light', this.t('activity_light'), profile.activity_level)}
@@ -328,6 +328,13 @@ Object.assign(window.FitCarePlugin, {
                 if (input) input.value = next ? '1' : '0';
                 el.classList.toggle('is-on', next);
                 el.setAttribute('aria-pressed', next ? 'true' : 'false');
+                if ((name === 'cycle_tracking' || name === 'intimacy_tracking') && window.DB && window.DB.db) {
+                    window.DB.saveFitProfile({ [name]: next ? 1 : 0 });
+                    this.state.profile = window.DB.getFitProfile();
+                    if (name === 'intimacy_tracking' && !next) this.state.showPrivate = false;
+                    this.loadAll();
+                    this.toast(this.t('settings_saved'), 'success');
+                }
                 return true;
             }
             case 'calc-calories':
@@ -383,9 +390,14 @@ Object.assign(window.FitCarePlugin, {
         let calorieMax = this.fieldNumber(form, 'calorie_max');
         if (calorieMin !== null && calorieMax !== null && calorieMin > calorieMax) {
             [calorieMin, calorieMax] = [calorieMax, calorieMin];
+            const minInput = form.elements.namedItem('calorie_min');
+            const maxInput = form.elements.namedItem('calorie_max');
+            if (minInput) minInput.value = String(calorieMin);
+            if (maxInput) maxInput.value = String(calorieMax);
         }
+        const displayName = this.fieldValue(form, 'display_name');
         window.DB.saveFitProfile({
-            display_name: this.fieldValue(form, 'display_name'),
+            display_name: displayName,
             sex: this.fieldValue(form, 'sex'),
             birth_year: this.fieldNumber(form, 'birth_year'),
             height_cm: this.fieldNumber(form, 'height_cm'),
@@ -403,11 +415,21 @@ Object.assign(window.FitCarePlugin, {
         const initialWeight = weightInput ? Number(weightInput.dataset.initial) : NaN;
         const weightChanged = currentWeight !== null && (!Number.isFinite(initialWeight) || currentWeight !== initialWeight);
         if (weightChanged) {
-            window.DB.saveFitDailyLog({ log_date: this.todayKey(), weight: currentWeight });
+            const today = this.todayKey();
+            window.DB.saveFitDailyLog({ log_date: today, weight: currentWeight });
+            if (weightInput) {
+                weightInput.dataset.initial = String(currentWeight);
+                const hint = weightInput.closest('.fit-field') && weightInput.closest('.fit-field').querySelector('small');
+                if (hint) hint.textContent = this.t('weight_logged_at', { date: this.formatShortDate(today) });
+            }
             this.loadAll();
         }
+        const badge = form.closest('.fit-card') && form.closest('.fit-card').querySelector('.fit-badge');
+        if (badge) {
+            badge.innerHTML = `<i data-lucide="user-round"></i>${this.esc(displayName || this.t('profile'))}`;
+            if (window.lucide) window.lucide.createIcons();
+        }
         this.state.profile = window.DB.getFitProfile();
-        this.render();
         this.toast(this.t('settings_saved'), 'success');
     },
 
@@ -456,7 +478,6 @@ Object.assign(window.FitCarePlugin, {
             aru_notes: this.fieldValue(form, 'aru_notes')
         });
         this.state.profile = window.DB.getFitProfile();
-        this.render();
         this.toast(this.t('settings_saved'), 'success');
     },
 
@@ -464,6 +485,12 @@ Object.assign(window.FitCarePlugin, {
         const cycleLength = Math.min(60, Math.max(15, Math.round(this.fieldNumber(form, 'cycle_length') || 28)));
         const periodLength = Math.min(15, Math.max(1, Math.round(this.fieldNumber(form, 'period_length') || 5)));
         const lutealLength = Math.min(20, Math.max(7, Math.round(this.fieldNumber(form, 'luteal_length') || 14)));
+        const cycleInput = form.elements.namedItem('cycle_length');
+        const periodInput = form.elements.namedItem('period_length');
+        const lutealInput = form.elements.namedItem('luteal_length');
+        if (cycleInput) cycleInput.value = String(cycleLength);
+        if (periodInput) periodInput.value = String(periodLength);
+        if (lutealInput) lutealInput.value = String(lutealLength);
         window.DB.saveFitProfile({
             cycle_tracking: this.fieldValue(form, 'cycle_tracking') === '1' ? 1 : 0,
             cycle_length: cycleLength,
@@ -472,7 +499,6 @@ Object.assign(window.FitCarePlugin, {
         });
         this.state.profile = window.DB.getFitProfile();
         this.loadAll();
-        this.render();
         this.toast(this.t('settings_saved'), 'success');
     },
 
@@ -483,7 +509,6 @@ Object.assign(window.FitCarePlugin, {
         this.state.profile = window.DB.getFitProfile();
         this.state.showPrivate = false;
         this.loadAll();
-        this.render();
         this.toast(this.t('settings_saved'), 'success');
     },
 
@@ -535,7 +560,10 @@ Object.assign(window.FitCarePlugin, {
     },
 
     csvCell(value) {
-        const text = value === null || value === undefined ? '' : String(value);
+        let text = value === null || value === undefined ? '' : String(value);
+        if (/^[=+\-@\t\r]/.test(text)) {
+            text = "'" + text;
+        }
         return /[;"\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     },
 
@@ -590,11 +618,18 @@ Object.assign(window.FitCarePlugin, {
             if (rows.length < 2) throw new Error('No CSV rows');
             const records = this.csvRecords(rows);
             if (!records.length) throw new Error('No dated rows');
-            for (const record of records) window.DB.saveFitDailyLog(record, false);
-            window.DB.save();
-            this.loadAll();
-            this.render();
-            this.toast(this.t('imported_ok'), 'success');
+            this.openSettingsConfirm({
+                title: this.t('import_data'),
+                message: this.t('csv_import_confirm'),
+                confirmLabel: this.t('import_data'),
+                onConfirm: () => {
+                    for (const record of records) window.DB.saveFitDailyLog(record, false);
+                    window.DB.save();
+                    this.loadAll();
+                    this.render();
+                    this.toast(this.t('imported_ok'), 'success');
+                }
+            });
         } catch (error) {
             console.warn('FitCare: import failed', error);
             this.toast(this.t('import_error'), 'error');
@@ -624,9 +659,10 @@ Object.assign(window.FitCarePlugin, {
 
     parseSettingsCsv(text) {
         const source = String(text || '').replace(/^\ufeff/, '');
-        const semicolons = (source.match(/;/g) || []).length;
-        const commas = (source.match(/,/g) || []).length;
-        const tabs = (source.match(/\t/g) || []).length;
+        const headerLine = source.split(/\r?\n/, 1)[0] || '';
+        const semicolons = (headerLine.match(/;/g) || []).length;
+        const commas = (headerLine.match(/,/g) || []).length;
+        const tabs = (headerLine.match(/\t/g) || []).length;
         const delimiter = tabs > semicolons && tabs > commas ? '\t' : (semicolons >= commas ? ';' : ',');
         const rows = [];
         let row = [];
@@ -645,7 +681,7 @@ Object.assign(window.FitCarePlugin, {
                 } else {
                     field += char;
                 }
-            } else if (char === '"') {
+            } else if (char === '"' && field === '') {
                 quoted = true;
             } else if (char === delimiter) {
                 row.push(field);
@@ -732,14 +768,23 @@ Object.assign(window.FitCarePlugin, {
 
     parseSettingsDate(value) {
         const text = String(value === null || value === undefined ? '' : value).trim();
+        const isValidYmd = (y, m, d) => {
+            const dt = new Date(y, m - 1, d, 12, 0, 0);
+            return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+        };
         let match = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(text);
         if (match) {
-            return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+            const y = Number(match[1]), m = Number(match[2]), d = Number(match[3]);
+            if (isValidYmd(y, m, d)) {
+                return `${match[1]}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+            return '';
         }
         match = /^(\d{1,2})[./](\d{1,2})[./](\d{4})/.exec(text);
         if (match) {
             const first = Number(match[1]);
             const second = Number(match[2]);
+            const y = Number(match[3]);
             let day = first;
             let month = second;
             if (first > 12 && second <= 12) {
@@ -749,7 +794,7 @@ Object.assign(window.FitCarePlugin, {
                 day = second;
                 month = first;
             }
-            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            if (isValidYmd(y, month, day)) {
                 return `${match[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             }
         }
@@ -757,11 +802,13 @@ Object.assign(window.FitCarePlugin, {
     },
 
     parseSettingsNumber(value) {
-        const text = String(value === null || value === undefined ? '' : value)
-            .replace(/\s/g, '')
-            .replace(',', '.');
+        let text = String(value === null || value === undefined ? '' : value).trim().replace(/\s+/g, '');
         if (!text) return null;
-        const number = Number(text.replace(/[^0-9.+-]/g, ''));
+        if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(text)) text = text.replace(/,/g, '');
+        else text = text.replace(',', '.');
+        const cleaned = text.replace(/[^0-9.+-]/g, '');
+        if (!cleaned || !/\d/.test(cleaned)) return null;
+        const number = Number(cleaned);
         return Number.isFinite(number) ? number : null;
     },
 

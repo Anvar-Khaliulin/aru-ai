@@ -5,6 +5,7 @@ Canvas manager responsible for rendering generated artifacts like games, apps, a
 */
 import { DB } from './db.js';
 import { UI } from './ui.js';
+import { loadHtml2Pdf } from './lazyLoader.js';
 
 export const CanvasManager = {
     containers: {}, // chatId -> { container, iframe }
@@ -45,20 +46,34 @@ export const CanvasManager = {
     },
 
     open() {
-        this.panel.classList.remove('hidden');
+        this.panel.classList.remove('hidden', 'absolute', 'z-50', 'w-full');
         // Artifacts can open the panel without going through ChatController.toggleCanvas,
         // so the split handle has to follow the panel state here as well.
         const resizer = document.getElementById('canvas-resizer');
         if (resizer) resizer.classList.remove('hidden');
-        if (window.innerWidth < 768) {
-            this.panel.classList.add('absolute', 'z-50', 'w-full');
+        const st = window.aruState;
+        if (st && st.tabs[st.activeTabIndex]) {
+            st.tabs[st.activeTabIndex].isCanvasOpen = true;
         }
     },
 
     close() {
         this.panel.classList.add('hidden');
+        this.panel.classList.remove('canvas-fullscreen', 'absolute', 'z-50', 'w-full');
+        document.getElementById('aru-desktop')?.classList.remove('wd-has-fullscreen-canvas');
         const resizer = document.getElementById('canvas-resizer');
         if (resizer) resizer.classList.add('hidden');
+        const st = window.aruState;
+        if (st && st.tabs[st.activeTabIndex]) {
+            st.tabs[st.activeTabIndex].isCanvasOpen = false;
+        }
+    },
+
+    getTabKey(tab) {
+        if (!tab) return null;
+        if (tab.canvasKey) return tab.canvasKey;
+        if (tab.type === 'plugin') return `plugin:${tab.pluginId || 'unknown'}`;
+        return tab.chatId ?? null;
     },
 
     renderArtifact(type, title, code) {
@@ -116,14 +131,16 @@ export const CanvasManager = {
         const state = window.aruState;
         if (!state || state.activeTabIndex === -1) return;
 
-        const chatId = state.tabs[state.activeTabIndex].chatId;
+        const tab = state.tabs[state.activeTabIndex];
+        const chatId = this.getTabKey(tab);
+        if (chatId === null || chatId === undefined) return;
         const { type, title, code } = this.currentArtifact;
         const renderArea = document.getElementById('canvas-render-area');
 
         if (!this.containers[chatId]) {
             const container = document.createElement('div');
             container.className = 'w-full h-full chat-artifact-container';
-            container.dataset.chatId = chatId;
+            container.dataset.chatId = String(chatId);
             renderArea.appendChild(container);
 
             const iframe = document.createElement('iframe');
@@ -168,7 +185,7 @@ export const CanvasManager = {
                 } catch (e) { /* keep sanitized markup as-is */ }
                 finalCode = `<article class="aru-doc">${safeHtml}</article>`;
             } else {
-                finalCode = `<pre class="aru-doc">${code}</pre>`;
+                finalCode = `<pre class="aru-doc">${UI.escapeHTML(code)}</pre>`;
             }
         } else if (type === 'app' || type === 'game' || type === 'analytics') {
             if (!/<!DOCTYPE html>/i.test(code) && !/^\s*<html/i.test(code)) {
@@ -249,7 +266,8 @@ export const CanvasManager = {
                 overflow-x: auto;
             }
             .dark .aru-doc pre { background: #1f2937; }
-            .aru-doc pre code { background: transparent; padding: 0; font-size: 0.92em; }
+            .aru-doc pre code,
+            .aru-doc pre code.hljs { background: transparent !important; padding: 0; font-size: 0.92em; color: inherit; }
             .aru-doc hr { margin: 1em 0; border: 0; border-top: 1px solid #e9e9ec; }
             .dark .aru-doc hr { border-top-color: #2b2b2f; }
             .aru-doc table { width: 100%; margin: 0.65em 0; border-collapse: collapse; font-size: 0.95em; }
@@ -301,17 +319,80 @@ export const CanvasManager = {
             }
         })();</script>`;
 
-        const sandboxHTML = `
+        const pdfSnapshotBridge = `<script>(function(){
+            window.addEventListener('message', function(e) {
+                if (!e.data || e.data.type !== 'aru-pdf-snapshot' || e.source !== window.parent) return;
+                try {
+                    var clone = document.body ? document.body.cloneNode(true) : document.createElement('div');
+                    var origCanvases = document.querySelectorAll('canvas');
+                    var cloneCanvases = clone.querySelectorAll('canvas');
+                    for (var i = 0; i < origCanvases.length; i++) {
+                        try {
+                            var img = document.createElement('img');
+                            img.src = origCanvases[i].toDataURL('image/png');
+                            img.style.maxWidth = '100%';
+                            img.style.height = 'auto';
+                            img.className = origCanvases[i].className;
+                            if (cloneCanvases[i] && cloneCanvases[i].parentNode) {
+                                cloneCanvases[i].parentNode.replaceChild(img, cloneCanvases[i]);
+                            }
+                        } catch (_) {}
+                    }
+                    var scripts = clone.querySelectorAll('script');
+                    for (var j = 0; j < scripts.length; j++) scripts[j].remove();
+                    var styles = [];
+                    var styleEls = document.querySelectorAll('style');
+                    for (var k = 0; k < styleEls.length; k++) styles.push(styleEls[k].textContent || '');
+                    window.parent.postMessage({
+                        type: 'aru-pdf-snapshot-result',
+                        reqId: e.data.reqId,
+                        html: clone.innerHTML || '',
+                        styles: styles.join('\\n')
+                    }, '*');
+                } catch (err) {
+                    window.parent.postMessage({
+                        type: 'aru-pdf-snapshot-result',
+                        reqId: e.data.reqId,
+                        error: err && err.message ? err.message : 'snapshot failed'
+                    }, '*');
+                }
+            });
+        })();</script>`;
+
+        const hljsTheme = isDark ? 'github-dark.min.css' : 'github.min.css';
+        const isFullDoc = type !== 'doc' && (/<!DOCTYPE html>/i.test(finalCode) || /^\s*<html/i.test(finalCode));
+        let sandboxHTML;
+
+        if (isFullDoc) {
+            const headInject = `${storageShim}\n${pdfSnapshotBridge}`;
+            if (/<head[^>]*>/i.test(finalCode)) {
+                sandboxHTML = finalCode.replace(/<head([^>]*)>/i, `<head$1>\n${headInject}`);
+            } else if (/<html[^>]*>/i.test(finalCode)) {
+                sandboxHTML = finalCode.replace(/<html([^>]*)>/i, `<html$1><head>${headInject}</head>`);
+            } else {
+                sandboxHTML = `${headInject}\n${finalCode}`;
+            }
+            if (isDark) {
+                sandboxHTML = sandboxHTML.replace(/<html([^>]*)>/i, (m, attrs) => {
+                    if (/class\s*=\s*["']/i.test(attrs)) {
+                        return `<html${attrs.replace(/class\s*=\s*(["'])/i, 'class=$1dark ')}>`;
+                    }
+                    return `<html${attrs} class="dark">`;
+                });
+            }
+        } else {
+            sandboxHTML = `
             <!DOCTYPE html>
             <html lang="en" class="${isDark ? 'dark' : ''}">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${storageShim}
+                ${pdfSnapshotBridge}
                 ${type === 'doc' ? '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">' : ''}
                 <script src="https://cdn.tailwindcss.com"></script>
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/${hljsTheme}">
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
                 <style>
                     body { background-color: #ffffff; color: #1f2937; padding: 20px; font-family: sans-serif; transition: background-color 0.3s; }
@@ -329,6 +410,7 @@ export const CanvasManager = {
             </body>
             </html>
         `;
+        }
 
         iframe.srcdoc = sandboxHTML;
     },
@@ -383,23 +465,67 @@ export const CanvasManager = {
         const code = this.currentArtifact.code;
         if (typeof marked !== 'undefined') {
             const docHtml = marked.parse(code);
-            editor.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
+            let safeHtml = (typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(docHtml, { FORBID_ATTR: ['onclick'] })
+                : docHtml;
+            try {
+                const holder = document.createElement('div');
+                holder.innerHTML = safeHtml;
+                holder.querySelectorAll('div.rounded-xl').forEach((card) => {
+                    const pre = card.querySelector('pre');
+                    const headerBtn = card.querySelector('div:first-child > button');
+                    if (pre && headerBtn) card.replaceWith(pre);
+                });
+                safeHtml = holder.innerHTML;
+            } catch (_) {}
+            editor.innerHTML = safeHtml;
         } else {
             editor.textContent = code;
+        }
+        if (editor.dataset.pasteBound !== '1') {
+            editor.dataset.pasteBound = '1';
+            editor.addEventListener('paste', (e) => {
+                if (!e.clipboardData) return;
+                e.preventDefault();
+                const html = e.clipboardData.getData('text/html');
+                if (html && typeof DOMPurify !== 'undefined') {
+                    const clean = DOMPurify.sanitize(html, {
+                        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
+                        FORBID_ATTR: ['onclick', 'onerror', 'onload']
+                    });
+                    document.execCommand('insertHTML', false, clean);
+                } else {
+                    const plain = e.clipboardData.getData('text/plain');
+                    document.execCommand('insertText', false, plain);
+                }
+            });
         }
         if (window.lucide) window.lucide.createIcons();
     },
 
-    docEditCommand(cmd, value = null) {
+    async docEditCommand(cmd, value = null) {
         const editor = document.getElementById('doc-editor');
         if (!editor) return;
+        if (cmd === 'createLink') {
+            const sel = window.getSelection();
+            const savedRange = (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode))
+                ? sel.getRangeAt(0).cloneRange()
+                : null;
+            const t = window.aruState && window.aruState.translations ? window.aruState.translations : {};
+            const rawUrl = await UI.prompt(t.edit_link_prompt || 'URL:', 'https://');
+            const url = String(rawUrl || '').trim();
+            if (!url || !/^(https?:|mailto:|tel:|#|\/)/i.test(url)) return;
+            editor.focus();
+            if (savedRange && sel) {
+                sel.removeAllRanges();
+                sel.addRange(savedRange);
+            }
+            document.execCommand('createLink', false, url);
+            return;
+        }
         editor.focus();
         if (cmd === 'formatBlock') {
             document.execCommand('formatBlock', false, value);
-        } else if (cmd === 'createLink') {
-            const t = window.aruState && window.aruState.translations ? window.aruState.translations : {};
-            const url = window.prompt(t.edit_link_prompt || 'URL:', 'https://');
-            if (url) document.execCommand('createLink', false, url);
         } else {
             document.execCommand(cmd, false, value);
         }
@@ -424,10 +550,21 @@ export const CanvasManager = {
         const tab = state && state.tabs[state.activeTabIndex];
         if (tab) {
             tab.artifact = { ...this.currentArtifact };
-            const cacheKey = (tab.chatId !== null && tab.chatId !== undefined) ? `${tab.chatId}:${this.currentArtifact.title}` : this.currentArtifact.title;
+            const tabKey = this.getTabKey(tab);
+            const cacheKey = (tabKey !== null && tabKey !== undefined) ? `${tabKey}:${this.currentArtifact.title}` : this.currentArtifact.title;
             if (!window.aruArtifactsCache) window.aruArtifactsCache = {};
             window.aruArtifactsCache[cacheKey] = { type: 'doc', title: this.currentArtifact.title, code: markdown };
-            if (!tab.isPrivate && tab.chatId !== null && tab.chatId !== undefined && window.DB && DB.saveChatArtifact) {
+            if (tab.type === 'plugin' && tab.pluginId === 'skills' && window.DB && window.SkillsPlugin) {
+                const projId = window.SkillsPlugin.state?.activeProjectId;
+                const artId = window.SkillsPlugin.state?.lastArtifactId;
+                const existing = artId && DB.getSkillArtifact ? DB.getSkillArtifact(artId) : null;
+                if (existing && existing.title === this.currentArtifact.title && DB.saveSkillArtifact) {
+                    DB.saveSkillArtifact(existing.project_id, existing.run_id ?? null, this.currentArtifact.title, 'doc', markdown);
+                } else if (projId && DB.saveSkillArtifact) {
+                    const savedId = DB.saveSkillArtifact(projId, null, this.currentArtifact.title, 'doc', markdown);
+                    if (savedId) window.SkillsPlugin.state.lastArtifactId = savedId;
+                }
+            } else if (!tab.isPrivate && tab.type !== 'plugin' && tab.chatId !== null && tab.chatId !== undefined && window.DB && DB.saveChatArtifact) {
                 DB.saveChatArtifact(tab.chatId, this.currentArtifact.title, 'doc', markdown);
             }
         }
@@ -439,14 +576,18 @@ export const CanvasManager = {
     },
 
     copyCode() {
-        if (!this.currentArtifact) return;
-        navigator.clipboard.writeText(this.currentArtifact.code);
+        if (!this.currentArtifact || !navigator.clipboard?.writeText) return;
+        const t = (window.aruState && window.aruState.translations) || {};
+        navigator.clipboard.writeText(this.currentArtifact.code)
+            .then(() => UI.showToast(t.copied || 'Скопировано', 'check'))
+            .catch((e) => console.warn('CanvasManager.copyCode failed', e));
     },
 
     clearCanvas(evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         this.currentArtifact = null;
         this.panel.classList.remove('canvas-fullscreen');
+        document.getElementById('aru-desktop')?.classList.remove('wd-has-fullscreen-canvas');
         const icon = document.getElementById('canvas-maximize-icon');
         if (icon) icon.setAttribute('data-lucide', 'maximize-2');
         if (window.lucide) window.lucide.createIcons();
@@ -466,6 +607,7 @@ export const CanvasManager = {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         this.panel.classList.toggle('canvas-fullscreen');
         const isFullscreen = this.panel.classList.contains('canvas-fullscreen');
+        document.getElementById('aru-desktop')?.classList.toggle('wd-has-fullscreen-canvas', isFullscreen);
         
         const icon = document.getElementById('canvas-maximize-icon');
         const btn = icon ? icon.closest('button') : null;
@@ -487,34 +629,82 @@ export const CanvasManager = {
     toggleDownloadDropdown(evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         const dropdown = document.getElementById('download-dropdown');
-        if (dropdown) dropdown.classList.toggle('hidden');
+        if (!dropdown) return;
+        if (this._closeDownloadDropdown) {
+            document.removeEventListener('click', this._closeDownloadDropdown);
+            this._closeDownloadDropdown = null;
+        }
+        dropdown.classList.toggle('hidden');
 
-        const closeDropdown = (e) => {
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.add('hidden');
-                document.removeEventListener('click', closeDropdown);
-            }
-        };
         if (!dropdown.classList.contains('hidden')) {
-            document.addEventListener('click', closeDropdown);
+            this._closeDownloadDropdown = (e) => {
+                if (!dropdown.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                    document.removeEventListener('click', this._closeDownloadDropdown);
+                    this._closeDownloadDropdown = null;
+                }
+            };
+            document.addEventListener('click', this._closeDownloadDropdown);
         }
     },
 
     downloadAsHTML(evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         if (!this.currentArtifact) return;
-        const { title, code } = this.currentArtifact;
+        const { title, type, code } = this.currentArtifact;
+        const safeTitle = UI.escapeHTML(title || 'artifact');
 
         let outHtml = code;
-        if (!/<!DOCTYPE html>/i.test(code) && !/^\s*<html/i.test(code)) {
-            outHtml = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${title}</title>\n<script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="p-6">\n${code}\n</body>\n</html>`;
+        if (type === 'doc') {
+            let rendered = '';
+            if (typeof marked !== 'undefined') {
+                const docHtml = marked.parse(code);
+                let safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(docHtml) : docHtml;
+                try {
+                    const holder = document.createElement('div');
+                    holder.innerHTML = safeHtml;
+                    holder.querySelectorAll('div.rounded-xl > div:first-child > button').forEach(btn => btn.remove());
+                    safeHtml = holder.innerHTML;
+                } catch (_) {}
+                rendered = `<article class="aru-doc">${safeHtml}</article>`;
+            } else {
+                rendered = `<pre class="aru-doc">${UI.escapeHTML(code)}</pre>`;
+            }
+            outHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${safeTitle}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<style>
+  body { margin: 0; padding: 32px 20px; background: #ffffff; color: #1f2937; font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.65; }
+  .aru-doc { max-width: 780px; margin: 0 auto; word-break: break-word; }
+  .aru-doc h1, .aru-doc h2, .aru-doc h3, .aru-doc h4 { margin: 1em 0 0.45em; font-weight: 700; line-height: 1.3; }
+  .aru-doc p { margin: 0.6em 0; }
+  .aru-doc ul, .aru-doc ol { margin: 0.6em 0; padding-left: 1.4em; }
+  .aru-doc blockquote { margin: 0.8em 0; padding-left: 1em; border-left: 3px solid #f97316; color: #6b7280; }
+  .aru-doc :not(pre) > code { padding: 0.1em 0.35em; border-radius: 4px; background: #f3f4f6; font-family: monospace; font-size: 0.9em; }
+  .aru-doc pre { margin: 0.8em 0; padding: 0.9em 1em; border-radius: 8px; background: #f3f4f6; overflow-x: auto; }
+  .aru-doc pre code { background: transparent; padding: 0; }
+  .aru-doc table { width: 100%; margin: 0.8em 0; border-collapse: collapse; }
+  .aru-doc th, .aru-doc td { padding: 6px 9px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+  .aru-doc img { max-width: 100%; height: auto; border-radius: 8px; }
+</style>
+</head>
+<body>
+${rendered}
+</body>
+</html>`;
+        } else if (!/<!DOCTYPE html>/i.test(code) && !/^\s*<html/i.test(code)) {
+            outHtml = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${safeTitle}</title>\n<script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="p-6">\n${code}\n</body>\n</html>`;
         }
 
         const blob = new Blob([outHtml], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${title.replace(/\s+/g, '_')}.html`;
+        a.download = `${(title || 'artifact').replace(/\s+/g, '_')}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -523,53 +713,120 @@ export const CanvasManager = {
         document.getElementById('download-dropdown')?.classList.add('hidden');
     },
 
+    _requestPdfSnapshot(iframe) {
+        return new Promise((resolve) => {
+            if (!iframe || !iframe.contentWindow) {
+                resolve(null);
+                return;
+            }
+            const reqId = 'pdf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+            let done = false;
+            const finish = (payload) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                window.removeEventListener('message', onMessage);
+                resolve(payload);
+            };
+            const onMessage = (e) => {
+                if (e.source !== iframe.contentWindow) return;
+                const d = e.data;
+                if (!d || d.type !== 'aru-pdf-snapshot-result' || d.reqId !== reqId) return;
+                finish(d);
+            };
+            const timer = setTimeout(() => finish(null), 4000);
+            window.addEventListener('message', onMessage);
+            try {
+                iframe.contentWindow.postMessage({ type: 'aru-pdf-snapshot', reqId }, '*');
+            } catch (_) {
+                finish(null);
+            }
+        });
+    },
+
     async downloadAsPDF(evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         if (!this.currentArtifact) return;
-        const { title, type } = this.currentArtifact;
+        const { title, type, code } = this.currentArtifact;
         const state = window.aruState;
         if (!state || state.activeTabIndex === -1) return;
 
-        const chatId = state.tabs[state.activeTabIndex].chatId;
-        const container = this.containers[chatId];
-        if (!container || !container.iframe) return;
+        const tabKey = this.getTabKey(state.tabs[state.activeTabIndex]);
+        const container = this.containers[tabKey];
 
         try {
             document.getElementById('download-dropdown')?.classList.add('hidden');
+            if (typeof html2pdf === 'undefined') {
+                try {
+                    await loadHtml2Pdf();
+                } catch (loadErr) {
+                    console.warn('Lazy html2pdf load failed:', loadErr);
+                }
+            }
+            if (typeof html2pdf === 'undefined') {
+                await UI.alert('PDF exporter library is not loaded.');
+                return;
+            }
 
-            const iframeDoc = container.iframe.contentWindow.document;
-            // Create a wrapper for PDF generation
             const element = document.createElement('div');
             element.style.padding = '20px';
             element.style.backgroundColor = 'white';
-            element.style.color = 'black';
+            element.style.color = '#111827';
             element.classList.add('pdf-export-container');
 
-            // Clone body to manipulate
-            const bodyClone = iframeDoc.body.cloneNode(true);
-            element.appendChild(bodyClone);
-
-            const originalCanvases = iframeDoc.querySelectorAll('canvas');
-            const clonedCanvases = element.querySelectorAll('canvas');
-
-            originalCanvases.forEach((canv, idx) => {
-                try {
-                    const img = document.createElement('img');
-                    img.src = canv.toDataURL('image/png');
-                    img.style.width = '100%';
-                    img.style.height = 'auto';
-                    img.className = canv.className;
-                    if (clonedCanvases[idx]) {
-                        clonedCanvases[idx].parentNode.replaceChild(img, clonedCanvases[idx]);
-                    }
-                } catch (e) {
-                    console.warn('CanvasManager: Failed to convert canvas to image', e);
+            if (type === 'doc') {
+                const printCss = document.createElement('style');
+                printCss.textContent = `
+                    .pdf-export-container .aru-doc { font-family: Inter, sans-serif; font-size: 13px; line-height: 1.65; color: #1f2937; }
+                    .pdf-export-container .aru-doc h1 { font-size: 1.45em; font-weight: 700; margin: 0.9em 0 0.4em; }
+                    .pdf-export-container .aru-doc h2 { font-size: 1.25em; font-weight: 700; margin: 0.9em 0 0.4em; }
+                    .pdf-export-container .aru-doc h3 { font-size: 1.1em; font-weight: 700; margin: 0.8em 0 0.4em; }
+                    .pdf-export-container .aru-doc p { margin: 0.5em 0; }
+                    .pdf-export-container .aru-doc ul { list-style: disc; padding-left: 1.4em; margin: 0.5em 0; }
+                    .pdf-export-container .aru-doc ol { list-style: decimal; padding-left: 1.4em; margin: 0.5em 0; }
+                    .pdf-export-container .aru-doc blockquote { border-left: 3px solid #f97316; padding-left: 0.9em; color: #4b5563; margin: 0.6em 0; }
+                    .pdf-export-container .aru-doc pre { background: #f3f4f6; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; margin: 0.6em 0; }
+                    .pdf-export-container .aru-doc code { font-family: monospace; font-size: 0.9em; background: #f3f4f6; padding: 0.1em 0.3em; border-radius: 4px; }
+                    .pdf-export-container .aru-doc pre code { background: transparent; padding: 0; }
+                    .pdf-export-container .aru-doc table { width: 100%; border-collapse: collapse; margin: 0.65em 0; }
+                    .pdf-export-container .aru-doc th, .pdf-export-container .aru-doc td { padding: 6px 8px; border-bottom: 1px solid #d1d5db; text-align: left; }
+                `;
+                element.appendChild(printCss);
+                const holder = document.createElement('div');
+                if (typeof marked !== 'undefined') {
+                    const docHtml = marked.parse(code);
+                    const safeHtml = (typeof DOMPurify !== 'undefined')
+                        ? DOMPurify.sanitize(docHtml, { FORBID_TAGS: ['script', 'iframe'], FORBID_ATTR: ['onclick', 'onerror', 'onload'] })
+                        : docHtml;
+                    holder.innerHTML = `<article class="aru-doc">${safeHtml}</article>`;
+                    holder.querySelectorAll('div.rounded-xl > div:first-child > button').forEach(btn => btn.remove());
+                } else {
+                    const pre = document.createElement('pre');
+                    pre.className = 'aru-doc';
+                    pre.textContent = code;
+                    holder.appendChild(pre);
                 }
-            });
+                element.appendChild(holder);
+                if (typeof UI.renderMath === 'function') UI.renderMath(element);
+            } else {
+                const snap = container && container.iframe ? await this._requestPdfSnapshot(container.iframe) : null;
+                if (snap && snap.styles) {
+                    const snapCss = document.createElement('style');
+                    snapCss.textContent = String(snap.styles).replace(/<\/style/gi, '<\\/style');
+                    element.appendChild(snapCss);
+                }
+                const rawHtml = (snap && !snap.error && typeof snap.html === 'string' && snap.html.trim()) ? snap.html : code;
+                const safeHtml = (typeof DOMPurify !== 'undefined')
+                    ? DOMPurify.sanitize(rawHtml, { FORBID_TAGS: ['script', 'iframe', 'object', 'embed'], FORBID_ATTR: ['onclick', 'onerror', 'onload'] })
+                    : UI.escapeHTML(rawHtml);
+                const holder = document.createElement('div');
+                holder.innerHTML = safeHtml;
+                element.appendChild(holder);
+            }
 
             const opt = {
                 margin: 10,
-                filename: `${title.replace(/\s+/g, '_')}.pdf`,
+                filename: `${(title || 'artifact').replace(/\s+/g, '_')}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, logging: false },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -607,7 +864,7 @@ export const CanvasManager = {
         }
 
         const tags = await UI.prompt(t.canvas_save_prompt || 'Enter comma separated tags:', 'general');
-        if (!tags) return;
+        if (tags === null) return;
 
         try {
             DB.saveModule(type, title, this.currentArtifact.code, tags);

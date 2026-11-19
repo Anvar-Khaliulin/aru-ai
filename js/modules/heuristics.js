@@ -89,14 +89,14 @@ export const Heuristics = {
             /\b(?:мәссаған|паһ)\b/i
         ],
         grief: [
-            /\b(?:соболезную|жаль|скорб|погиб|погибли|умер|умерла|трагед|увы|печаль)\b/i,
-            /\b(?:condolence|grief|mourning|tragic|died|dead|sadly|unfortunately)\b/i,
-            /\b(?:қайғы|қаза|қайтыс|өкініш|көңіл айтам)\b/i
+            /\b(?:соболезную|жаль|скорб|погиб|погибли|умер|умерла|трагед|увы|печаль)/i,
+            /\b(?:condolence|grief|mourning|tragic|died|dead|sadly|unfortunately)/i,
+            /\b(?:қайғы|қаза|қайтыс|өкініш|көңіл айтам)/i
         ],
         heavy: [
-            /\b(?:войн|конфликт|обстрел|бомб|ракет|дрон|убит|жертв|теракт|катастроф|трагед|насили|геноцид|заложник|беженц|армия|военн)\b/i,
-            /\b(?:war|conflict|shelling|bomb|missile|drone|killed|casualt|terror|attack|disaster|traged|violence|massacre|genocide|hostage|refugee|military|army)\b/i,
-            /\b(?:соғыс|қақтығыс|бомб|зымыран|дрон|өлім|қаза|құрбан|теракт|апат|қайғы|зорлық|геноцид|әскер|босқын)\b/i
+            /\b(?:войн|конфликт|обстрел|бомб|ракет|дрон|убит|жертв|теракт|катастроф|трагед|насили|геноцид|заложник|беженц|армия|военн)/i,
+            /\b(?:war|conflict|shelling|bomb|missile|drone|killed|casualt|terror|attack|disaster|traged|violence|massacre|genocide|hostage|refugee|military|army)/i,
+            /\b(?:соғыс|қақтығыс|бомб|зымыран|дрон|өлім|қаза|құрбан|теракт|апат|қайғы|зорлық|геноцид|әскер|босқын)/i
         ],
         sleep: [
             /\b(?:спать|устал|устала|сонный|ночь)\b/i,
@@ -110,7 +110,7 @@ export const Heuristics = {
             /\.\.\./
         ],
         sarcasm: [
-            /\b(?:подмиг|ирони|сарказм)\b/i,
+            /\b(?:подмиг|ирони|сарказм)/i,
             /;\)|😉/i,
             /\b(?:yeah right|sure,? right)\b/i,
             /\b(?:қойшы)\b/i
@@ -139,6 +139,7 @@ export const Heuristics = {
 
     // Compiled Unicode-aware copies of the pattern list (JS \b ignores Cyrillic)
     _patternCache: new WeakMap(),
+    _keywordRegexCache: new Map(),
 
     _preparePattern(pattern) {
         let prepared = this._patternCache.get(pattern);
@@ -146,12 +147,32 @@ export const Heuristics = {
         prepared = pattern;
         if (/[^\x00-\x7F]/.test(pattern.source)) {
             const source = pattern.source
-                .replace(/^\\b/, '(?<![a-zа-яёәіңөұүқғһ0-9])')
+                .replace(/^\\b/, '(?:^|[^a-zа-яёәіңөұүқғһ0-9])')
                 .replace(/\\b$/, '(?![a-zа-яёәіңөұүқғһ0-9])');
             if (source !== pattern.source) prepared = new RegExp(source, pattern.flags);
         }
         this._patternCache.set(pattern, prepared);
         return prepared;
+    },
+
+    _hasKeyword(text, words = []) {
+        if (!text) return false;
+        const L = 'a-zа-яёәіңөұүқғһ0-9';
+        return words.some((word) => {
+            let rx = this._keywordRegexCache.get(word);
+            if (!rx) {
+                const esc = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Short words need full-word boundaries (allowing simple single-letter endings on non-ASCII nouns like код->кода/коде, баг->бага/баги)
+                const suffix = word.length <= 4
+                    ? (/[^\x00-\x7F]/.test(word) && word !== 'рок' && word !== 'рэп' && word !== 'ән'
+                        ? `[а-яёәіңөұүқғһ]{0,2}(?![${L}])`
+                        : (word === 'ән' ? `(?:і|ің|ді|дер|ге|мен|ші)?(?![${L}])` : `(?![${L}])`))
+                    : '';
+                rx = new RegExp(`(?:^|[^${L}])${esc}${suffix}`, 'i');
+                this._keywordRegexCache.set(word, rx);
+            }
+            return rx.test(text);
+        });
     },
 
     _matchesAny(text, patterns = []) {
@@ -172,8 +193,8 @@ export const Heuristics = {
             user,
             combined,
             isLongForm: response.length > 260,
-            technical: this._keywords.geeky.some(w => combined.includes(w)) || String(responseText || '').includes('```'),
-            musical: this._keywords.musical.some(w => combined.includes(w)) || combined.includes('🎸'),
+            technical: this._hasKeyword(combined, this._keywords.geeky) || String(responseText || '').includes('```'),
+            musical: this._hasKeyword(combined, this._keywords.musical) || combined.includes('🎸'),
             affection: this._matchesAny(combined, this._patterns.affection),
             apology: this._matchesAny(response, this._patterns.apology),
             request: this._matchesAny(response, this._patterns.request),
@@ -190,7 +211,8 @@ export const Heuristics = {
         };
     },
 
-    adjustMood(userText) {
+    adjustMood(userText, { skipPersist = false } = {}) {
+        if (skipPersist) return;
         const text = this._normalizeText(userText);
 
         const posCount = this._countMatches(text, this._patterns.positiveFeedback);
@@ -206,6 +228,7 @@ export const Heuristics = {
         const moodOld = Number.isFinite(state.personality.mood) ? state.personality.mood : 50;
         const sarcasmOld = Number.isFinite(state.personality.sarcasm) ? state.personality.sarcasm : 0;
         const affinityOld = Number.isFinite(state.personality.affinity) ? state.personality.affinity : 0;
+        const humorOld = Number.isFinite(state.personality.humor) ? state.personality.humor : 50;
         let moodNew = moodOld;
         let sarcasmNew = sarcasmOld;
         let affinityNew = affinityOld;
@@ -227,20 +250,22 @@ export const Heuristics = {
             }
         }
 
-        // Resolves interpersonal coupling logic (e.g. low mood increases sarcasm)
-        if (moodNew < 30) sarcasmNew = sarcasmNew + Math.round(gamma * (30 - moodNew));
-        if (sarcasmNew > 70) moodNew = moodNew - Math.round(delta * (sarcasmNew - 70));
+        // Resolves interpersonal coupling logic only when sentiment shifted
+        if (s !== 0) {
+            if (moodNew < 30) sarcasmNew = sarcasmNew + Math.round(gamma * (30 - moodNew));
+            if (sarcasmNew > 70) moodNew = moodNew - Math.round(delta * (sarcasmNew - 70));
+        }
 
         // Enforces boundary constraints on calculated vectors
         moodNew = Math.max(0, Math.min(100, moodNew));
         sarcasmNew = Math.max(0, Math.min(100, sarcasmNew));
 
         // Executes topic-specific humor corrections
-        let humorNew = state.personality.humor || 50;
-        if (this._keywords.geeky.some(w => text.includes(w))) humorNew = Math.min(100, humorNew + 5);
-        if (this._keywords.musical.some(w => text.includes(w))) humorNew = Math.min(100, humorNew + 2);
+        let humorNew = humorOld;
+        if (this._hasKeyword(text, this._keywords.geeky)) humorNew = Math.min(100, humorNew + 5);
+        if (this._hasKeyword(text, this._keywords.musical)) humorNew = Math.min(100, humorNew + 2);
 
-        const changed = (moodNew !== moodOld) || (sarcasmNew !== sarcasmOld) || (humorNew !== state.personality.humor) || (affinityNew !== affinityOld);
+        const changed = (moodNew !== moodOld) || (sarcasmNew !== sarcasmOld) || (humorNew !== humorOld) || (affinityNew !== affinityOld);
 
         if (changed) {
             state.setPersonality({ mood: moodNew, sarcasm: sarcasmNew, humor: humorNew, affinity: affinityNew });

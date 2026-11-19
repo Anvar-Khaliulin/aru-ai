@@ -5,6 +5,11 @@ User interface controller managing DOM manipulations, animations, and toast noti
 */
 import { aruGlobalState } from './aruState.js';
 
+const ALLOWED_EMOTIONS = new Set([
+    'angry', 'cool', 'crazy', 'cry', 'geek', 'happy', 'love',
+    'normal', 'oh', 'please', 'rock', 'sad', 'sleep', 'thinking', 'wow'
+]);
+
 export const UI = {
     container: document.getElementById('messages-container'),
     modalContainer: document.getElementById('modal-container'),
@@ -53,8 +58,9 @@ export const UI = {
     _openDialog({ mode, message, value = '', okText, cancelText, inputType = 'text' }) {
         const t = aruGlobalState.translations || {};
         return new Promise((resolve) => {
+            const prevFocus = document.activeElement;
             const root = document.createElement('div');
-            root.className = 'aru-dialog-root fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in';
+            root.className = 'aru-dialog-root fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/40 animate-fade-in';
 
             const box = document.createElement('div');
             box.className = 'aru-dialog bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 p-5';
@@ -62,8 +68,10 @@ export const UI = {
             box.setAttribute('aria-modal', 'true');
 
             const text = document.createElement('div');
+            text.id = 'aru-dialog-title-' + Math.random().toString(36).slice(2, 8);
             text.className = 'text-sm font-bold text-gray-800 dark:text-gray-100 whitespace-pre-line break-words';
             text.textContent = String(message ?? '');
+            box.setAttribute('aria-labelledby', text.id);
             box.appendChild(text);
 
             let input = null;
@@ -108,6 +116,9 @@ export const UI = {
                 document.removeEventListener('keydown', onKey, true);
                 if (observer) observer.disconnect();
                 if (root.parentNode) root.parentNode.removeChild(root);
+                if (prevFocus && prevFocus.isConnected && typeof prevFocus.focus === 'function') {
+                    try { prevFocus.focus(); } catch (_) {}
+                }
                 resolve(result);
             }
 
@@ -123,17 +134,30 @@ export const UI = {
                 } else if (event.key === 'Enter') {
                     event.preventDefault();
                     event.stopPropagation();
-                    submit();
+                    if (cancelBtn && document.activeElement === cancelBtn) {
+                        finish(cancelValue);
+                    } else {
+                        submit();
+                    }
+                } else if (event.key === 'Tab') {
+                    const focusables = [input, cancelBtn, okBtn].filter(Boolean);
+                    if (focusables.length > 0) {
+                        event.preventDefault();
+                        const idx = focusables.indexOf(document.activeElement);
+                        const next = event.shiftKey
+                            ? (idx <= 0 ? focusables.length - 1 : idx - 1)
+                            : (idx === -1 || idx >= focusables.length - 1 ? 0 : idx + 1);
+                        focusables[next].focus();
+                    }
                 }
             }
             document.addEventListener('keydown', onKey, true);
 
-            // Desktop mode turns modals into windows; closing that window removes the
-            // node without calling our handlers, so settle on detachment as cancel.
+            // Desktop mode turns modals into windows; closing or detaching settles as cancel.
             observer = new MutationObserver(() => {
                 if (!root.isConnected) finish(cancelValue);
             });
-            observer.observe(document.body, { childList: true, subtree: true });
+            observer.observe(container, { childList: true });
 
             okBtn.addEventListener('click', submit);
             if (cancelBtn) cancelBtn.addEventListener('click', () => finish(cancelValue));
@@ -144,10 +168,19 @@ export const UI = {
     },
 
     showToast(message, icon = 'info') {
+        let stack = document.getElementById('aru-toast-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'aru-toast-stack';
+            stack.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2 pointer-events-none max-w-[90vw]';
+            document.body.appendChild(stack);
+        }
         const toast = document.createElement('div');
-        toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1.5 px-3 rounded-full opacity-0 transition-opacity duration-500 z-50 flex items-center gap-2 max-w-[90vw] shadow-lg';
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
+        toast.className = 'bg-gray-800 dark:bg-gray-900 text-white text-xs py-1.5 px-3 rounded-full opacity-0 transition-opacity duration-500 flex items-center gap-2 max-w-full shadow-lg pointer-events-auto border border-white/10';
         toast.innerHTML = `<i data-lucide="${icon}" class="w-3 h-3 text-aru-400 shrink-0"></i> <span class="truncate">${UI.escapeHTML(message)}</span>`;
-        document.body.appendChild(toast);
+        stack.appendChild(toast);
         requestAnimationFrame(() => toast.classList.remove('opacity-0'));
         setTimeout(() => {
             toast.classList.add('opacity-0');
@@ -170,7 +203,42 @@ export const UI = {
             .replace(/'/g, '&#039;');
     },
 
+    _ensureCopyDelegation() {
+        if (this._copyDelegationBound) return;
+        this._copyDelegationBound = true;
+        document.addEventListener('click', (e) => {
+            const codeBtn = e.target.closest ? e.target.closest('[data-copy-code]') : null;
+            if (codeBtn) {
+                const id = codeBtn.getAttribute('data-copy-code');
+                const text = (window.aruContentCache && window.aruContentCache[id]) || '';
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    navigator.clipboard.writeText(text).then(() => {
+                        codeBtn.classList.add('text-emerald-500');
+                        setTimeout(() => codeBtn.classList.remove('text-emerald-500'), 1200);
+                    }).catch(() => {});
+                }
+                return;
+            }
+            const msgBtn = e.target.closest ? e.target.closest('[data-copy-msg]') : null;
+            if (msgBtn) {
+                const id = msgBtn.getAttribute('data-copy-msg');
+                let text = (window.aruCopyTextCache && window.aruCopyTextCache[id]);
+                if (text === undefined) {
+                    const raw = (window.aruContentCache && window.aruContentCache[id]) || '';
+                    text = raw;
+                }
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    navigator.clipboard.writeText(String(text || '')).then(() => {
+                        msgBtn.classList.add('text-emerald-500');
+                        setTimeout(() => msgBtn.classList.remove('text-emerald-500'), 1200);
+                    }).catch(() => {});
+                }
+            }
+        });
+    },
+
     initMarked() {
+        this._ensureCopyDelegation();
         if (typeof marked === 'undefined') return;
         const renderer = new marked.Renderer();
         renderer.code = (codeOrObj, language) => {
@@ -186,19 +254,22 @@ export const UI = {
             if (!window.aruContentCache) window.aruContentCache = {};
             window.aruContentCache[codeId] = code;
 
-            const validLang = !!(lang && hljs.getLanguage(lang));
-            const highlighted = validLang ? hljs.highlight(code, { language: lang }).value : hljs.highlightAuto(code).value;
-            const langLabel = lang || 'code';
+            const safeLang = String(lang || '').replace(/[^a-z0-9_-]/gi, '');
+            const validLang = !!(safeLang && typeof hljs !== 'undefined' && hljs.getLanguage(safeLang));
+            const highlighted = (typeof hljs !== 'undefined')
+                ? (validLang ? hljs.highlight(code, { language: safeLang }).value : hljs.highlightAuto(code).value)
+                : this.escapeHTML(code);
+            const langLabel = this.escapeHTML(lang || 'code');
 
             return `
             <div class="my-4 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div class="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${langLabel}</span>
-                    <button class="text-xs text-gray-500 hover:text-aru-500 transition-colors flex items-center gap-1" onclick="navigator.clipboard.writeText(window.aruContentCache['${codeId}'])">
+                    <button type="button" class="text-xs text-gray-500 hover:text-aru-500 transition-colors flex items-center gap-1" data-copy-code="${codeId}">
                         <i data-lucide="copy" class="w-3 h-3"></i>
                     </button>
                 </div>
-                <pre class="m-0 p-4 bg-gray-50 dark:bg-gray-900/50 overflow-x-auto"><code class="hljs language-${lang}">${highlighted}</code></pre>
+                <pre class="m-0 p-4 bg-gray-50 dark:bg-gray-900/50 overflow-x-auto"><code class="hljs language-${safeLang}">${highlighted}</code></pre>
             </div>`;
         };
         marked.setOptions({ renderer });
@@ -243,6 +314,7 @@ export const UI = {
     },
 
     appendMessage(msg) {
+        this._ensureCopyDelegation();
         if (!this.container) this.container = document.getElementById('messages-container');
 
         const isUser = msg.role === 'user';
@@ -264,13 +336,26 @@ export const UI = {
             } catch (e) {
                 // Fallback to original content in case of decoding errors
             }
+            parsedContent = this.sanitizeHTML(parsedContent);
         } else {
             parsedContent = this.parseMarkdownWithMath(msg.content);
         }
 
         const msgId = 'm-' + Math.random().toString(36).substring(2, 9);
         if (!window.aruContentCache) window.aruContentCache = {};
+        if (!window.aruCopyTextCache) window.aruCopyTextCache = {};
         window.aruContentCache[msgId] = msg.content;
+        if (msg.isHTML) {
+            let plain = String(parsedContent || '');
+            try {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = plain;
+                plain = (tmp.innerText || tmp.textContent || '').trim();
+            } catch (_) {}
+            window.aruCopyTextCache[msgId] = plain;
+        } else {
+            window.aruCopyTextCache[msgId] = String(msg.content || '');
+        }
 
         const dbIdAttr = (msg.id !== undefined && msg.id !== null) ? ` data-msg-id="${msg.id}"` : '';
 
@@ -311,7 +396,7 @@ export const UI = {
                     <i data-lucide="user" class="w-5 h-5"></i>
                 </div>
                 <div class="max-w-[80%] flex flex-col items-end gap-1.5">
-                    <div class="bg-aru-500 text-white p-3 px-4 rounded-2xl rounded-tr-none shadow-md text-sm selection:bg-white/30">
+                    <div class="aru-user-bubble bg-aru-500 text-white p-3 px-4 rounded-2xl rounded-tr-none shadow-md text-sm selection:bg-white/30">
                         <div class="prose prose-invert prose-sm max-w-none break-words">
                             ${parsedContent}
                         </div>
@@ -321,7 +406,8 @@ export const UI = {
             </div>`;
         } else {
             const showStickers = settings.show_stickers !== 'false';
-            const moodClass = msg.emotion ? `aru-${msg.emotion}` : '';
+            const safeEmotion = ALLOWED_EMOTIONS.has(msg.emotion) ? msg.emotion : '';
+            const moodClass = safeEmotion ? `aru-${safeEmotion}` : '';
 
             // Renders clickable quick-reply buttons proposed by the model; clicking one
             // sends its label as the user's next message
@@ -341,10 +427,10 @@ export const UI = {
 
             // Generates and appends HTML for character stickers if enabled in user settings
             let stickerHTML = '';
-            if (showStickers && msg.emotion) {
+            if (showStickers && safeEmotion) {
                 stickerHTML = `
                 <div class="mt-2 ml-10 animate-fade-in-up">
-                    <img src="media/emotions/${msg.emotion}.png" class="w-24 h-24 object-contain transition-transform hover:scale-110 ${moodClass}" onerror="this.style.display='none'">
+                    <img src="media/emotions/${safeEmotion}.png" class="w-24 h-24 object-contain transition-transform hover:scale-110 ${moodClass}" onerror="this.style.display='none'">
                 </div>`;
             }
 
@@ -363,7 +449,7 @@ export const UI = {
                             </div>
                         </div>
                          <div class="flex gap-2 mt-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <button class="text-xs text-gray-400 hover:text-aru-500 flex items-center gap-1" onclick="navigator.clipboard.writeText(window.aruContentCache['${msgId}'])">
+                             <button type="button" class="text-xs text-gray-400 hover:text-aru-500 flex items-center gap-1" data-copy-msg="${msgId}">
                                 <i data-lucide="copy" class="w-3 h-3"></i> ${settings.translations?.action_copy || appState.translations?.action_copy || 'Copy'}
                              </button>
                          </div>
@@ -376,9 +462,10 @@ export const UI = {
 
         if (this.container) {
             this.container.insertAdjacentHTML('beforeend', html);
-            this.renderMath(this.container.lastElementChild);
-            if (typeof hljs !== 'undefined') {
-                document.querySelectorAll('pre code').forEach((el) => hljs.highlightElement(el));
+            const addedEl = this.container.lastElementChild;
+            this.renderMath(addedEl);
+            if (typeof hljs !== 'undefined' && addedEl) {
+                addedEl.querySelectorAll('pre code:not(.hljs):not([data-highlighted])').forEach((el) => hljs.highlightElement(el));
             }
             if (typeof lucide !== 'undefined') lucide.createIcons();
             this.scrollToBottom();
@@ -437,12 +524,15 @@ export const UI = {
             return html;
         }
         if (!this._sanitizerReady) {
-            // The artifact card is built by the app, not by the model. Keep only
-            // that exact handler shape; every other inline event is stripped.
+            // Only app-generated interactive cards (artifact launcher and news discuss button)
+            // may retain their exact inline onclick shape; every other inline event is stripped.
             DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
                 if (data.attrName !== 'onclick') return;
                 const value = String(data.attrValue || '').trim();
-                if (/^window\.app\.openArtifact\("(?:doc|app|game|analytics)",\s*"(?:[^"\\]|\\.)*"\)$/.test(value)) {
+                if (
+                    /^window\.app\.openArtifact\("(?:doc|app|game|analytics)",\s*"(?:[^"\\]|\\.)*"\)$/.test(value) ||
+                    value === 'window.app.discussNewsFromEl(this)'
+                ) {
                     data.forceKeepAttr = true;
                 }
             });
@@ -527,6 +617,10 @@ export const UI = {
 
     clearChat() {
         if (this.container) this.container.innerHTML = '';
+        window.aruContentCache = {};
+        window.aruCopyTextCache = {};
+        window.aruFilesCache = {};
+        window.aruSuggestionsCache = {};
     },
 
     renderAttachments(files) {
@@ -561,6 +655,7 @@ export const UI = {
 
     showMsgFiles(msgId, wrapEl) {
         const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        const badge = wrapEl && wrapEl.querySelector('.msg-files-badge');
         if (!pop) return;
         clearTimeout(wrapEl._filesHideTimer);
         if (pop.dataset.rendered !== msgId) {
@@ -574,33 +669,58 @@ export const UI = {
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
         pop.classList.remove('hidden');
+        if (badge) badge.classList.add('is-open');
     },
 
     hideMsgFiles(wrapEl) {
         const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        const badge = wrapEl && wrapEl.querySelector('.msg-files-badge');
         if (!pop || pop.classList.contains('hidden') || pop.dataset.pinned === '1') return;
         clearTimeout(wrapEl._filesHideTimer);
-        wrapEl._filesHideTimer = setTimeout(() => pop.classList.add('hidden'), 250);
+        wrapEl._filesHideTimer = setTimeout(() => {
+            pop.classList.add('hidden');
+            if (badge) badge.classList.remove('is-open');
+        }, 250);
+    },
+
+    _closePinnedMsgFiles() {
+        const prevWrap = this._pinnedMsgFilesWrap;
+        if (prevWrap) {
+            const prevPop = prevWrap.querySelector('.msg-files-popover');
+            const prevBadge = prevWrap.querySelector('.msg-files-badge');
+            if (prevPop) {
+                prevPop.classList.add('hidden');
+                prevPop.dataset.pinned = '';
+            }
+            if (prevBadge) prevBadge.classList.remove('is-open');
+            this._pinnedMsgFilesWrap = null;
+        }
+        if (this._msgFilesOutside) {
+            document.removeEventListener('click', this._msgFilesOutside, true);
+            this._msgFilesOutside = null;
+        }
     },
 
     toggleMsgFiles(msgId, btnEl) {
         const wrapEl = btnEl && btnEl.closest('.msg-files-badge-wrap');
         const pop = wrapEl && wrapEl.querySelector('.msg-files-popover');
+        const badge = wrapEl && wrapEl.querySelector('.msg-files-badge');
         if (!pop) return;
         if (!pop.classList.contains('hidden') && pop.dataset.pinned === '1') {
-            pop.classList.add('hidden');
-            pop.dataset.pinned = '';
-            if (this._msgFilesOutside) document.removeEventListener('click', this._msgFilesOutside, true);
+            this._closePinnedMsgFiles();
             return;
+        }
+        if (this._pinnedMsgFilesWrap && this._pinnedMsgFilesWrap !== wrapEl) {
+            this._closePinnedMsgFiles();
         }
         this.showMsgFiles(msgId, wrapEl);
         pop.dataset.pinned = '1';
+        if (badge) badge.classList.add('is-open');
+        this._pinnedMsgFilesWrap = wrapEl;
         if (this._msgFilesOutside) document.removeEventListener('click', this._msgFilesOutside, true);
         this._msgFilesOutside = (e) => {
             if (wrapEl.contains(e.target)) return;
-            pop.classList.add('hidden');
-            pop.dataset.pinned = '';
-            document.removeEventListener('click', this._msgFilesOutside, true);
+            this._closePinnedMsgFiles();
         };
         setTimeout(() => document.addEventListener('click', this._msgFilesOutside, true), 0);
     },
@@ -608,16 +728,17 @@ export const UI = {
     updateModelProgress(progress) {
         let overlay = document.getElementById('model-loading-overlay');
         const t = aruGlobalState.translations || {};
+        const pct = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
 
-        if (progress >= 100) {
-            if (overlay) overlay.classList.add('fade-out');
+        if (pct >= 100) {
+            if (overlay) overlay.classList.add('opacity-0');
             setTimeout(() => overlay?.remove(), 500);
             return;
         }
 
         if (!overlay) {
             const html = `
-            <div id="model-loading-overlay" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 dark:bg-black/75 transition-opacity duration-500">
+            <div id="model-loading-overlay" class="fixed inset-0 z-[180] flex items-center justify-center bg-black/60 dark:bg-black/75 transition-opacity duration-500">
                 <div class="max-w-sm w-full mx-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 text-center space-y-6 border border-gray-100 dark:border-gray-700">
                     <div class="relative w-24 h-24 mx-auto">
                         <div class="absolute inset-0 rounded-full border-4 border-aru-100 dark:border-aru-800"></div>
@@ -645,8 +766,8 @@ export const UI = {
         const bar = document.getElementById('model-progress-bar');
         const text = document.getElementById('model-progress-text');
 
-        if (bar) bar.style.width = `${progress}%`;
-        if (text) text.innerText = (t.model_loading_progress || 'Загрузка: {p}%').replace('{p}', progress);
+        if (bar) bar.style.width = `${pct}%`;
+        if (text) text.innerText = (t.model_loading_progress || 'Загрузка: {p}%').replace('{p}', pct);
     }
 };
 

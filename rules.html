@@ -10,7 +10,7 @@ End User License Agreement (EULA) and usage rules for the application.
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EULA - Aru Ai</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -96,11 +96,11 @@ End User License Agreement (EULA) and usage rules for the application.
 
                 <!-- Language Switcher -->
                 <div class="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
-                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'kz')" id="btn-kz-inner"
+                    <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'kz') : setLanguage('kz')" id="btn-kz-inner"
                         class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">KZ</button>
-                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'en')" id="btn-en-inner"
+                    <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'en') : setLanguage('en')" id="btn-en-inner"
                         class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">EN</button>
-                    <button onclick="app.updateEULALang(this.closest('#eula-content-frame'), 'ru')" id="btn-ru-inner"
+                    <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'ru') : setLanguage('ru')" id="btn-ru-inner"
                         class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">RU</button>
                 </div>
             </div>
@@ -237,6 +237,7 @@ End User License Agreement (EULA) and usage rules for the application.
                         <p>4.1. Aru Ai provides "Child" and "Teen" profiles with content filtering features.</p>
                         <p>4.2. Filtering is based on semantic analysis of third-party LLMs and may not be 100%
                             error-proof.</p>
+                        <p>4.3. Use of the software by children must be supervised by adults.</p>
                     </section>
 
                     <section>
@@ -299,6 +300,7 @@ End User License Agreement (EULA) and usage rules for the application.
                         <p>3.1. Aru Ai дербес тілдік модель емес. Жұмыс істеу үшін сыртқы API-ге қосылу қажет.</p>
                         <p>3.2. Пайдаланушы сыртқы провайдерлердің пайдалану шарттарын (Terms of Service) сақтауға
                             міндетті.</p>
+                        <p>3.3. Оқыту тәуекелдері: Сыртқы провайдерлердің тегін тарифтерін пайдаланған кезде деректер олардың модельдерін оқыту үшін қолданылуы мүмкін.</p>
                     </section>
 
                     <section>
@@ -308,6 +310,7 @@ End User License Agreement (EULA) and usage rules for the application.
                         </p>
                         <p>4.2. Сүзгілеу сыртқы LLM-дердің семантикалық талдауы негізінде жүзеге асады, қателердің болуы
                             мүмкін.</p>
+                        <p>4.3. Балалардың БҚ-ны пайдалануы ересектердің бақылауымен жүзеге асырылуы тиіс.</p>
                     </section>
 
                     <section>
@@ -341,18 +344,21 @@ End User License Agreement (EULA) and usage rules for the application.
                 });
 
                 // Show selected language
-                document.getElementById('lang-' + lang).classList.add('lang-active');
+                const targetLang = lang === 'kk' ? 'kz' : lang;
+                const targetNode = document.getElementById('lang-' + targetLang);
+                if (targetNode) targetNode.classList.add('lang-active');
 
                 // Update buttons styling
                 const buttons = {
-                    kz: document.getElementById('btn-kz'),
-                    en: document.getElementById('btn-en'),
-                    ru: document.getElementById('btn-ru')
+                    kz: document.getElementById('btn-kz-inner'),
+                    en: document.getElementById('btn-en-inner'),
+                    ru: document.getElementById('btn-ru-inner')
                 };
 
                 Object.keys(buttons).forEach(key => {
                     const btn = buttons[key];
-                    if (key === lang) {
+                    if (!btn) return;
+                    if (key === targetLang) {
                         btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
                         btn.classList.remove('text-slate-500');
                     } else {
@@ -362,9 +368,17 @@ End User License Agreement (EULA) and usage rules for the application.
                 });
             }
 
-            // Dark mode detection (optional, follows system or class)
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                // document.documentElement.classList.add('dark');
+            // Initialize language from localStorage (maps 'kk' -> 'kz')
+            try {
+                setLanguage(localStorage.getItem('aru_lang') || 'ru');
+            } catch (_) {
+                setLanguage('ru');
+            }
+
+            // Dark mode detection (respects aru_theme or OS preference)
+            const savedTheme = (() => { try { return localStorage.getItem('aru_theme'); } catch (_) { return null; } })();
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
             }
         </script>
 </body>

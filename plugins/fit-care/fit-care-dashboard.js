@@ -126,8 +126,8 @@ Object.assign(window.FitCarePlugin, {
             if (protein > 0) proteinByDate.set(date, protein);
         }
         for (const log of dailyLogs) {
-            if (log.calories !== null && log.calories !== undefined) calorieByDate.set(log.log_date, Number(log.calories));
-            if (log.protein !== null && log.protein !== undefined) proteinByDate.set(log.log_date, Number(log.protein));
+            if (!calorieByDate.has(log.log_date) && log.calories !== null && log.calories !== undefined) calorieByDate.set(log.log_date, Number(log.calories));
+            if (!proteinByDate.has(log.log_date) && log.protein !== null && log.protein !== undefined) proteinByDate.set(log.log_date, Number(log.protein));
         }
 
         const sleepValues = dailyLogs
@@ -152,26 +152,35 @@ Object.assign(window.FitCarePlugin, {
                 workout.plan_day_id && planDayIds.has(Number(workout.plan_day_id))
             )).length;
         } else {
-            plannedSessions = workouts.filter((workout) => workout.status !== 'skipped').length;
+            plannedSessions = workouts.length;
             doneSessions = doneWorkouts.length;
         }
         const adherence = plannedSessions ? Math.min(100, Math.round((doneSessions / plannedSessions) * 100)) : null;
 
-        const activityByDate = new Map();
-        let loggedDays = 0;
-        const activitySet = new Set();
-        for (const date of days) {
-            const log = dailyByDate.get(date);
+        const dayHasActivity = (log, dateWorkouts, dateMeals, dateHealth, cycleLog) => {
             const hasDaily = !!log && [
                 'weight', 'body_fat', 'muscle_mass', 'water_pct', 'bone_mass', 'visceral_fat',
                 'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein'
             ].some((field) => log[field] !== null && log[field] !== undefined)
                 || !!(log && (log.note || log.workout_note || log.meal_note || log.workout_status));
-            const count = (workoutsByDate.get(date) || []).length
-                + (mealsByDate.get(date) || []).length
-                + (healthByDate.get(date) || []).length
-                + (cycleByDate.get(date) && cycleByDate.get(date).flow ? 1 : 0)
+            return dateWorkouts.length
+                + dateMeals.length
+                + dateHealth.length
+                + (cycleLog && cycleLog.flow ? 1 : 0)
                 + (hasDaily ? 1 : 0);
+        };
+
+        const activityByDate = new Map();
+        let loggedDays = 0;
+        const activitySet = new Set();
+        for (const date of days) {
+            const count = dayHasActivity(
+                dailyByDate.get(date),
+                workoutsByDate.get(date) || [],
+                mealsByDate.get(date) || [],
+                healthByDate.get(date) || [],
+                cycleByDate.get(date)
+            );
             activityByDate.set(date, count);
             if (count > 0) {
                 loggedDays++;
@@ -185,6 +194,26 @@ Object.assign(window.FitCarePlugin, {
         while (activitySet.has(streakCursor)) {
             streak++;
             streakCursor = this.addDays(streakCursor, -1);
+        }
+        if (streak > 0 && streakCursor < range.from) {
+            const extraFrom = this.addDays(range.from, -365);
+            const extraTo = this.addDays(range.from, -1);
+            if (extraFrom <= extraTo) {
+                const extraDaily = new Map((window.DB.getFitDailyLogs(extraFrom, extraTo) || []).map((row) => [row.log_date, row]));
+                const extraWorkouts = this.groupByDate(window.DB.getFitWorkouts(extraFrom, extraTo) || []);
+                const extraMeals = this.groupByDate(window.DB.getFitMeals(extraFrom, extraTo) || []);
+                const extraHealth = this.groupByDate(window.DB.getFitHealthLogs(extraFrom, extraTo) || []);
+                const extraCycle = new Map((this.cycleEnabled() ? (window.DB.getFitCycleLogs(extraFrom, extraTo) || []) : []).map((row) => [row.log_date, row]));
+                for (let k = extraTo; k >= extraFrom; k = this.addDays(k, -1)) {
+                    if (dayHasActivity(extraDaily.get(k), extraWorkouts.get(k) || [], extraMeals.get(k) || [], extraHealth.get(k) || [], extraCycle.get(k)) > 0) {
+                        activitySet.add(k);
+                    }
+                }
+                while (activitySet.has(streakCursor)) {
+                    streak++;
+                    streakCursor = this.addDays(streakCursor, -1);
+                }
+            }
         }
 
         const bodyConfig = this.BODY_METRICS;
@@ -296,7 +325,7 @@ Object.assign(window.FitCarePlugin, {
         const rawMax = Math.max(...rawValues);
         const spread = Math.max(rawMax - rawMin, 1);
         const target = Number((this.state.profile || {}).target_weight) || null;
-        const showTarget = target && target > rawMin - spread * 2 && target < rawMax + spread * 2;
+        const showTarget = target && target > rawMin - Math.max(spread * 2, 15) && target < rawMax + Math.max(spread * 2, 15);
         const values = showTarget ? rawValues.concat(target) : rawValues;
         let min = Math.min(...values);
         let max = Math.max(...values);
@@ -380,27 +409,46 @@ Object.assign(window.FitCarePlugin, {
         if (!stats.latestBody) {
             return `<div class="fit-chart-empty" style="min-height:130px"><i data-lucide="ruler"></i><span>${this.esc(this.t('no_body_data'))}</span></div>`;
         }
+        const logs = stats.dailyLogs || [];
         const rows = [];
+        let newestDate = stats.latestBodyDate || '';
         for (const metric of this.BODY_METRICS) {
-            const value = stats.latestBody[metric.field];
-            if (value === null || value === undefined) continue;
-            const previous = stats.dailyLogs.find((log) => (
-                log[metric.field] !== null && log[metric.field] !== undefined && log.log_date < stats.latestBody.log_date
-            ));
+            let latestIdx = -1;
+            for (let i = logs.length - 1; i >= 0; i--) {
+                if (logs[i][metric.field] !== null && logs[i][metric.field] !== undefined) {
+                    latestIdx = i;
+                    break;
+                }
+            }
+            if (latestIdx < 0) continue;
+            const latestLog = logs[latestIdx];
+            if (!newestDate || latestLog.log_date > newestDate) newestDate = latestLog.log_date;
+            const value = latestLog[metric.field];
+            let previous = null;
+            for (let i = latestIdx - 1; i >= 0; i--) {
+                if (logs[i][metric.field] !== null && logs[i][metric.field] !== undefined) {
+                    previous = logs[i];
+                    break;
+                }
+            }
             const delta = previous ? Number(value) - Number(previous[metric.field]) : null;
             const percent = Math.min(100, Math.max(2, (Number(value) / metric.max) * 100));
             const deltaText = delta === null ? '' : ` · ${delta > 0 ? '+' : ''}${this.fmt(delta, 1)}`;
+            const unitSuffix = metric.unit ? (metric.unit === '%' ? '%' : ` ${this.t(metric.unit)}`) : '';
             rows.push(`
                 <div class="fit-compo-row" title="${this.esc(`${this.t(metric.label)}: ${this.fmt(value)}${deltaText}`)}">
                     <span>${this.esc(this.t(metric.label))}</span>
                     <div class="fit-compo-track"><div class="fit-compo-fill" style="width:${percent.toFixed(1)}%"></div></div>
-                    <b>${this.esc(this.fmt(value))}${metric.unit ? ` ${this.esc(metric.unit === '%' ? '%' : this.t(metric.unit))}` : ''}</b>
+                    <b>${this.esc(this.fmt(value))}${this.esc(unitSuffix)}</b>
                 </div>
             `);
         }
+        if (!rows.length) {
+            return `<div class="fit-chart-empty" style="min-height:130px"><i data-lucide="ruler"></i><span>${this.esc(this.t('no_body_data'))}</span></div>`;
+        }
         return `
             <div style="display:flex;flex-direction:column;gap:11px">${rows.join('')}</div>
-            <p class="fit-muted" style="margin:12px 0 0;font-size:.65rem">${this.esc(this.t('latest'))}: ${this.esc(this.formatShortDate(stats.latestBodyDate))}</p>
+            <p class="fit-muted" style="margin:12px 0 0;font-size:.65rem">${this.esc(this.t('latest'))}: ${this.esc(this.formatShortDate(newestDate))}</p>
         `;
     },
 
@@ -411,31 +459,32 @@ Object.assign(window.FitCarePlugin, {
         }
         const bucketDays = stats.rangeDays > 120 ? 30 : 7;
         const buckets = [];
-        let cursor = stats.from;
-        while (cursor <= stats.to) {
-            let end = this.addDays(cursor, bucketDays - 1);
-            if (end > stats.to) end = stats.to;
-            const list = workouts.filter((workout) => workout.log_date >= cursor && workout.log_date <= end);
-            buckets.push({
-                from: cursor,
+        let end = stats.to;
+        while (end >= stats.from) {
+            let from = this.addDays(end, -(bucketDays - 1));
+            if (from < stats.from) from = stats.from;
+            const list = workouts.filter((workout) => workout.log_date >= from && workout.log_date <= end);
+            buckets.unshift({
+                from,
                 to: end,
                 count: list.length,
                 volume: list.reduce((sum, workout) => sum + (Number(workout.volume_kg) || 0), 0),
                 duration: list.reduce((sum, workout) => sum + (Number(workout.duration_min) || 0), 0)
             });
-            cursor = this.addDays(end, 1);
+            end = this.addDays(from, -1);
         }
         const useVolume = buckets.some((bucket) => bucket.volume > 0);
-        const values = buckets.map((bucket) => (useVolume ? bucket.volume : bucket.duration));
+        const useDuration = !useVolume && buckets.some((bucket) => bucket.duration > 0);
+        const values = buckets.map((bucket) => (useVolume ? bucket.volume : (useDuration ? bucket.duration : bucket.count)));
         const maxValue = Math.max(...values, 1);
         const W = 460;
         const H = 190;
-        const pad = { l: 34, r: 8, t: 14, b: 28 };
+        const pad = { l: 44, r: 8, t: 14, b: 28 };
         const innerW = W - pad.l - pad.r;
         const innerH = H - pad.t - pad.b;
         const slot = innerW / buckets.length;
         const barW = Math.max(4, Math.min(26, slot * 0.62));
-        const unit = useVolume ? this.t('kg') : this.t('min');
+        const unit = useVolume ? this.t('kg') : (useDuration ? this.t('min') : this.t('sessions'));
 
         const bars = buckets.map((bucket, index) => {
             const value = values[index];
@@ -467,7 +516,7 @@ Object.assign(window.FitCarePlugin, {
                 </svg>
             </div>
             <div class="fit-chart-legend">
-                <span class="fit-legend-item"><span class="fit-legend-swatch violet"></span>${this.esc(this.fmt(total))} ${this.esc(unit)}</span>
+                <span class="fit-legend-item"><span class="fit-legend-swatch violet"></span>${this.esc(this.fmt(total, useVolume || useDuration ? 1 : 0))} ${this.esc(unit)}</span>
                 <span class="fit-legend-item">${this.esc(this.t('sessions'))}: ${stats.doneWorkouts.length}</span>
             </div>
         `;
@@ -545,9 +594,15 @@ Object.assign(window.FitCarePlugin, {
             if (Math.abs(delta) < 0.4) {
                 insights.push({ icon: 'minus', tone: 'green', title: this.t('weight_trend'), text: this.t('insight_weight_stable', { days: stats.weightDays }) });
             } else {
+                const goal = weight.goal || 'maintain';
+                const tone = goal === 'lose'
+                    ? (delta < 0 ? 'green' : 'amber')
+                    : goal === 'gain'
+                        ? (delta > 0 ? 'green' : 'amber')
+                        : 'violet';
                 insights.push({
                     icon: delta < 0 ? 'trending-down' : 'trending-up',
-                    tone: delta < 0 ? 'green' : 'amber',
+                    tone,
                     title: this.t('weight_trend'),
                     text: this.t(delta < 0 ? 'insight_weight_down' : 'insight_weight_up', { delta: this.fmt(Math.abs(delta)), days: stats.weightDays })
                 });
@@ -601,7 +656,14 @@ Object.assign(window.FitCarePlugin, {
             const current = stats.lastWeight.value;
             const target = Number(weight.target_weight);
             const spanWeight = start - target;
-            if (Math.abs(spanWeight) > 0.5) {
+            if (Math.abs(current - target) <= 0.5 || (Math.abs(spanWeight) > 0.5 && Math.round(((start - current) / spanWeight) * 100) >= 100)) {
+                insights.push({
+                    icon: 'flag',
+                    tone: 'green',
+                    title: this.t('target'),
+                    text: this.t('insight_target_reached')
+                });
+            } else if (Math.abs(spanWeight) > 0.5) {
                 const progress = Math.round(((start - current) / spanWeight) * 100);
                 if (progress > 0 && progress < 100) {
                     insights.push({

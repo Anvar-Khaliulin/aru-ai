@@ -27,6 +27,14 @@ Clean application UI: neutral surfaces, one orange accent, and shared dialogs.
     --aru-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.03);
     --aru-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 14px -8px rgba(15, 23, 42, 0.22);
     --aru-shadow-lg: 0 4px 12px rgba(15, 23, 42, 0.07), 0 24px 60px -20px rgba(15, 23, 42, 0.32);
+    --aru-z-header: 50;
+    --aru-z-sidebar: 60;
+    --aru-z-popover: 70;
+    --aru-z-modal: 100;
+    --aru-z-canvas-fs: 140;
+    --aru-z-dialog: 160;
+    --aru-z-overlay: 180;
+    --aru-z-toast: 200;
 }
 
 @media (min-width: 768px) {
@@ -168,21 +176,34 @@ button:not(:disabled):active {
     transform: scale(0.98);
 }
 
-/* Text fields stay quiet: no glow, ring or accent outline on focus. */
+/* Text fields indicate focus via background darkening without an orange outline. */
 input,
 textarea,
 select {
+    outline: none;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):focus-visible,
+textarea:focus,
+textarea:focus-visible {
     outline: none !important;
 }
 
-input:focus,
-input:focus-visible,
-textarea:focus,
-textarea:focus-visible,
-select:focus,
-select:focus-visible {
+select:focus:not(:focus-visible),
+input[type="checkbox"]:focus:not(:focus-visible),
+input[type="radio"]:focus:not(:focus-visible),
+input[type="range"]:focus:not(:focus-visible) {
     outline: none !important;
     box-shadow: none !important;
+}
+
+select:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+input[type="range"]:focus-visible {
+    outline: 2px solid var(--aru-accent) !important;
+    outline-offset: 1px;
 }
 
 button:focus-visible,
@@ -459,11 +480,77 @@ a:focus-visible,
     box-shadow: none !important;
 }
 
+.aru-user-bubble,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500,
 #messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 {
     background: var(--aru-accent) !important;
+    color: #ffffff !important;
     box-shadow: none !important;
 }
 
+.aru-user-bubble .prose,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose {
+    color: #ffffff !important;
+    --tw-prose-body: #ffffff;
+    --tw-prose-headings: #ffffff;
+    --tw-prose-lead: #ffffff;
+    --tw-prose-links: #ffffff;
+    --tw-prose-bold: #ffffff;
+    --tw-prose-counters: rgba(255, 255, 255, 0.88);
+    --tw-prose-bullets: rgba(255, 255, 255, 0.88);
+    --tw-prose-quotes: #ffffff;
+    --tw-prose-quote-borders: rgba(255, 255, 255, 0.45);
+    --tw-prose-code: #ffffff;
+    --tw-prose-invert-body: #ffffff;
+    --tw-prose-invert-headings: #ffffff;
+    --tw-prose-invert-lead: #ffffff;
+    --tw-prose-invert-links: #ffffff;
+    --tw-prose-invert-bold: #ffffff;
+    --tw-prose-invert-counters: rgba(255, 255, 255, 0.88);
+    --tw-prose-invert-bullets: rgba(255, 255, 255, 0.88);
+    --tw-prose-invert-quotes: #ffffff;
+    --tw-prose-invert-quote-borders: rgba(255, 255, 255, 0.45);
+    --tw-prose-invert-code: #ffffff;
+}
+
+.aru-user-bubble .prose p,
+.aru-user-bubble .prose li,
+.aru-user-bubble .prose strong,
+.aru-user-bubble .prose em,
+.aru-user-bubble .prose h1,
+.aru-user-bubble .prose h2,
+.aru-user-bubble .prose h3,
+.aru-user-bubble .prose h4,
+.aru-user-bubble .prose h5,
+.aru-user-bubble .prose h6,
+.aru-user-bubble .prose blockquote,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose p,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose li,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose strong,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose em,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h1,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h2,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h3,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h4,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h5,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h6,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose blockquote,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose p,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose li,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose strong,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose em,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h1,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h2,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h3,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h4,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h5,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose h6,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose blockquote {
+    color: #ffffff !important;
+}
+
+.chat-stream > .flex.flex-col .bg-white,
 #messages-container > .flex.flex-col .bg-white,
 #typing-indicator > div:last-child {
     background: var(--aru-surface-muted) !important;
@@ -472,18 +559,60 @@ a:focus-visible,
     color: var(--aru-text) !important;
 }
 
+.dark .chat-stream > .flex.flex-col .dark\:bg-gray-800,
 .dark #messages-container > .flex.flex-col .dark\:bg-gray-800,
 .dark #typing-indicator > div:last-child {
     background: var(--aru-surface-muted) !important;
 }
 
+.chat-stream .prose a,
 #messages-container .prose a {
     color: var(--aru-accent-strong);
 }
 
+.aru-user-bubble .prose a,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose a,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose a {
+    color: #ffffff !important;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.aru-user-bubble .prose :not(pre) > code,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose :not(pre) > code,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose :not(pre) > code {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    padding: 0.1em 0.35em;
+    border-radius: 0.35em;
+}
+
+.aru-user-bubble .prose pre,
+.aru-user-bubble .prose pre code,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose pre,
+.chat-stream > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose pre code,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose pre,
+#messages-container > .flex.flex-row-reverse > div:nth-child(2) > .bg-aru-500 .prose pre code {
+    color: var(--aru-text);
+}
+
+.chat-stream .prose pre,
+.chat-stream .prose code,
 #messages-container .prose pre,
 #messages-container .prose code {
     border: 0 !important;
+}
+
+.chat-stream .prose pre,
+#messages-container .prose pre {
+    margin: 0;
+}
+
+.chat-stream pre code.hljs,
+#messages-container pre code.hljs,
+#canvas-code-area pre code.hljs {
+    background: transparent !important;
+    padding: 0 !important;
 }
 
 .composer-area {
@@ -507,6 +636,7 @@ a:focus-visible,
     transform: none;
 }
 
+.aru-send-btn,
 #send-btn,
 #modal-container button.bg-aru-500,
 #modal-container button[class*="bg-orange-500"] {
@@ -515,6 +645,7 @@ a:focus-visible,
     box-shadow: none !important;
 }
 
+.aru-send-btn:hover,
 #send-btn:hover,
 #modal-container button.bg-aru-500:hover,
 #modal-container button[class*="bg-orange-500"]:hover {
@@ -530,25 +661,31 @@ a:focus-visible,
 }
 
 /* Canvas */
+.canvas-workspace > div:first-child,
 #canvas-panel > div:first-child,
 #canvas-content {
     background: var(--aru-surface) !important;
     border: 0 !important;
 }
 
+.canvas-workspace > div:first-child,
 #canvas-panel > div:first-child {
     border-bottom: 0 !important;
 }
 
+.canvas-tabs,
 #canvas-tabs {
     background: var(--aru-surface-muted) !important;
     border: 0 !important;
 }
 
+.canvas-tabs button,
 #canvas-tabs button {
     border: 0 !important;
 }
 
+.canvas-tabs button.bg-white,
+.dark .canvas-tabs button.dark\:bg-gray-700,
 #canvas-tabs button.bg-white,
 .dark #canvas-tabs button.dark\:bg-gray-700 {
     background: var(--aru-surface) !important;
@@ -617,12 +754,17 @@ body.aru-resizing-canvas iframe {
 
 /* Dialogs and overlays */
 #modal-container > [class*="fixed"],
+.aru-dialog-root,
 #model-loading-overlay,
 #lib-add-overlay,
 #transfer-sub-modal {
     background: var(--aru-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+}
+
+.aru-dialog-root {
+    z-index: var(--aru-z-dialog, 160) !important;
 }
 
 #modal-container > [class*="fixed"] > .absolute {
@@ -640,9 +782,11 @@ body.aru-resizing-canvas iframe {
 }
 
 #modal-container > [class*="fixed"] > div:not(.absolute),
+.aru-dialog,
 #lib-add-overlay > div,
 #transfer-sub-modal > div {
     background: var(--aru-surface) !important;
+    color: var(--aru-text);
     border: 0 !important;
     border-radius: var(--aru-radius-lg) !important;
     box-shadow: var(--aru-shadow-lg) !important;
@@ -652,6 +796,12 @@ body.aru-resizing-canvas iframe {
 #modal-container input:not([type="checkbox"]):not([type="range"]),
 #modal-container textarea,
 #modal-container select,
+.wd-modal-root input:not([type="checkbox"]):not([type="range"]),
+.wd-modal-root textarea,
+.wd-modal-root select,
+.aru-dialog input:not([type="checkbox"]):not([type="range"]),
+.aru-dialog textarea,
+.aru-dialog select,
 #lib-add-overlay input:not([type="checkbox"]):not([type="range"]),
 #lib-add-overlay textarea,
 #lib-add-overlay select,
@@ -666,6 +816,12 @@ body.aru-resizing-canvas iframe {
 #modal-container input:not([type="checkbox"]):not([type="range"]):focus,
 #modal-container textarea:focus,
 #modal-container select:focus,
+.wd-modal-root input:not([type="checkbox"]):not([type="range"]):focus,
+.wd-modal-root textarea:focus,
+.wd-modal-root select:focus,
+.aru-dialog input:not([type="checkbox"]):not([type="range"]):focus,
+.aru-dialog textarea:focus,
+.aru-dialog select:focus,
 #lib-add-overlay input:not([type="checkbox"]):not([type="range"]):focus,
 #lib-add-overlay textarea:focus,
 #lib-add-overlay select:focus,
@@ -673,6 +829,36 @@ body.aru-resizing-canvas iframe {
     background: var(--aru-surface-hover) !important;
     border-color: transparent !important;
     box-shadow: none !important;
+}
+
+.aru-dialog button.bg-orange-500,
+.aru-dialog button.bg-aru-500 {
+    background: var(--aru-accent) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.aru-dialog button.bg-orange-500:hover,
+.aru-dialog button.bg-aru-500:hover {
+    background: var(--aru-accent-strong) !important;
+}
+
+#aru-toast-stack {
+    z-index: var(--aru-z-toast, 200) !important;
+}
+
+.scan-line {
+    background: var(--aru-accent);
+    height: 2px;
+    position: absolute;
+    width: 100%;
+    animation: scan 1.5s linear infinite;
+    box-shadow: 0 0 5px rgba(249, 115, 22, 0.5);
+}
+
+@keyframes scan {
+    0% { top: 0; }
+    100% { top: 100%; }
 }
 
 /* Settings: macOS-style sidebar window; a scrolling icon strip on phones. */
@@ -1082,7 +1268,7 @@ body.aru-resizing-canvas iframe {
 
 #canvas-panel.canvas-fullscreen {
     position: fixed !important;
-    z-index: 1000 !important;
+    z-index: var(--aru-z-canvas-fs, 140) !important;
     top: 0 !important;
     left: 0 !important;
     width: 100vw !important;
@@ -1113,6 +1299,24 @@ body.aru-resizing-canvas iframe {
         border-bottom: 0 !important;
         border-left: 0 !important;
         box-shadow: var(--aru-shadow-lg) !important;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #tab-switcher {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    body:not(.aru-desktop-mode) #canvas-panel:not(.canvas-fullscreen) {
+        position: fixed !important;
+        top: calc(var(--aru-header-h) + env(safe-area-inset-top)) !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        z-index: 45 !important;
     }
 
     aside#sidebar:not(.-translate-x-full) {
@@ -1210,9 +1414,18 @@ body.chats-dragging .folder-dropzone:hover {
 }
 
 @media (hover: none) {
-    .chat-actions {
-        opacity: 0.65 !important;
+    .chat-actions,
+    .chat-stream .group-hover\:opacity-100,
+    #messages-container .group-hover\:opacity-100,
+    .tab-item .group-hover\:opacity-100 {
+        opacity: 0.72 !important;
     }
+}
+
+.chat-stream .group:focus-within .group-hover\:opacity-100,
+#messages-container .group:focus-within .group-hover\:opacity-100,
+.tab-item:focus-within .group-hover\:opacity-100 {
+    opacity: 1 !important;
 }
 
 /* --- Sections & Chapters (in-chat navigation) --- */
@@ -1258,7 +1471,7 @@ body.chats-dragging .folder-dropzone:hover {
     display: flex;
     flex-direction: column;
     width: min(84vw, 300px);
-    max-height: min(62vh, 480px);
+    max-height: min(62dvh, 480px);
     border: 0 !important;
     border-radius: var(--aru-radius);
     background: var(--aru-surface) !important;
@@ -1485,12 +1698,13 @@ body.chats-dragging .folder-dropzone:hover {
 }
 
 .msg-files-popover {
+    position: absolute;
     top: calc(100% + 6px);
     right: 0;
     width: max-content;
     max-width: min(72vw, 280px);
-    max-height: min(42vh, 260px);
-    z-index: 60;
+    max-height: min(42dvh, 260px);
+    z-index: var(--aru-z-popover, 70);
     padding: 6px 4px;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -1581,7 +1795,7 @@ body.chapters-picking [data-msg-id] {
         right: 14px;
     }
 
-    .chapters-panel {
+    .chapters-panel:not(.msg-files-popover) {
         top: 104px;
         right: 14px;
     }

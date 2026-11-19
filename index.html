@@ -39,7 +39,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <link rel="icon" type="image/png" href="media/int/favicon-96x96.png">
 
     <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -85,38 +85,23 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- File Parsers -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 
     <!-- Database (WASM + IndexedDB) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-
-    <!-- WebRTC & QR (Data Transfer) -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 
     <!-- Google Identity Services (Google Drive OAuth) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-    <!-- Config PDF.js Worker -->
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
-
     <!-- Markdown Parser (Marked.js) & Highlight.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/turndown@7/dist/turndown.min.js"></script>
+    <link id="hljs-theme-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <link id="hljs-theme-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" disabled>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.min.js"></script>
 
     <!-- Math Rendering (KaTeX) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -227,7 +212,8 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                 </button>
                 <!-- Configuration Menu (Consolidation) -->
                 <div class="relative">
-                    <button onclick="app.toggleConfigMenu()" id="btn-config-trigger"
+                    <button type="button" onclick="app.toggleConfigMenu()" id="btn-config-trigger"
+                        aria-label="Settings menu"
                         class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-aru-600 hover:bg-aru-50 dark:hover:bg-aru-900/20 transition-all shadow-sm">
                         <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
                     </button>
@@ -286,7 +272,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                             <span data-i18n="sidebar_info">Information</span>
                         </button>
 
-                        <button onclick="window.open('https://forum.aru-lab.space','_blank'); app.toggleConfigMenu()"
+                        <button type="button" onclick="window.open('https://forum.aru-lab.space','_blank','noopener,noreferrer'); app.toggleConfigMenu()"
                             class="w-full flex items-center gap-3 p-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
                             <div
                                 class="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 flex items-center justify-center">
@@ -361,7 +347,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                                     data-i18n-title="sidebar_info">
                                     <i data-lucide="info" class="w-5 h-5"></i>
                                 </button>
-                                <a href="https://forum.aru-lab.space" target="_blank"
+                                <a href="https://forum.aru-lab.space" target="_blank" rel="noopener noreferrer"
                                     class="p-2 text-gray-400 hover:text-aru-500 transition"
                                     data-i18n-title="sidebar_forum">
                                     <i data-lucide="message-circle" class="w-5 h-5"></i>
@@ -381,7 +367,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
             <!-- Sidebar Backdrop (Mobile) -->
             <div id="sidebar-backdrop" onclick="app.toggleSidebar()"
-                class="fixed inset-0 bg-black/50 z-40 hidden md:hidden transition-opacity duration-300 backdrop-blur-sm">
+                class="fixed inset-0 bg-black/50 z-[55] hidden md:hidden transition-opacity duration-300 backdrop-blur-sm">
             </div>
 
             <!-- Sidebar (Desktop Collapsible / Mobile Slide-over) -->
@@ -393,7 +379,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         <i data-lucide="search"
                             class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-aru-500 transition-colors"></i>
                         <input type="text" id="chat-search"
-                            class="w-full pl-9 pr-3 h-[36px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-400 transition-all"
+                            class="w-full pl-9 pr-3 h-[36px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-xs outline-none transition-all"
                             oninput="app.searchChats(this.value)">
                     </div>
 
@@ -520,7 +506,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
 
                         <form onsubmit="app.sendMessage(event)"
-                            class="composer-shell flex items-end gap-2 bg-gray-50 dark:bg-gray-800 p-2 rounded-3xl border border-gray-200 dark:border-gray-700 focus-within:border-aru-400 focus-within:ring-2 focus-within:ring-aru-100 dark:focus-within:ring-aru-900/30 transition-all shadow-sm relative">
+                            class="composer-shell flex items-end gap-2 bg-gray-50 dark:bg-gray-800 p-2 rounded-3xl border border-gray-200 dark:border-gray-700 transition-all shadow-sm relative">
 
                             <!-- Unified Tools Menu -->
                             <div class="relative flex items-center">
@@ -563,8 +549,8 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                                 data-i18n-placeholder="prompt_input_placeholder"
                                 oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
 
-                            <button type="submit" id="send-btn"
-                                class="p-3 bg-aru-500 text-white rounded-2xl hover:bg-aru-600 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button type="submit" id="send-btn" aria-label="Send"
+                                class="aru-send-btn p-3 bg-aru-500 text-white rounded-2xl hover:bg-aru-600 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
                                 <i data-lucide="send" class="w-5 h-5"></i>
                             </button>
                         </form>
@@ -584,32 +570,32 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                 class="canvas-workspace hidden absolute md:relative right-0 top-0 h-full w-full md:w-[450px] lg:w-[600px] bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col shadow-2xl z-40 transform transition-transform duration-300 translate-x-0">
                 <div
                     class="p-3 border-b border-gray-200 dark:border-gray-800 flex flex-col gap-3 bg-white dark:bg-gray-900">
-                    <div class="flex justify-between items-center">
-                        <span class="font-medium text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200">
-                            <i data-lucide="palette" class="w-4 h-4 text-aru-500"></i>
-                            <span id="canvas-title-text" data-i18n="canvas_title"></span>
+                    <div class="flex justify-between items-center gap-2 min-w-0">
+                        <span class="font-medium text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200 min-w-0 flex-1 overflow-hidden">
+                            <i data-lucide="palette" class="w-4 h-4 text-aru-500 shrink-0"></i>
+                            <span id="canvas-title-text" class="truncate" data-i18n="canvas_title"></span>
                         </span>
-                        <div class="flex gap-1">
-                            <button onclick="CanvasManager.clearCanvas(event)"
+                        <div class="flex gap-1 shrink-0">
+                            <button type="button" onclick="CanvasManager.clearCanvas(event)"
                                 class="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition"
                                 data-i18n-title="clean_canvas_tooltip">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                             <div class="relative">
-                                <button onclick="CanvasManager.toggleDownloadDropdown(event)"
+                                <button type="button" onclick="CanvasManager.toggleDownloadDropdown(event)"
                                     class="p-1.5 text-gray-400 hover:text-aru-500 rounded-lg transition"
                                     data-i18n-title="download_options_tooltip">
                                     <i data-lucide="download" class="w-4 h-4"></i>
                                 </button>
                                 <div id="download-dropdown"
-                                    class="absolute right-0 top-full mt-1 hidden bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl z-[110] min-w-[120px] overflow-hidden animate-fade-in">
-                                    <button onclick="CanvasManager.downloadAsHTML(event)"
+                                    class="absolute right-0 top-full mt-1 hidden bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl z-[70] min-w-[120px] overflow-hidden animate-fade-in">
+                                    <button type="button" onclick="CanvasManager.downloadAsHTML(event)"
                                         class="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition"
                                         data-i18n-title="download_html_tooltip">
                                         <i data-lucide="file-code" class="w-3.5 h-3.5 text-orange-500"></i>
                                         <span>HTML</span>
                                     </button>
-                                    <button onclick="CanvasManager.downloadAsPDF(event)"
+                                    <button type="button" onclick="CanvasManager.downloadAsPDF(event)"
                                         class="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition"
                                         data-i18n-title="download_pdf_tooltip">
                                         <i data-lucide="file-text" class="w-3.5 h-3.5 text-red-500"></i>
@@ -617,24 +603,24 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                                     </button>
                                 </div>
                             </div>
-                            <button onclick="CanvasManager.saveCurrentArtifact()"
+                            <button type="button" onclick="CanvasManager.saveCurrentArtifact()"
                                 class="p-1.5 text-aru-600 hover:bg-aru-50 dark:hover:bg-aru-900/30 rounded-lg transition"
                                 data-i18n-title="canvas_save_btn">
                                 <i data-lucide="save" class="w-4 h-4"></i>
                             </button>
-                            <button onclick="CanvasManager.toggleFullscreen(event)"
+                            <button type="button" onclick="CanvasManager.toggleFullscreen(event)"
                                 class="p-1.5 text-gray-400 hover:text-aru-500 rounded-lg transition"
                                 data-i18n-title="canvas_expand_tooltip">
                                 <i data-lucide="maximize-2" id="canvas-maximize-icon" class="w-4 h-4"></i>
                             </button>
-                            <button onclick="app.toggleCanvas()" class="text-gray-400 hover:text-gray-600 p-1">
+                            <button type="button" onclick="app.toggleCanvas()" aria-label="Close canvas" class="text-gray-400 hover:text-gray-600 p-1">
                                 <i data-lucide="x" class="w-5 h-5"></i>
                             </button>
                         </div>
                     </div>
 
                     <!-- Canvas Tabs -->
-                    <div id="canvas-tabs" class="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl hidden">
+                    <div id="canvas-tabs" class="canvas-tabs flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl hidden">
                         <button onclick="CanvasManager.switchTab('preview')" id="btn-canvas-preview"
                             class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition-all"
                             data-i18n="canvas_preview_tab"></button>
@@ -672,38 +658,38 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                     </div>
                     <div id="canvas-edit-area" class="w-full h-full hidden flex flex-col">
                         <div class="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 flex-wrap">
-                            <button onclick="CanvasManager.docEditCommand('bold')" title="Bold"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('bold')" title="Bold"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="bold" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('italic')" title="Italic"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('italic')" title="Italic"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="italic" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<h2>')" title="H2"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('formatBlock', '<h2>')" title="H2"
                                 class="px-1.5 py-1 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">H2</button>
-                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<h3>')" title="H3"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('formatBlock', '<h3>')" title="H3"
                                 class="px-1.5 py-1 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">H3</button>
-                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<p>')" title="Text"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('formatBlock', '<p>')" title="Text"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="pilcrow" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('insertUnorderedList')" title="List"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('insertUnorderedList')" title="List"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="list" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('insertOrderedList')" title="Numbered list"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('insertOrderedList')" title="Numbered list"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="list-ordered" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('formatBlock', '<blockquote>')" title="Quote"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('formatBlock', '<blockquote>')" title="Quote"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="quote" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
-                            <button onclick="CanvasManager.docEditCommand('createLink')" title="Link"
+                            <button type="button" onmousedown="event.preventDefault()" onclick="CanvasManager.docEditCommand('createLink')" title="Link"
                                 class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><i
                                     data-lucide="link" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></button>
                             <div class="flex-1"></div>
-                            <button onclick="CanvasManager.cancelDocEdit()" data-i18n="edit_cancel"
+                            <button type="button" onclick="CanvasManager.cancelDocEdit()" data-i18n="edit_cancel"
                                 class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition"></button>
-                            <button onclick="CanvasManager.saveDocEdit()" data-i18n="edit_save"
+                            <button type="button" onclick="CanvasManager.saveDocEdit()" data-i18n="edit_save"
                                 class="px-3 py-1.5 text-xs font-bold bg-aru-500 hover:bg-aru-600 text-white rounded-lg transition"></button>
                         </div>
-                        <div id="doc-editor" contenteditable="true" spellcheck="false"
+                        <div id="doc-editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
                             class="flex-1 overflow-auto custom-scrollbar p-5 text-sm text-gray-800 dark:text-gray-200 outline-none"></div>
                     </div>
                 </div>
@@ -725,7 +711,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
 
     <!-- Drag & Drop Overlay -->
     <div id="drag-drop-overlay"
-        class="fixed inset-0 z-[200] bg-aru-500/20 backdrop-blur-sm p-8 hidden items-center justify-center animate-fade-in pointer-events-none">
+        class="fixed inset-0 z-[180] bg-aru-500/20 backdrop-blur-sm p-8 hidden items-center justify-center animate-fade-in pointer-events-none">
         <div
             class="w-full h-full border-4 border-dashed border-aru-500 rounded-3xl flex flex-col items-center justify-center bg-white/50">
             <div
@@ -750,13 +736,115 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <script>
         if ('serviceWorker' in navigator) {
             let swRefreshPending = false;
-            let swShouldReloadOnControllerChange = false;
+            let swUserApprovedReload = false;
+            let pendingWorker = null;
+            let dismissedWorker = null;
+
+            const SW_UPDATE_FALLBACK = {
+                ru: {
+                    available: 'Доступна новая версия, обновить?',
+                    now: 'Обновить',
+                    later: 'Позже'
+                },
+                en: {
+                    available: 'A new version is available. Update now?',
+                    now: 'Update',
+                    later: 'Later'
+                },
+                kk: {
+                    available: 'Жаңа нұсқа қолжетімді, жаңарту керек пе?',
+                    now: 'Жаңарту',
+                    later: 'Кейінірек'
+                }
+            };
+
+            const getSwUpdateCopy = () => {
+                let storedLang = '';
+                try { storedLang = localStorage.getItem('aru_lang') || ''; } catch (_) {}
+                const rawLang = window.aruState?.lang || storedLang || document.documentElement.lang || 'ru';
+                const lang = String(rawLang).split('-')[0].toLowerCase();
+                const fb = SW_UPDATE_FALLBACK[lang] || SW_UPDATE_FALLBACK.ru;
+                const tr = window.aruState?.translations || {};
+                return {
+                    available: tr.pwa_update_available || fb.available,
+                    now: tr.pwa_update_now || fb.now,
+                    later: tr.pwa_update_later || fb.later
+                };
+            };
+
+            const updateBannerCopy = () => {
+                const banner = document.getElementById('pwa-update-banner');
+                if (!banner) return;
+                const copy = getSwUpdateCopy();
+                const textEl = document.getElementById('pwa-update-text');
+                const nowBtn = document.getElementById('pwa-update-now-btn');
+                const laterBtn = document.getElementById('pwa-update-later-btn');
+                if (textEl) textEl.textContent = copy.available;
+                if (nowBtn) nowBtn.textContent = copy.now;
+                if (laterBtn) laterBtn.textContent = copy.later;
+            };
+
+            window.addEventListener('aru-lang-changed', updateBannerCopy);
+
+            const showUpdatePrompt = (worker) => {
+                if (!worker || worker === dismissedWorker) return;
+                pendingWorker = worker;
+
+                if (document.getElementById('pwa-update-banner')) {
+                    updateBannerCopy();
+                    return;
+                }
+
+                const banner = document.createElement('div');
+                banner.id = 'pwa-update-banner';
+                banner.setAttribute('role', 'status');
+                banner.setAttribute('aria-live', 'polite');
+                banner.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[130] w-[calc(100%-2rem)] max-w-md bg-white dark:bg-gray-900 border border-aru-200 dark:border-gray-700 rounded-2xl shadow-2xl px-4 py-3 flex items-center justify-between gap-3 animate-fade-in';
+
+                const textEl = document.createElement('span');
+                textEl.id = 'pwa-update-text';
+                textEl.setAttribute('data-i18n', 'pwa_update_available');
+                textEl.className = 'text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-100';
+
+                const actions = document.createElement('div');
+                actions.className = 'flex items-center gap-2 shrink-0';
+
+                const laterBtn = document.createElement('button');
+                laterBtn.id = 'pwa-update-later-btn';
+                laterBtn.type = 'button';
+                laterBtn.setAttribute('data-i18n', 'pwa_update_later');
+                laterBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors';
+                laterBtn.addEventListener('click', () => {
+                    dismissedWorker = pendingWorker;
+                    banner.remove();
+                });
+
+                const nowBtn = document.createElement('button');
+                nowBtn.id = 'pwa-update-now-btn';
+                nowBtn.type = 'button';
+                nowBtn.setAttribute('data-i18n', 'pwa_update_now');
+                nowBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-aru-500 hover:bg-aru-600 text-white shadow-sm transition-colors';
+                nowBtn.addEventListener('click', () => {
+                    swUserApprovedReload = true;
+                    banner.remove();
+                    if (pendingWorker) {
+                        pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                });
+
+                actions.appendChild(laterBtn);
+                actions.appendChild(nowBtn);
+                banner.appendChild(textEl);
+                banner.appendChild(actions);
+                (document.body || document.documentElement).appendChild(banner);
+                updateBannerCopy();
+            };
 
             const bindWorkerLifecycle = (worker) => {
                 if (!worker) return;
                 worker.addEventListener('statechange', () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        swShouldReloadOnControllerChange = true;
+                        showUpdatePrompt(worker);
                     }
                 });
             };
@@ -770,7 +858,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         reg.addEventListener('updatefound', () => bindWorkerLifecycle(reg.installing));
 
                         if (reg.waiting && navigator.serviceWorker.controller) {
-                            swShouldReloadOnControllerChange = true;
+                            showUpdatePrompt(reg.waiting);
                         }
 
                         const requestUpdateCheck = () => reg.update().catch(err => console.log('SW: Update check failed', err));
@@ -786,7 +874,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
             });
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (swRefreshPending || !swShouldReloadOnControllerChange) return;
+                if (!swUserApprovedReload || swRefreshPending) return;
                 swRefreshPending = true;
                 window.location.reload();
             });
@@ -796,7 +884,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <div id="tab-switcher" class="fixed inset-0 z-[100] hidden bg-gray-50 dark:bg-gray-950 flex-col animate-fade-in">
         <div class="p-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-800">
             <h2 class="text-xl font-bold" data-i18n="tabs_title">Вкладки</h2>
-            <button onclick="app.closeTabSwitcher()"
+            <button type="button" onclick="app.closeTabSwitcher()" aria-label="Close"
                 class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500">
                 <i data-lucide="x" class="w-6 h-6"></i>
             </button>

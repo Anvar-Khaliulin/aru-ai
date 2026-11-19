@@ -365,7 +365,12 @@ export const DesktopMode = {
             if (this.active) this.syncTabWindows();
         });
         window.addEventListener('resize', () => {
-            if (this.active) this.clampAllWindows();
+            if (!this.active) return;
+            if (window.matchMedia('(max-width: 767px)').matches) {
+                this.exit();
+                return;
+            }
+            this.clampAllWindows();
         });
 
         this.applyTexts();
@@ -601,13 +606,16 @@ export const DesktopMode = {
         }
 
         const area = this.areaSize();
+        const isTransfer = modal.id === 'modal-transfer-overlay' || !!modal.querySelector('#modal-transfer-overlay');
+        const focused = modal.contains(document.activeElement) ? document.activeElement : null;
         const win = this.createWindow({
             id: `adopt-${++this.adoptSeq}`,
             titleText: titleText || this.t('window'),
             icon,
             width,
             height: fillsHeight ? Math.round(area.h * 0.88) : 420,
-            adopted: true
+            adopted: true,
+            onClose: isTransfer ? () => { window.TransferController?.cleanup?.(); } : null
         });
         if (!win) return;
 
@@ -651,6 +659,9 @@ export const DesktopMode = {
 
         refreshIcons();
         this.focusWindow(win.id);
+        if (focused && focused.isConnected && typeof focused.focus === 'function') {
+            focused.focus();
+        }
     },
 
     decorateSettings(dialog) {
@@ -937,7 +948,14 @@ export const DesktopMode = {
                 document.getElementById('doc-editor').innerHTML = window.DOMPurify.sanitize(saved.docHtml);
             }
         }
-        if (saved) document.getElementById('messages-container').scrollTop = saved.scroll;
+        if (saved) {
+            const stream = document.getElementById('messages-container');
+            if (stream) {
+                stream.style.scrollBehavior = 'auto';
+                stream.scrollTop = saved.scroll;
+                requestAnimationFrame(() => { if (stream) stream.style.scrollBehavior = ''; });
+            }
+        }
         this.app.updateSearchUI();
     },
 
@@ -948,6 +966,9 @@ export const DesktopMode = {
         const snapshot = this.workspace.cloneNode(true);
         snapshot.classList.add('wd-chat-snapshot');
         snapshot.inert = true;
+        ['task-plugin-root', 'skills-plugin-root', 'fit-care-plugin-root'].forEach((cls) => {
+            snapshot.querySelector(`#${cls}`)?.classList.add(cls);
+        });
         snapshot.querySelectorAll('iframe').forEach((frame) => {
             const placeholder = document.createElement('div');
             placeholder.className = 'wd-snapshot-artifact';
@@ -1102,6 +1123,12 @@ export const DesktopMode = {
     clampAllWindows() {
         const area = this.areaSize();
         this.windows.forEach((win) => {
+            if (win.prevRect) {
+                win.prevRect.w = clamp(win.prevRect.w, 320, area.w);
+                win.prevRect.h = clamp(win.prevRect.h, 190, area.h);
+                win.prevRect.x = clamp(win.prevRect.x, 0, Math.max(area.w - win.prevRect.w, 0));
+                win.prevRect.y = clamp(win.prevRect.y, 0, Math.max(area.h - win.prevRect.h, 0));
+            }
             if (win.maximized) return;
             win.w = clamp(win.w, 320, area.w);
             win.h = clamp(win.h, 190, area.h);
@@ -1180,12 +1207,17 @@ export const DesktopMode = {
         const modeKey = `wiz_profile_${settings.user_mode || 'adult'}_title`;
         const modeLabel = translations[modeKey] || '';
 
-        const apps = START_APPS.map((item) => `
-            <button type="button" class="wd-start-app" data-wd-action="${item.action}">
+        const pm = window.PluginManager;
+        const apps = START_APPS.map((item) => {
+            const def = pm && pm.getPluginDefinition ? pm.getPluginDefinition(item.action) : null;
+            const locked = !!(def && pm.isPluginLocked(def));
+            return `
+            <button type="button" class="wd-start-app ${locked ? 'opacity-50' : ''}" data-wd-action="${item.action}">
                 <i data-lucide="${item.icon}" class="w-4 h-4"></i>
                 <span>${esc(this.t(item.key))}</span>
-            </button>
-        `).join('');
+                ${locked ? '<i data-lucide="lock" class="w-3.5 h-3.5 ml-auto text-gray-400"></i>' : ''}
+            </button>`;
+        }).join('');
 
         menu.innerHTML = `
             <div class="wd-start-head">
@@ -1389,7 +1421,10 @@ export const DesktopMode = {
 
     bindWindow(win) {
         const { el } = win;
-        el.addEventListener('pointerdown', () => this.focusWindow(win.id));
+        el.addEventListener('pointerdown', (event) => {
+            if (event.target.closest('.wd-win-btn')) return;
+            this.focusWindow(win.id);
+        });
 
         const titlebar = el.querySelector('.wd-window-titlebar');
         const resizeHandle = el.querySelector('.wd-window-resize');
@@ -1425,11 +1460,16 @@ export const DesktopMode = {
 
     startDrag(win, event) {
         event.preventDefault();
+        const handle = event.currentTarget;
+        const pointerId = event.pointerId;
         const scale = this.scale || 1;
         const startX = event.clientX;
         const startY = event.clientY;
         const baseX = win.x;
         const baseY = win.y;
+
+        this.shell?.classList.add('wd-interacting');
+        try { handle.setPointerCapture(pointerId); } catch (_) {}
 
         const onMove = (moveEvent) => {
             const area = this.areaSize();
@@ -1437,35 +1477,67 @@ export const DesktopMode = {
             win.y = clamp(baseY + (moveEvent.clientY - startY) / scale, 0, Math.max(area.h - 44, 0));
             this.applyRect(win);
         };
-        const onUp = () => {
+        const finish = () => {
+            this.shell?.classList.remove('wd-interacting');
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', finish);
+            handle.removeEventListener('pointercancel', finish);
+            handle.removeEventListener('lostpointercapture', finish);
             document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
+            document.removeEventListener('pointerup', finish);
+            document.removeEventListener('pointercancel', finish);
+            try { if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId); } catch (_) {}
         };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+        handle.addEventListener('lostpointercapture', finish);
         document.addEventListener('pointermove', onMove);
-        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointerup', finish);
+        document.addEventListener('pointercancel', finish);
     },
 
     startResize(win, event) {
+        if (win.maximized) return;
         event.preventDefault();
         event.stopPropagation();
+        const handle = event.currentTarget;
+        const pointerId = event.pointerId;
+        this.focusWindow(win.id);
         const scale = this.scale || 1;
         const startX = event.clientX;
         const startY = event.clientY;
         const baseW = win.w;
         const baseH = win.h;
 
+        this.shell?.classList.add('wd-interacting');
+        try { handle.setPointerCapture(pointerId); } catch (_) {}
+
         const onMove = (moveEvent) => {
             const area = this.areaSize();
-            win.w = clamp(baseW + (moveEvent.clientX - startX) / scale, 320, Math.max(area.w - win.x, 320));
+            const maxW = Math.min(area.w, Math.max(area.w - win.x, 320));
+            win.w = clamp(baseW + (moveEvent.clientX - startX) / scale, 320, maxW);
             win.h = clamp(baseH + (moveEvent.clientY - startY) / scale, 190, Math.max(area.h - win.y, 190));
             this.applyRect(win);
         };
-        const onUp = () => {
+        const finish = () => {
+            this.shell?.classList.remove('wd-interacting');
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', finish);
+            handle.removeEventListener('pointercancel', finish);
+            handle.removeEventListener('lostpointercapture', finish);
             document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
+            document.removeEventListener('pointerup', finish);
+            document.removeEventListener('pointercancel', finish);
+            try { if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId); } catch (_) {}
         };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+        handle.addEventListener('lostpointercapture', finish);
         document.addEventListener('pointermove', onMove);
-        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointerup', finish);
+        document.addEventListener('pointercancel', finish);
     },
 
     applyRect(win) {
@@ -1493,6 +1565,7 @@ export const DesktopMode = {
             this.app.switchTab(state.tabs.indexOf(win.tab));
             return;
         }
+        if (this.activeWinId === id && !win.minimized) return;
         if (win.minimized) {
             win.minimized = false;
             win.el.classList.remove('minimized');
@@ -1590,7 +1663,7 @@ export const DesktopMode = {
             button.className = 'wd-task-btn';
             button.dataset.winId = id;
             button.title = win.titleKey ? this.t(win.titleKey) : (win.titleText || this.t('window'));
-            const caption = win.tab ? Array.from(button.title).slice(0, 7).join('') + (Array.from(button.title).length > 7 ? '…' : '') : button.title;
+            const caption = button.title;
             button.innerHTML = `<i data-lucide="${win.icon}" class="w-4 h-4"></i><span>${esc(caption)}</span>`;
             button.addEventListener('click', () => {
                 const current = this.windows.get(id);

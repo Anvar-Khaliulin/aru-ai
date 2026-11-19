@@ -5,13 +5,14 @@ ARU TASK PLUGIN - UI FRAGMENT
 -->
 <link rel="stylesheet" href="plugins/task/task.css">
 
-<div id="task-plugin-root">
-    <aside id="task-sidebar">
+<div id="task-plugin-root" class="task-plugin-root">
+    <aside id="task-sidebar" class="task-sidebar">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-[10px] font-extrabold uppercase tracking-[0.2em] text-gray-400"
                 data-task-i18n="task_projects_list">
                 Projects List</h3>
-            <button class="p-1 text-gray-400 hover:text-purple-500 transition lg:hidden"
+            <button type="button" class="p-1 text-gray-400 hover:text-purple-500 transition md:hidden"
+                aria-label="Close sidebar"
                 onclick="TaskPlugin.toggleSidebar()">
                 <i data-lucide="chevrons-left" class="w-4 h-4"></i>
             </button>
@@ -20,7 +21,7 @@ ARU TASK PLUGIN - UI FRAGMENT
             <!-- Projects injected here -->
         </div>
         <div class="pt-4 mt-auto">
-            <button class="btn-task btn-task-primary w-full flex items-center justify-center gap-2"
+            <button type="button" class="btn-task btn-task-primary w-full flex items-center justify-center gap-2"
                 onclick="TaskPlugin.addProject()">
                 <i data-lucide="plus" class="w-4 h-4"></i>
                 <span data-task-i18n="task_new_project">New Project</span>
@@ -28,31 +29,32 @@ ARU TASK PLUGIN - UI FRAGMENT
         </div>
     </aside>
 
-    <div id="task-sidebar-backdrop" class="hidden fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[105]"
+    <div id="task-sidebar-backdrop" class="task-sidebar-backdrop hidden absolute inset-0 z-[25]"
         onclick="TaskPlugin.toggleSidebar()"></div>
 
-    <main id="task-board">
-        <header id="board-header">
-            <div class="flex items-center gap-3">
-                <button id="btn-sidebar-toggle"
-                    class="p-2 text-gray-400 hover:text-purple-500 transition-all rounded-xl"
+    <main id="task-board" class="task-board">
+        <header id="board-header" class="board-header">
+            <div class="flex items-center gap-3 min-w-0">
+                <button type="button" id="btn-sidebar-toggle"
+                    class="p-2 text-gray-400 hover:text-purple-500 transition-all rounded-xl shrink-0"
                     onclick="TaskPlugin.toggleSidebar()" title="Toggle Sidebar"
                     data-task-i18n-title="task_toggle_sidebar">
                     <i data-lucide="menu" class="w-5 h-5"></i>
                 </button>
-                <h2 id="active-project-name" class="font-bold text-lg" data-task-i18n="task_empty_board">Select a
+                <h2 id="active-project-name" class="font-bold text-lg truncate min-w-0" data-task-i18n="task_empty_board">Select a
                     project
                 </h2>
             </div>
-            <div class="flex gap-2">
-                <button class="btn-task btn-task-outline text-gray-500" onclick="TaskPlugin.addColumn()"
+            <div class="flex gap-2 shrink-0">
+                <button type="button" id="btn-add-column" class="btn-task btn-task-outline flex items-center gap-1.5" onclick="TaskPlugin.addColumn()"
                     title="Add Column" data-task-i18n-title="task_add_column_title">
                     <i data-lucide="columns" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline" data-task-i18n="task_add_column_title">Add Column</span>
                 </button>
             </div>
         </header>
 
-        <div id="board-columns">
+        <div id="board-columns" class="board-columns">
             <!-- Columns injected here -->
             <div class="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50">
                 <i data-lucide="clipboard-check" class="w-16 h-16 mb-4"></i>
@@ -62,19 +64,19 @@ ARU TASK PLUGIN - UI FRAGMENT
     </main>
 
     <!-- Task detail modal -->
-    <div id="task-detail-modal"
-        class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div id="task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"
+        class="task-detail-modal hidden absolute inset-0 z-[50] flex items-center justify-center p-4">
         <div
-            class="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[24px] shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in pointer-events-auto">
-            <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100" data-task-i18n="task_modal_header">Task Details
+            class="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[24px] shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in pointer-events-auto flex flex-col max-h-[85dvh]">
+            <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center shrink-0">
+                <h3 id="task-modal-title" class="text-xl font-bold text-gray-800 dark:text-gray-100" data-task-i18n="task_modal_header">Task Details
                 </h3>
-                <button onclick="TaskPlugin.closeTaskModal()"
-                    class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition">
+                <button type="button" onclick="TaskPlugin.closeTaskModal()"
+                    class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition" aria-label="Close">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <div id="task-modal-content" class="p-4">
+            <div id="task-modal-content" class="p-4 overflow-y-auto">
                 <!-- Content injected here -->
             </div>
         </div>

@@ -6,7 +6,7 @@ Only adds columns, tables and triggers; never alters or drops application data.
 */
 import { SYNC_TABLES, LOCAL_ONLY_SETTINGS } from './syncRegistry.js';
 
-export const SYNC_SCHEMA_VERSION = 1;
+export const SYNC_SCHEMA_VERSION = 2;
 const LEGACY_REV = '0000000000001-000000-legacy';
 const META_COLUMNS = [
     ['uid', 'TEXT'],
@@ -91,6 +91,11 @@ function settingsGuard(table, alias) {
     return ` AND NOT (${alias}.key IN (${keys}))`;
 }
 
+function triggerExists(db, name) {
+    const res = db.exec("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?", [name]);
+    return !!(res && res.length && res[0].values.length);
+}
+
 function triggerPrefix(table) {
     return `trg_${table.replace(/[^a-z0-9_]/gi, '_')}`;
 }
@@ -102,11 +107,26 @@ function dropTriggers(db, table) {
     }
 }
 
-function createTriggers(db, table) {
+function tombstoneKeyExpr(reg, alias) {
+    if (!reg || !Array.isArray(reg.identity)) return `${alias}.uid`;
+    return reg.identity.map((col, idx) => (
+        `${idx ? `'|${col}='` : `'${col}='`} || COALESCE(CAST(${alias}."${col}" AS TEXT), '')`
+    )).join(' || ');
+}
+
+function createTriggers(db, table, reg) {
     const p = triggerPrefix(table);
     const ctxHlc = '(SELECT hlc FROM _sync_ctx WHERE id = 1)';
     const ctxDevice = '(SELECT device FROM _sync_ctx WHERE id = 1)';
     const capture = '(SELECT capture FROM _sync_flags WHERE id = 1) = 1';
+    const natural = !!(reg && Array.isArray(reg.identity));
+    const tombDeleteWhere = natural
+        ? `(row_uid = (SELECT uid FROM ${table} WHERE rowid = NEW.rowid) OR row_uid = (${tombstoneKeyExpr(reg, 'NEW')}))`
+        : `row_uid = (SELECT uid FROM ${table} WHERE rowid = NEW.rowid)`;
+    const adWhen = natural
+        ? `${capture}${settingsGuard(table, 'OLD')}`
+        : `${capture}${settingsGuard(table, 'OLD')} AND OLD.uid IS NOT NULL`;
+    const adKeyExpr = natural ? tombstoneKeyExpr(reg, 'OLD') : 'OLD.uid';
 
     db.run(`CREATE TRIGGER ${p}_ai AFTER INSERT ON ${table}
         FOR EACH ROW WHEN ${capture}${settingsGuard(table, 'NEW')}
@@ -119,7 +139,7 @@ function createTriggers(db, table) {
             UPDATE _sync_state SET dirty = 1, seq = seq + 1 WHERE id = 1;
             DELETE FROM _sync_tombstones
              WHERE table_name = '${table}'
-               AND row_uid = (SELECT uid FROM ${table} WHERE rowid = NEW.rowid);
+               AND ${tombDeleteWhere};
         END`);
 
     // The first metadata UPDATE inside the trigger must not re-trigger itself.
@@ -137,10 +157,10 @@ function createTriggers(db, table) {
         END`);
 
     db.run(`CREATE TRIGGER ${p}_ad AFTER DELETE ON ${table}
-        FOR EACH ROW WHEN ${capture} AND OLD.uid IS NOT NULL
+        FOR EACH ROW WHEN ${adWhen}
         BEGIN
             INSERT INTO _sync_tombstones (table_name, row_uid, rev, device)
-            VALUES ('${table}', OLD.uid, ${ctxHlc}, ${ctxDevice})
+            VALUES ('${table}', ${adKeyExpr}, ${ctxHlc}, ${ctxDevice})
             ON CONFLICT(table_name, row_uid) DO UPDATE SET
                 rev = excluded.rev,
                 device = excluded.device,
@@ -174,6 +194,15 @@ function backfillIdentity(db, table, reg) {
     db.run(`UPDATE ${table} SET rev_device = 'legacy' WHERE rev_device IS NULL OR rev_device = ''`);
 }
 
+function needsTableSyncSetup(db, reg) {
+    if (!tableExists(db, reg.name)) return false;
+    for (const [col] of META_COLUMNS) {
+        if (!hasColumn(db, reg.name, col)) return true;
+    }
+    const p = triggerPrefix(reg.name);
+    return !triggerExists(db, `${p}_ai`) || !triggerExists(db, `${p}_au`) || !triggerExists(db, `${p}_ad`);
+}
+
 // Returns true when the on-disk schema was changed and should be persisted.
 export function ensureSyncSchema(db) {
     if (!db) return false;
@@ -183,7 +212,9 @@ export function ensureSyncSchema(db) {
         version = parseInt(getMeta(db, 'schema_version')) || 0;
     } catch (e) { /* _sync_meta does not exist yet */ }
 
-    if (version >= SYNC_SCHEMA_VERSION && tableExists(db, '_sync_state')) return false;
+    if (version >= SYNC_SCHEMA_VERSION && tableExists(db, '_sync_state') && !SYNC_TABLES.some(reg => needsTableSyncSetup(db, reg))) {
+        return false;
+    }
 
     ensureMetaTables(db);
     db.run('UPDATE _sync_flags SET capture = 0 WHERE id = 1');
@@ -195,11 +226,13 @@ export function ensureSyncSchema(db) {
         dropTriggers(db, reg.name);
         if (addIdentityColumns(db, reg.name)) changed = true;
         backfillIdentity(db, reg.name, reg);
-        createTriggers(db, reg.name);
+        createTriggers(db, reg.name, reg);
     }
 
     db.run('UPDATE _sync_flags SET capture = 1 WHERE id = 1');
-    db.run('UPDATE _sync_state SET dirty = 0 WHERE id = 1');
+    if (version === 0) {
+        db.run('UPDATE _sync_state SET dirty = 0 WHERE id = 1');
+    }
     setMeta(db, 'schema_version', SYNC_SCHEMA_VERSION);
     setMeta(db, 'configured_at', Date.now());
     return true;

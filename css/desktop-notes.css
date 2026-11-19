@@ -63,10 +63,20 @@
     cursor: default;
 }
 
-.wd-notes button:focus-visible,
-.wd-notes input:focus-visible {
+.wd-notes button:focus-visible {
     outline: 2px solid var(--notes-accent);
     outline-offset: 2px;
+}
+
+.wd-notes input:focus,
+.wd-notes input:focus-visible {
+    outline: none;
+    background: rgba(15, 23, 42, .09);
+}
+
+.dark .wd-notes input:focus,
+.dark .wd-notes input:focus-visible {
+    background: rgba(255, 255, 255, .12);
 }
 
 .wd-notes-sidebar {

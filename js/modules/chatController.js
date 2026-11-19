@@ -319,7 +319,8 @@ export const ChatController = {
                 // Try tab.messages first (active session cache), then DB
                 messages = (tab.messages && tab.messages.length > 0) ? tab.messages : (tab.chatId ? DB.getMessages(tab.chatId) : []);
             }
-            const lastMsg = (messages && messages.length > 0) ? messages[messages.length - 1].content : (tab.type === 'plugin' ? 'Plugin active' : '');
+            const activeLabel = PluginManager.getTranslation('plugin_active');
+            const lastMsg = (messages && messages.length > 0) ? messages[messages.length - 1].content : (tab.type === 'plugin' ? (activeLabel !== 'plugin_active' ? activeLabel : 'Plugin active') : '');
             const preview = UI.escapeHTML(lastMsg).slice(0, 80) + (lastMsg.length > 80 ? '...' : '');
 
             const activeBorder = state.activeTabIndex === index ? 'border-aru-500 ring-2 ring-aru-100 dark:ring-aru-900/30' : 'border-gray-200 dark:border-gray-800';
@@ -386,15 +387,18 @@ export const ChatController = {
 
         state.activeTabIndex = index;
         const tab = state.tabs[index];
-        state.currentChatId = tab.chatId;
-        localStorage.setItem('aru_last_chat', tab.chatId);
+        if (tab.type === 'chat' && tab.chatId !== null && tab.chatId !== undefined) {
+            state.currentChatId = tab.chatId;
+            if (!tab.isPrivate) localStorage.setItem('aru_last_chat', tab.chatId);
+        } else {
+            state.currentChatId = null;
+        }
 
         UI.clearChat();
         ChatController.app.loadChatsList();
 
         const placeholder = document.getElementById('chat-placeholder');
         const msgContainer = document.getElementById('messages-container');
-        const pluginViewport = document.getElementById('plugin-viewport');
 
         if (tab.type === 'plugin') {
             CanvasManager.clearCanvas();
@@ -403,19 +407,26 @@ export const ChatController = {
             if (placeholder) placeholder.classList.add('hidden');
             if (document.getElementById('chat-input-area')) document.getElementById('chat-input-area').classList.add('hidden');
             if (document.getElementById('btn-tools-trigger')) document.getElementById('btn-tools-trigger').classList.add('hidden');
-            if (pluginViewport) {
-                pluginViewport.classList.remove('hidden');
-                if (pluginViewport.dataset.pluginId !== tab.pluginId) {
-                    const plugin = PluginManager.getPluginDefinition(tab.pluginId);
-                    if (plugin && !await PluginManager.loadPluginContent(plugin, pluginViewport, tab)) return;
+            const pluginViewport = PluginManager.ensureViewport();
+            pluginViewport.classList.remove('hidden');
+            const plugin = PluginManager.getPluginDefinition(tab.pluginId);
+            const mountRes = plugin ? await PluginManager.mountPlugin(plugin, pluginViewport, tab) : { ok: false };
+            if (!mountRes || !mountRes.ok) return;
+            if (state.tabs[state.activeTabIndex] !== tab) return;
+            PluginManager.handleLifecycle(tab.pluginId, 'activate', { tab, container: mountRes.container, firstMount: mountRes.firstMount });
+            if (window.innerWidth < 768) {
+                const sidebar = document.getElementById('sidebar');
+                const backdrop = document.getElementById('sidebar-backdrop');
+                if (sidebar && !sidebar.classList.contains('-translate-x-full')) {
+                    sidebar.classList.add('-translate-x-full');
+                    if (backdrop) backdrop.classList.add('hidden');
                 }
             }
-            if (state.tabs[state.activeTabIndex] !== tab) return;
-            PluginManager.handleLifecycle(tab.pluginId, 'activate', { tab, container: pluginViewport });
             Chapters.refreshVisibility();
             window.dispatchEvent(new CustomEvent('aru-tab-activated', { detail: { tab } }));
             return; // Exit early for plugins
         } else {
+            const pluginViewport = document.getElementById('plugin-viewport');
             if (msgContainer) msgContainer.classList.remove('hidden');
             if (pluginViewport) pluginViewport.classList.add('hidden');
             if (document.getElementById('chat-input-area')) document.getElementById('chat-input-area').classList.remove('hidden');
@@ -436,12 +447,13 @@ export const ChatController = {
             if (latest) tab.artifact = { type: latest.type, title: latest.title, code: latest.code };
         }
 
+        const tabKey = CanvasManager.getTabKey(tab);
         if (tab.artifact) {
             CanvasManager.currentArtifact = { ...tab.artifact };
-            if (!CanvasManager.containers[tab.chatId]) {
+            if (!CanvasManager.containers[tabKey]) {
                 CanvasManager.renderPreview(); // Rebuilds the per-chat iframe after reload
             }
-            CanvasManager.switchChat(tab.chatId);
+            CanvasManager.switchChat(tabKey);
             // Optionally update UI for artifact view (tabs, title)
             const tabsEl = document.getElementById('canvas-tabs');
             const showTabs = ['app', 'game', 'analytics', 'doc'].includes(tab.artifact.type);
@@ -449,7 +461,7 @@ export const ChatController = {
             document.getElementById('btn-canvas-edit').classList.toggle('hidden', tab.artifact.type !== 'doc');
             document.getElementById('canvas-title-text').textContent = tab.artifact.title;
         } else {
-            CanvasManager.switchChat(tab.chatId); // This will clear/hide if no container exists
+            CanvasManager.switchChat(tabKey); // This will clear/hide if no container exists
         }
 
         // Sync Canvas visibility
@@ -481,10 +493,11 @@ export const ChatController = {
         const closedTab = state.tabs[index];
         const wasActive = index === state.activeTabIndex;
         if (closedTab?.abortController) closedTab.abortController.abort();
-        if (closedTab) CanvasManager.destroyContainer(closedTab.chatId);
+        if (closedTab) CanvasManager.destroyContainer(CanvasManager.getTabKey(closedTab));
         if (index === state.activeTabIndex) CanvasManager.currentArtifact = null;
         if (closedTab && closedTab.type === 'plugin') {
             PluginManager.handleLifecycle(closedTab.pluginId, 'close', { tab: closedTab, isActive: index === state.activeTabIndex });
+            PluginManager.unmountPlugin(closedTab.pluginId);
         }
 
         state.tabs.splice(index, 1);
@@ -731,26 +744,35 @@ export const ChatController = {
         const t = state.translations || {};
         if (!(await UI.confirm(t.confirm_delete_chat || 'Удалить этот чат?'))) return;
         const tabIndex = state.tabs.findIndex(t => t.chatId == id);
+        const tabToDelete = tabIndex !== -1 ? state.tabs[tabIndex] : null;
+        if (tabToDelete && tabToDelete.abortController) {
+            try { tabToDelete.abortController.abort(); } catch (_) {}
+        }
+        CanvasManager.destroyContainer(id);
+        const wasActive = (state.currentChatId == id);
+
         if (tabIndex !== -1) {
             state.tabs.splice(tabIndex, 1);
-            if (state.activeTabIndex >= tabIndex) {
-                state.activeTabIndex = Math.max(-1, state.activeTabIndex - 1);
+            if (!wasActive && state.activeTabIndex > tabIndex) {
+                state.activeTabIndex = Math.max(0, state.activeTabIndex - 1);
             }
         }
         if (id && !id.toString().startsWith('ephemeral-')) {
             DB.deleteChat(id);
         }
-        if (state.currentChatId == id) {
+        if (wasActive) {
             state.currentChatId = null;
+            state.activeTabIndex = -1;
             localStorage.removeItem('aru_last_chat');
             UI.clearChat();
+            CanvasManager.clearCanvas();
             if (state.tabs.length > 0) {
-                if (state.activeTabIndex === -1) state.activeTabIndex = 0;
-                ChatController.switchTab(state.activeTabIndex);
-                // ChatLock removed
+                const nextIdx = Math.max(0, Math.min(tabIndex !== -1 ? tabIndex : 0, state.tabs.length - 1));
+                await ChatController.switchTab(nextIdx);
+            } else {
                 const placeholder = document.getElementById('chat-placeholder');
                 if (placeholder) placeholder.classList.remove('hidden');
-                CanvasManager.clearCanvas();
+                CanvasManager.close();
             }
         }
         ChatController.app.loadChatsList();
@@ -795,9 +817,10 @@ export const ChatController = {
         UI.renderAttachments([]);
 
         try {
-            Heuristics.adjustMood(text);
-            ChatController.app.updateSystemPrompt();
-            input.value = ''; input.style.height = '';
+            if (!activeTab.isPrivate) {
+                Heuristics.adjustMood(text);
+            }
+            const { prompt: sysPrompt, mode: sysMode } = ChatController.app.updateSystemPrompt(activeTab);
 
             const placeholder = document.getElementById('chat-placeholder');
             if (placeholder && targetChatId === state.currentChatId) placeholder.classList.add('hidden');
@@ -814,9 +837,10 @@ export const ChatController = {
                 UI.appendMessage({ role: 'user', content: text, id: userMsgId, fileNames: fileNames });
             }
 
-            // Age-mode guard: deterministic local screening in child profiles.
+            // Age-mode guard: deterministic local screening in child profiles (covers text + attachments).
             // The refusal is produced without any LLM call, so it holds on every provider.
-            const safetyHit = Safety.checkInput(text);
+            const safetyText = [text, ...attachments.map(f => f.content || '')].filter(Boolean).join('\n');
+            const safetyHit = Safety.checkInput(safetyText);
             if (safetyHit) {
                 const refusal = Safety.getRefusal(safetyHit);
                 let refusalMsgId = null;
@@ -859,6 +883,7 @@ export const ChatController = {
             }
 
             const context = await Triggers.getRelevantContext(text);
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
             const recall = await Triggers.processRecallModules(text, activeTab);
             let toSend = text;
             if (context) toSend = `[SYSTEM_MEMORY_CONTEXT]\n${context}\n[/SYSTEM_MEMORY_CONTEXT]\n\nUser: ${text}`;
@@ -882,19 +907,34 @@ export const ChatController = {
 
             const allMessages = activeTab.isPrivate ? activeTab.messages : DB.getMessages(targetChatId);
             const contextLimit = parseInt(state.userSettings.token_limit) || 8192;
+            const maxOutTokens = ChatController.app.llm?.maxOutputTokens || parseInt(state.userSettings.max_output_tokens) || 0;
             const history = ChatController.app.buildContextHistory(
                 allMessages.slice(0, -1),
-                ChatController.app.tokenEstimator(ChatController.app.llm.systemInstruction),
+                ChatController.app.tokenEstimator(sysPrompt),
                 ChatController.app.tokenEstimator(toSend),
-                contextLimit
+                contextLimit,
+                maxOutTokens
             );
 
-            let raw = await ChatController.app.llm.sendMessage(history, toSend, { signal: controller.signal });
+            let raw = await ChatController.app.llm.sendMessage(history, toSend, {
+                signal: controller.signal,
+                systemInstruction: sysPrompt,
+                ageMode: sysMode
+            });
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+            let isRefusal = false;
             if (raw == null) {
-                raw = Safety.getRefusal('output');
+                if (Safety.isChildMode()) {
+                    raw = Safety.getRefusal('output');
+                    isRefusal = true;
+                } else {
+                    throw new Error('Empty response from LLM');
+                }
             } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
                 console.warn('Safety: model output filtered in child mode');
                 raw = Safety.getRefusal('output');
+                isRefusal = true;
             }
             const extracted = Triggers.extractSuggestions(raw);
             const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse, activeTab.isPrivate);
@@ -902,7 +942,8 @@ export const ChatController = {
             const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, activeTab.isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: text });
             const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, activeTab.isPrivate, text);
-            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
+            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed), { skipFallback: isRefusal });
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
             let modelMsgId = null;
             if (!activeTab.isPrivate) {
@@ -916,17 +957,18 @@ export const ChatController = {
                 UI.appendMessage({ role: 'model', content: finalHtml, emotion: emotion, isHTML: true, id: modelMsgId, suggestions: extracted.suggestions });
             }
 
+            const titleSource = text || (fileNames[0] || state.translations?.sidebar_new_chat || 'Chat');
             if (!activeTab.isPrivate) {
                 const count = DB.query("SELECT COUNT(*) as c FROM messages WHERE chat_id = ?", [targetChatId])[0].c;
                 if (count <= 2) {
-                    const title = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+                    const title = titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '');
                     DB.updateChatTitle(targetChatId, title);
                     activeTab.title = title;
                     ChatController.app.loadChatsList();
                 }
             } else {
                 if (activeTab.messages.length <= 2) {
-                    const title = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+                    const title = titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '');
                     activeTab.title = title;
                     ChatController.renderTabs();
                 }
@@ -980,7 +1022,17 @@ export const ChatController = {
         let targetChatId = state.currentChatId;
         if (!targetChatId) {
             const id = DB.createChat(state.translations?.sidebar_new_chat || 'New Chat');
-            state.tabs.push({ chatId: id, type: 'chat', title: title.slice(0, 20), artifact: null, isSending: false });
+            state.tabs.push({
+                chatId: id,
+                type: 'chat',
+                title: title.slice(0, 20),
+                artifact: null,
+                isSending: false,
+                isPrivate: false,
+                isCanvasOpen: false,
+                attachments: [],
+                isSearchEnabled: false
+            });
             await ChatController.switchTab(state.tabs.length - 1);
             targetChatId = id;
         }
@@ -996,9 +1048,9 @@ export const ChatController = {
         const isPrivate = !!activeTab.isPrivate;
         let newsMsgId = null;
         if (isPrivate) {
-            activeTab.messages.push({ role: 'user', content: payload });
+            activeTab.messages.push({ role: 'user', content: visibleText });
         } else {
-            newsMsgId = DB.saveMessage(targetChatId, 'user', payload);
+            newsMsgId = DB.saveMessage(targetChatId, 'user', visibleText);
         }
         if (targetChatId === state.currentChatId) UI.appendMessage({ role: 'user', content: visibleText, id: newsMsgId });
 
@@ -1007,12 +1059,30 @@ export const ChatController = {
         ChatController.renderTabs();
 
         try {
+            const safetyHit = Safety.checkInput(`${title}\n${cleanFull}`);
+            if (safetyHit) {
+                const refusal = Safety.getRefusal(safetyHit);
+                let refusalMsgId = null;
+                if (isPrivate) {
+                    activeTab.messages.push({ role: 'model', content: refusal, emotion: '', isHTML: true });
+                } else {
+                    refusalMsgId = DB.saveMessage(targetChatId, 'model', refusal, '', 1);
+                }
+                if (targetChatId === state.currentChatId) {
+                    UI.appendMessage({ role: 'model', content: refusal, emotion: '', isHTML: true, id: refusalMsgId });
+                }
+                return;
+            }
+
+            const { prompt: sysPrompt, mode: sysMode } = ChatController.app.updateSystemPrompt(activeTab);
+
             if (targetChatId === state.currentChatId) UI.showTyping();
             const langNames = { ru: 'Russian', kk: 'Kazakh', en: 'English' };
             const replyLang = langNames[state.lang] || 'Russian';
             const discussNote = `[SYSTEM: The user wants to DISCUSS this news item with you. Give YOUR OWN take: what stands out, why it matters, your opinion and mood. Do NOT just retell or summarize the article. Reply in ${replyLang}.]`;
             let toSend = `${discussNote}\n\n${payload}`;
             const context = await Triggers.getRelevantContext(title);
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
             if (context) toSend = `[SYSTEM_MEMORY_CONTEXT]\n${context}\n[/SYSTEM_MEMORY_CONTEXT]\n\nUser: ${toSend}`;
 
             if (activeTab.artifact) {
@@ -1022,18 +1092,33 @@ export const ChatController = {
 
             const allMessages = isPrivate ? activeTab.messages : DB.getMessages(targetChatId);
             const contextLimit = parseInt(state.userSettings.token_limit) || 8192;
+            const maxOutTokens = ChatController.app.llm?.maxOutputTokens || parseInt(state.userSettings.max_output_tokens) || 0;
             const history = ChatController.app.buildContextHistory(
                 allMessages.slice(0, -1),
-                ChatController.app.tokenEstimator(ChatController.app.llm.systemInstruction),
+                ChatController.app.tokenEstimator(sysPrompt),
                 ChatController.app.tokenEstimator(toSend),
-                contextLimit
+                contextLimit,
+                maxOutTokens
             );
-            let raw = await ChatController.app.llm.sendMessage(history, toSend, { signal: controller.signal });
+            let raw = await ChatController.app.llm.sendMessage(history, toSend, {
+                signal: controller.signal,
+                systemInstruction: sysPrompt,
+                ageMode: sysMode
+            });
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+            let isRefusal = false;
             if (raw == null) {
-                raw = Safety.getRefusal('output');
+                if (Safety.isChildMode()) {
+                    raw = Safety.getRefusal('output');
+                    isRefusal = true;
+                } else {
+                    throw new Error('Empty response from LLM');
+                }
             } else if (Safety.isChildMode() && Safety.checkOutput(raw)) {
                 console.warn('Safety: model output filtered in child mode');
                 raw = Safety.getRefusal('output');
+                isRefusal = true;
             }
             const extracted = Triggers.extractSuggestions(raw);
             const responseAfterMemoryCheck = await Triggers.processResponseForMemory(extracted.cleanResponse, isPrivate);
@@ -1041,7 +1126,8 @@ export const ChatController = {
             const responseAfterFitCare = Triggers.processResponseForFitCare(responseAfterTasks, isPrivate);
             const emotion = Heuristics.determineEmotion(responseAfterFitCare, { userText: payload });
             const artifactsProcessed = await Triggers.processResponseForArtifacts(responseAfterFitCare, targetChatId, isPrivate, title);
-            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed));
+            const finalHtml = await Triggers.processResponseForTools(UI.parseMarkdownWithMath(artifactsProcessed), { skipFallback: isRefusal });
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
             let newsModelMsgId = null;
             if (isPrivate) {

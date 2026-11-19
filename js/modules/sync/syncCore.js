@@ -8,6 +8,7 @@ No DOM and no DB access here so the merge engine can run in tests as well.
 const DEVICE_ID_KEY = 'aru_sync_device_id';
 const DEVICE_NAME_KEY = 'aru_sync_device_name';
 const CLOCK_KEY = 'aru_sync_clock';
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 function randomHex(bytes = 16) {
     const buf = crypto.getRandomValues(new Uint8Array(bytes));
@@ -152,11 +153,21 @@ export const SyncCore = {
         return encodeHlc(lastPhysical, lastCounter, this.deviceId());
     },
 
-    // A remote revision must never be older than what this device can produce next.
+    // A remote revision must never be older than what this device can produce next,
+    // nor poison local clocks with a far-future skewed device timestamp.
     observeRemote(rev) {
         ensureClock();
         const parsed = parseHlc(rev);
         if (!parsed) return;
+        const maxPhysical = Date.now() + MAX_FUTURE_SKEW_MS;
+        if (parsed.physical > maxPhysical) {
+            if (maxPhysical > lastPhysical) {
+                lastPhysical = maxPhysical;
+                lastCounter = 0;
+                persistClock();
+            }
+            return;
+        }
         if (parsed.physical > lastPhysical) {
             lastPhysical = parsed.physical;
             lastCounter = parsed.counter;

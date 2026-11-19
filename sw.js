@@ -3,7 +3,7 @@
 Progressive Web App Service Worker for offline caching and resource management.
 ---chat.aru-lab.space---PWA---
 */
-const APP_VERSION = '1.1.3';
+const APP_VERSION = '1.2.1';
 const CACHE_PREFIX = 'aru-ai';
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`;
 const CDN_CACHE_PREFIX = `${CACHE_PREFIX}-cdn`;
@@ -20,8 +20,7 @@ const CDN_HOSTS = new Set([
   'unpkg.com',
   'cdnjs.cloudflare.com',
   'cdn.jsdelivr.net',
-  'cdn.sheetjs.com',
-  'accounts.google.com'
+  'cdn.sheetjs.com'
 ]);
 
 // Loaded lazily (only when a PDF is opened, the DB starts or math is rendered),
@@ -36,7 +35,6 @@ const KATEX_FONT_VARIANTS = [
 ];
 const CDN_WARMUP_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.wasm',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
   ...KATEX_FONT_VARIANTS.map(name => `https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/fonts/KaTeX_${name}.woff2`)
 ];
 
@@ -57,18 +55,23 @@ const ASSETS_TO_CACHE = [
   './js/modules/aruState.js',
   './js/modules/auth.js',
   './js/modules/canvas.js',
+  './js/modules/chapters.js',
   './js/modules/chatController.js',
   './js/modules/db.js',
+  './js/modules/dbFit.js',
+  './js/modules/dbSchema.js',
   './js/modules/desktop.js',
   './js/modules/desktopNotes.js',
   './js/modules/files.js',
   './js/modules/foxRain.js',
   './js/modules/heuristics.js',
+  './js/modules/lazyLoader.js',
   './js/modules/library.js',
   './js/modules/llm.js',
   './js/modules/network.js',
   './js/modules/pluginManager.js',
   './js/modules/remoteStorage.js',
+  './js/modules/safety.js',
   './js/modules/search.js',
   './js/modules/semantics.js',
   './js/modules/settingsController.js',
@@ -101,6 +104,9 @@ const ASSETS_TO_CACHE = [
   './plugins/fit-care/fit-care-health.js',
   './plugins/fit-care/fit-care-settings.js',
   './plugins/fit-care/fit-care-i18n.json',
+  './plugins/skills/skills.css',
+  './plugins/skills/skills.html',
+  './plugins/skills/skills.js',
   './media/emotions/angry.png',
   './media/emotions/cool.png',
   './media/emotions/crazy.png',
@@ -257,8 +263,14 @@ async function networkFirst(request, { isNavigation = false } = {}) {
 
 // Handles the Service Worker installation process
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(precacheAssets());
+});
+
+// Activate a waiting Service Worker only when the user approves the update
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Handles the Service Worker activation and stale cache cleanup process

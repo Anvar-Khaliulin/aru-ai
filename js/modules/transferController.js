@@ -6,17 +6,28 @@ Transfer Controller handles WebRTC data exchange between devices.
 import { aruGlobalState as state } from './aruState.js';
 import { DB } from './db.js';
 import { UI } from './ui.js';
+import { loadTransferLibs } from './lazyLoader.js';
 
 export const TransferController = {
     peer: null,
     conn: null,
     isSender: false,
     chunks: [],
+    receivedData: null,
     receivedSize: 0,
     totalSize: 0,
+    expectedChunks: 0,
     dataType: null,
     pendingTypes: [],
     videoStream: null,
+    transferAccepted: false,
+    _modalOpen: false,
+    _scanRafId: null,
+    _cameraRequestSeq: 0,
+    _lastScanAt: 0,
+    _receivedChunkSet: null,
+    _cancelAck: null,
+    _sending: false,
     selectedItems: { chats: null, artifacts: null, tasks: null },
 
     init() {
@@ -24,13 +35,16 @@ export const TransferController = {
     },
 
     openTransferModal() {
+        this.cleanup();
+        this._modalOpen = true;
+        loadTransferLibs(['peerjs', 'qrcode', 'jsqr']).catch(() => {});
         const t = state.translations || {};
         const modalContainer = document.getElementById('modal-container');
 
         const html = `
         <div id="modal-transfer-overlay" class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center p-2 md:p-4 animate-fade-in backdrop-blur-md bg-white/5 dark:bg-black/5">
             <div class="absolute inset-0" onclick="TransferController.closeModal()"></div>
-            <div class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-[calc(100dvh-76px)] md:max-h-[calc(100dvh-104px)] scale-in">
+            <div id="transfer-modal-card" class="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-[calc(100dvh-76px)] md:max-h-[calc(100dvh-104px)] scale-in">
                 
                 <!-- Compact Header -->
                 <div class="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
@@ -124,7 +138,7 @@ export const TransferController = {
                         <!-- Receive Section -->
                         <div id="transfer-receive" class="w-full flex flex-col items-center hidden animate-fade-in">
                             <div class="w-full aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl relative border-4 border-white dark:border-gray-800">
-                                <video id="qr-video" class="w-full h-full object-cover hidden"></video>
+                                <video id="qr-video" muted playsinline class="w-full h-full object-cover hidden"></video>
                                 <canvas id="qr-canvas" class="hidden"></canvas>
                                 <div id="receive-status" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gray-900/60 backdrop-blur-sm">
                                      <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-4">
@@ -173,46 +187,88 @@ export const TransferController = {
                 </div>
             </div>
         </div>
-
-        <style>
-            .scan-line {
-                background: rgba(249, 115, 22, 0.55);
-                height: 2px;
-                position: absolute;
-                width: 100%;
-                animation: scan 1.5s linear infinite;
-                box-shadow: 0 0 5px rgba(249, 115, 22, 0.5);
-            }
-            @keyframes scan {
-                0% { top: 0; }
-                100% { top: 100%; }
-            }
-        </style>
         `;
 
         modalContainer.innerHTML = html;
         if (window.lucide) lucide.createIcons();
     },
 
-    closeModal() {
-        document.getElementById('modal-container').innerHTML = '';
+    stopCamera() {
+        this._cameraRequestSeq++;
+        if (this._scanRafId !== null && typeof cancelAnimationFrame === 'function') {
+            cancelAnimationFrame(this._scanRafId);
+        }
+        this._scanRafId = null;
+        if (this.videoStream) {
+            this.videoStream.getTracks().forEach(track => {
+                try { track.stop(); } catch (_) {}
+            });
+            this.videoStream = null;
+        }
+        const video = typeof document !== 'undefined' ? document.getElementById('qr-video') : null;
+        if (video) {
+            try { video.pause(); } catch (_) {}
+            video.srcObject = null;
+            video.classList.add('hidden');
+        }
+        const overlay = typeof document !== 'undefined' ? document.getElementById('scan-overlay') : null;
+        if (overlay) overlay.classList.add('hidden');
+        const btn = typeof document !== 'undefined' ? document.getElementById('btn-start-receive') : null;
+        if (btn) btn.disabled = false;
+    },
+
+    destroyPeer() {
+        if (this._cancelAck) {
+            const cancel = this._cancelAck;
+            this._cancelAck = null;
+            try { cancel(new Error((state.translations || {}).transfer_status_closed || 'Connection closed')); } catch (_) {}
+        }
+        this._sending = false;
         if (this.conn) {
-            this.conn.close();
+            try { this.conn.close(); } catch (_) {}
             this.conn = null;
         }
         if (this.peer) {
-            this.peer.destroy();
+            try { this.peer.destroy(); } catch (_) {}
             this.peer = null;
         }
-        if (this.videoStream) {
-            this.videoStream.getTracks().forEach(track => track.stop());
-            this.videoStream = null;
-        }
-        this.selectedItems = { chats: null, artifacts: null, tasks: null };
+        const sendBtn = typeof document !== 'undefined' ? document.getElementById('btn-start-send') : null;
+        if (sendBtn) sendBtn.disabled = false;
+    },
+
+    cleanup() {
+        this.stopCamera();
+        this.destroyPeer();
+        this.chunks = [];
+        this._receivedChunkSet = new Set();
+        this.receivedData = null;
+        this.receivedSize = 0;
+        this.totalSize = 0;
+        this.expectedChunks = 0;
+        this.dataType = null;
+        this.pendingTypes = [];
+        this.transferAccepted = false;
         this.isSender = false;
+        this.selectedItems = { chats: null, artifacts: null, tasks: null };
+    },
+
+    closeModal() {
+        this._modalOpen = false;
+        this.cleanup();
+        const modalContainer = document.getElementById('modal-container');
+        if (modalContainer) modalContainer.innerHTML = '';
     },
 
     switchTab(tab) {
+        this.stopCamera();
+        this.destroyPeer();
+        this.transferAccepted = false;
+        this.pendingTypes = [];
+        const confirmBox = document.getElementById('transfer-confirm-box');
+        const progressBox = document.getElementById('transfer-progress-box');
+        if (confirmBox) confirmBox.classList.add('hidden');
+        if (progressBox) progressBox.classList.add('hidden');
+
         document.getElementById('transfer-send').classList.toggle('hidden', tab !== 'send');
         document.getElementById('transfer-receive').classList.toggle('hidden', tab !== 'receive');
         
@@ -317,7 +373,7 @@ export const TransferController = {
                 <!-- Header -->
                 <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                     <h4 class="text-xs font-bold text-gray-800 dark:text-gray-100 uppercase tracking-wider">${t.transfer_select_items || 'Select items'}</h4>
-                    <span class="text-[10px] text-gray-400 font-mono">${title}</span>
+                    <span class="text-[10px] text-gray-400 font-mono">${UI.escapeHTML(title)}</span>
                 </div>
                 
                 <!-- Quick toggles -->
@@ -333,8 +389,8 @@ export const TransferController = {
                         const isChecked = currentlySelected === null || currentlySelected.includes(item.id);
                         return `
                         <label class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg cursor-pointer transition-colors w-full group">
-                            <input type="checkbox" value="${item.id}" ${isChecked ? 'checked' : ''} class="sub-modal-chk w-4 h-4 rounded accent-orange-500 cursor-pointer">
-                            <span class="text-xs text-gray-700 dark:text-gray-300 truncate w-full group-hover:text-orange-600 transition-colors">${item.name || t.transfer_untitled || 'Untitled'}</span>
+                            <input type="checkbox" value="${UI.escapeHTML(item.id)}" ${isChecked ? 'checked' : ''} class="sub-modal-chk w-4 h-4 rounded accent-orange-500 cursor-pointer">
+                            <span class="text-xs text-gray-700 dark:text-gray-300 truncate w-full group-hover:text-orange-600 transition-colors">${UI.escapeHTML(item.name || t.transfer_untitled || 'Untitled')}</span>
                         </label>
                         `;
                     }).join('')}
@@ -349,7 +405,8 @@ export const TransferController = {
         </div>
         `;
         
-        document.getElementById('modal-transfer-overlay').insertAdjacentHTML('beforeend', html);
+        const host = document.getElementById('transfer-modal-card') || document.getElementById('modal-transfer-overlay');
+        if (host) host.insertAdjacentHTML('beforeend', html);
         if (window.lucide) lucide.createIcons();
     },
 
@@ -363,7 +420,7 @@ export const TransferController = {
         const chkParent = document.getElementById(`chk-${type}`);
         if (!chkParent) return;
 
-        if (selected.length === totalCount) {
+        if (totalCount > 0 && selected.length === totalCount) {
             this.selectedItems[type] = null; // all
             chkParent.checked = true;
             chkParent.indeterminate = false;
@@ -377,29 +434,56 @@ export const TransferController = {
             chkParent.indeterminate = true;
         }
         
-        document.getElementById('transfer-sub-modal').remove();
+        document.getElementById('transfer-sub-modal')?.remove();
         this.updateCheckAllState();
     },
 
+    _buildPeerConfig() {
+        const stunServer = state.userSettings?.stun_server || 'stun:stun.l.google.com:19302';
+        const signaling = String(state.userSettings?.signaling_server || 'peerjs-default').trim();
+        const config = { config: { iceServers: [{ urls: stunServer }] } };
+        if (signaling && signaling !== 'peerjs-default') {
+            try {
+                const rawUrl = signaling.includes('://') ? signaling : 'https://' + signaling;
+                const u = new URL(rawUrl);
+                config.host = u.hostname;
+                const isHttps = u.protocol === 'https:';
+                config.secure = isHttps;
+                config.port = u.port ? parseInt(u.port, 10) : (isHttps ? 443 : 80);
+                if (u.pathname && u.pathname !== '/') config.path = u.pathname;
+            } catch (e) {
+                console.warn('TransferController: invalid signaling server URL:', signaling, e);
+            }
+        }
+        return config;
+    },
+
     // --- Sender Logic ---
-    initSender() {
+    async initSender() {
+        const t = state.translations || {};
+        this.stopCamera();
+        this.destroyPeer();
         const btn = document.getElementById('btn-start-send');
         if (btn) btn.disabled = true;
-        
-        this.isSender = true;
-        
-        const stunServer = state.userSettings.stun_server || 'stun:stun.l.google.com:19302';
-        const signaling = state.userSettings.signaling_server || 'peerjs-default';
-        
-        const config = { config: { 'iceServers': [{ 'urls': stunServer }] } };
-        if (signaling !== 'peerjs-default' && signaling.includes(':')) {
-            const parts = signaling.split(':');
-            config.host = parts[0]; config.port = parseInt(parts[1]);
+
+        try {
+            await loadTransferLibs(['peerjs', 'qrcode']);
+        } catch (loadErr) {
+            console.error('Failed to load WebRTC/QR libs:', loadErr);
+            if (btn) btn.disabled = false;
+            await UI.alert((t.transfer_lib_load_error || 'Failed to load transfer libraries. Check your connection.') + (loadErr?.message ? `\n${loadErr.message}` : ''));
+            return;
         }
+        if (!this._modalOpen) return;
 
-        this.peer = new Peer(config);
+        this.isSender = true;
+        this.transferAccepted = false;
 
-        this.peer.on('open', (id) => {
+        const peer = new Peer(this._buildPeerConfig());
+        this.peer = peer;
+
+        peer.on('open', (id) => {
+            if (this.peer !== peer) return;
             this.generateQR(id);
             const idDisp = document.getElementById('peer-id-display');
             if (idDisp) {
@@ -408,14 +492,25 @@ export const TransferController = {
             }
         });
 
-        this.peer.on('connection', (conn) => {
+        peer.on('connection', (conn) => {
+            if (this.peer !== peer) {
+                try { conn.close(); } catch (_) {}
+                return;
+            }
+            if (this.conn && this.conn !== conn) {
+                try { conn.close(); } catch (_) {}
+                return;
+            }
             this.conn = conn;
             this.setupConnectionHandlers();
         });
 
-        this.peer.on('error', (err) => {
+        peer.on('error', (err) => {
+            if (this.peer !== peer) return;
             console.error('Peer error:', err);
             if (btn) btn.disabled = false;
+            const statusEl = document.getElementById('transfer-status-text');
+            if (statusEl) statusEl.innerText = err?.message || (t.transfer_status_error || 'Connection error');
         });
     },
 
@@ -442,83 +537,146 @@ export const TransferController = {
         const overlay = document.getElementById('scan-overlay');
 
         if (!video) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            UI.alert(t.alert_camera_denied || "Camera access denied.");
+            return;
+        }
+
+        this.stopCamera();
+        const reqSeq = ++this._cameraRequestSeq;
+        if (btn) btn.disabled = true;
+
+        // Trigger script loads immediately without awaiting before getUserMedia (keeps user activation)
+        loadTransferLibs(['jsqr', 'peerjs']).catch(err => {
+            console.warn('Lazy transfer lib load error during scan init:', err);
+        });
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then((stream) => {
+            const curVideo = document.getElementById('qr-video');
+            if (!this._modalOpen || reqSeq !== this._cameraRequestSeq || !curVideo) {
+                stream.getTracks().forEach(track => {
+                    try { track.stop(); } catch (_) {}
+                });
+                return;
+            }
             this.videoStream = stream;
-            video.srcObject = stream;
-            video.setAttribute("playsinline", true);
-            video.play();
-            video.classList.remove('hidden');
+            curVideo.srcObject = stream;
+            curVideo.muted = true;
+            curVideo.setAttribute("playsinline", "");
+            Promise.resolve(curVideo.play()).catch(() => {});
+            curVideo.classList.remove('hidden');
             if (container) container.classList.add('hidden');
-            if (btn) btn.disabled = true;
             if (overlay) overlay.classList.remove('hidden');
-            
-            requestAnimationFrame(() => this.scanTick());
+
+            this._lastScanAt = 0;
+            this._scanRafId = requestAnimationFrame(() => this.scanTick());
         }).catch(err => {
+            if (!this._modalOpen || reqSeq !== this._cameraRequestSeq) return;
+            if (btn) btn.disabled = false;
             console.error("Camera access denied:", err);
             UI.alert(t.alert_camera_denied || "Camera access denied.");
         });
     },
 
     scanTick() {
+        this._scanRafId = null;
+        if (!this._modalOpen || !this.videoStream) return;
         const video = document.getElementById('qr-video');
         if (!video || video.paused || video.ended) return;
 
-        const canvas = document.getElementById('qr-canvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
+        const now = Date.now();
+        if (typeof jsQR === 'function' && now - (this._lastScanAt || 0) >= 150 && video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+            this._lastScanAt = now;
+            const canvas = document.getElementById('qr-canvas');
+            if (canvas) {
+                try {
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    if (ctx) {
+                        const scale = Math.min(1, 640 / video.videoWidth);
+                        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+                        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: "dontInvert",
+                        });
 
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.height = video.videoHeight;
-            canvas.width = video.videoWidth;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
-
-            if (code) {
-                const t = state.translations || {};
-                this.connectToPeer(code.data);
-                if (this.videoStream) {
-                    this.videoStream.getTracks().forEach(track => track.stop());
+                        if (code && code.data) {
+                            const t = state.translations || {};
+                            this.stopCamera();
+                            const receiveStatus = document.getElementById('receive-status');
+                            if (receiveStatus) {
+                                receiveStatus.innerHTML = '';
+                                const span = document.createElement('span');
+                                span.className = 'text-white font-bold opacity-50 text-[10px]';
+                                span.textContent = t.transfer_status_connected || 'Connected';
+                                receiveStatus.appendChild(span);
+                                receiveStatus.classList.remove('hidden');
+                            }
+                            this.connectToPeer(code.data);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('QR scan frame error:', e);
                 }
-                video.classList.add('hidden');
-                document.getElementById('receive-status').innerHTML = `<span class="text-white font-bold opacity-50 text-[10px]">${t.transfer_status_connected || 'Connected'}</span>`;
-                document.getElementById('receive-status').classList.remove('hidden');
-                document.getElementById('scan-overlay').classList.add('hidden');
-                return;
             }
         }
-        requestAnimationFrame(() => this.scanTick());
+        this._scanRafId = requestAnimationFrame(() => this.scanTick());
     },
 
     connectManual() {
-        const id = document.getElementById('manual-peer-id').value.trim();
+        const input = document.getElementById('manual-peer-id');
+        const id = input ? input.value.trim() : '';
         if (!id) return;
+        this.stopCamera();
         this.connectToPeer(id);
     },
 
-    connectToPeer(peerId) {
+    async connectToPeer(peerId) {
+        const t = state.translations || {};
+        this.destroyPeer();
         this.isSender = false;
-        const stunServer = state.userSettings.stun_server || 'stun:stun.l.google.com:19302';
-        const signaling = state.userSettings.signaling_server || 'peerjs-default';
-        const config = { config: { 'iceServers': [{ 'urls': stunServer }] } };
-        if (signaling !== 'peerjs-default' && signaling.includes(':')) {
-            const parts = signaling.split(':');
-            config.host = parts[0]; config.port = parseInt(parts[1]);
+        this.transferAccepted = false;
+
+        try {
+            await loadTransferLibs(['peerjs']);
+        } catch (loadErr) {
+            console.error('Failed to load PeerJS:', loadErr);
+            const box = document.getElementById('transfer-progress-box');
+            const statusEl = document.getElementById('transfer-status-text');
+            if (box) box.classList.remove('hidden');
+            if (statusEl) statusEl.innerText = loadErr?.message || (t.transfer_status_error || 'Connection error');
+            await UI.alert((t.transfer_lib_load_error || 'Failed to load transfer library. Check your connection.') + (loadErr?.message ? `\n${loadErr.message}` : ''));
+            return;
         }
-        this.peer = new Peer(config);
-        this.peer.on('open', () => {
-            this.conn = this.peer.connect(peerId);
+        if (!this._modalOpen) return;
+
+        const peer = new Peer(this._buildPeerConfig());
+        this.peer = peer;
+
+        peer.on('open', () => {
+            if (this.peer !== peer) return;
+            this.conn = peer.connect(peerId);
             this.setupConnectionHandlers();
+        });
+
+        peer.on('error', (err) => {
+            if (this.peer !== peer) return;
+            console.error('Peer error:', err);
+            const box = document.getElementById('transfer-progress-box');
+            const statusEl = document.getElementById('transfer-status-text');
+            if (box) box.classList.remove('hidden');
+            if (statusEl) statusEl.innerText = err?.message || (t.transfer_status_error || 'Connection error');
         });
     },
 
     setupConnectionHandlers() {
-        if (!this.conn) return;
+        const conn = this.conn;
+        if (!conn) return;
         const t = state.translations || {};
-        this.conn.on('open', () => {
+        conn.on('open', () => {
+            if (this.conn !== conn) return;
             const box = document.getElementById('transfer-progress-box');
             const statusEl = document.getElementById('transfer-status-text');
             if (box) box.classList.remove('hidden');
@@ -527,15 +685,26 @@ export const TransferController = {
                 this.sendMetadata();
             }
         });
-        this.conn.on('data', (data) => this.handleIncomingData(data));
-        this.conn.on('close', () => {
+        conn.on('data', (data) => {
+            if (this.conn !== conn) return;
+            this.handleIncomingData(data);
+        });
+        conn.on('close', () => {
+            if (this.conn !== conn) return;
             const statusEl = document.getElementById('transfer-status-text');
             if (statusEl) statusEl.innerText = t.transfer_status_closed || 'Connection closed';
+        });
+        conn.on('error', (err) => {
+            if (this.conn !== conn) return;
+            console.error('Peer connection error:', err);
+            const statusEl = document.getElementById('transfer-status-text');
+            if (statusEl) statusEl.innerText = err?.message || (t.transfer_status_error || 'Connection error');
         });
     },
 
     sendMetadata() {
-        if (!this.conn) return;
+        if (!this.conn) return false;
+        const t = state.translations || {};
         const allDb = document.getElementById('check-all-db')?.checked;
         const types = [];
         if (allDb) {
@@ -546,7 +715,10 @@ export const TransferController = {
             });
         }
 
-        if (types.length === 0) return;
+        if (types.length === 0) {
+            UI?.alert?.(t.alert_no_data_selected || t.transfer_no_data || 'Please select data to transfer.');
+            return false;
+        }
 
         this.pendingTypes = types;
         this.conn.send({
@@ -557,32 +729,55 @@ export const TransferController = {
                 timestamp: Date.now()
             }
         });
+        return true;
     },
 
     handleIncomingData(data) {
         if (!data || !data.type) return;
+        const t = state.translations || {};
         switch (data.type) {
             case 'metadata':
                 if (!this.isSender) {
-                    this.handleMetadata(data.payload);
+                    this.handleMetadata(data.payload || {});
                 }
                 break;
             case 'ready':
-                if (this.isSender) {
-                    this.startTransfer(this.pendingTypes); 
+                if (this.isSender && !this._sending) {
+                    this.startTransfer(this.pendingTypes);
                 }
                 break;
-            case 'transfer-start':
-                this.totalSize = data.payload.totalSize;
-                this.dataType = data.payload.dataType;
-                this.chunks = [];
-                this.receivedSize = 0;
-                document.getElementById('transfer-progress-box').classList.remove('hidden');
+            case 'decline':
+                if (this.isSender) {
+                    this._sending = false;
+                    if (this._cancelAck) {
+                        const cancel = this._cancelAck;
+                        this._cancelAck = null;
+                        cancel(new Error(t.transfer_status_declined || 'Transfer declined'));
+                    }
+                    const statusEl = document.getElementById('transfer-status-text');
+                    if (statusEl) statusEl.innerText = t.transfer_status_declined || 'Transfer declined';
+                }
                 break;
+            case 'transfer-start': {
+                if (this.isSender || !this.transferAccepted) return;
+                const payload = data.payload || {};
+                this.totalSize = Number(payload.totalSize) || 0;
+                this.expectedChunks = Number.isInteger(payload.numChunks) ? payload.numChunks : 0;
+                this.dataType = payload.dataType || null;
+                this.chunks = [];
+                this._receivedChunkSet = new Set();
+                this.receivedSize = 0;
+                const progressBox = document.getElementById('transfer-progress-box');
+                if (progressBox) progressBox.classList.remove('hidden');
+                this.updateProgress(0);
+                break;
+            }
             case 'chunk':
+                if (this.isSender || !this.transferAccepted) return;
                 this.handleChunk(data.payload);
                 break;
             case 'transfer-complete':
+                if (this.isSender || !this.transferAccepted) return;
                 this.finalizeTransfer();
                 break;
             case 'ack':
@@ -592,9 +787,12 @@ export const TransferController = {
 
     handleMetadata(payload) {
         const t = state.translations || {};
+        this.transferAccepted = false;
         this.totalSize = 0;
+        this.expectedChunks = 0;
         this.receivedSize = 0;
         this.chunks = [];
+        this._receivedChunkSet = new Set();
 
         const typeLabels = {
             full_db: t.data_all_db || 'Full System Image',
@@ -621,6 +819,7 @@ export const TransferController = {
 
     acceptIncoming() {
         const t = state.translations || {};
+        this.transferAccepted = true;
         const confirmBox = document.getElementById('transfer-confirm-box');
         const progressBox = document.getElementById('transfer-progress-box');
         const statusEl = document.getElementById('transfer-status-text');
@@ -631,104 +830,169 @@ export const TransferController = {
     },
 
     declineIncoming() {
+        this.transferAccepted = false;
+        try {
+            if (this.conn) this.conn.send({ type: 'decline' });
+        } catch (_) {}
         this.receivedData = null;
         this.totalSize = 0;
+        this.expectedChunks = 0;
         this.chunks = [];
+        this._receivedChunkSet = new Set();
         this.closeModal();
     },
 
     async startTransfer(dataTypes) {
+        if (!this.conn || this._sending) return;
+        this._sending = true;
+        const activeConn = this.conn;
         const t = state.translations || {};
-        document.getElementById('transfer-status-text').innerText = t.transfer_status_preparing || "Preparing data...";
-        
-        // Wait a small tick so UI updates before heavy sync DB extraction
-        await new Promise(r => setTimeout(r, 50)); 
-        
-        const rawData = DB.getExportData(dataTypes, this.selectedItems, { stripSecrets: dataTypes.includes('settings') });
-        if (!rawData) return;
+        try {
+            const statusEl = document.getElementById('transfer-status-text');
+            if (statusEl) statusEl.innerText = t.transfer_status_preparing || "Preparing data...";
 
-        let u8Buffer;
-        
-        document.getElementById('transfer-status-text').innerText = t.transfer_status_serializing || "Serializing...";
-        await new Promise(r => setTimeout(r, 50));
+            // Wait a small tick so UI updates before heavy sync DB extraction
+            await new Promise(r => setTimeout(r, 50));
+            if (this.conn !== activeConn) return;
 
-        if (rawData.data.full_db) {
-            u8Buffer = rawData.data.full_db;
-        } else {
+            const rawData = DB.getExportData(dataTypes, this.selectedItems, { stripSecrets: dataTypes.includes('settings') });
+            if (!rawData) return;
+
+            let u8Buffer;
+            if (statusEl) statusEl.innerText = t.transfer_status_serializing || "Serializing...";
+            await new Promise(r => setTimeout(r, 50));
+            if (this.conn !== activeConn) return;
+
+            if (rawData.data.full_db) {
+                u8Buffer = rawData.data.full_db;
+            } else {
+                try {
+                    // Avoid using TextEncoder blindly for large strings, convert JSON str to Blob safely
+                    const jsonStr = JSON.stringify(rawData);
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+                    const arrayBuf = await blob.arrayBuffer();
+                    u8Buffer = new Uint8Array(arrayBuf);
+                } catch (e) {
+                    console.error("Stringify/Encode failed:", e);
+                    if (statusEl) statusEl.innerText = t.transfer_status_memory_error || "Memory error!";
+                    return;
+                }
+            }
+
+            if (this.conn !== activeConn) return;
+            this.totalSize = u8Buffer.byteLength;
+            const CHUNK_SIZE = 16 * 1024;
+            const numChunks = Math.ceil(this.totalSize / CHUNK_SIZE);
+
+            activeConn.send({
+                type: 'transfer-start',
+                payload: { totalSize: this.totalSize, numChunks: numChunks, dataType: dataTypes.includes('full_db') ? 'full_db' : 'partial' }
+            });
+
+            if (statusEl) statusEl.innerText = t.transfer_status_sending || "Streaming data...";
+
             try {
-                // Avoid using TextEncoder blindly for large strings, convert JSON str to Blob safely
-                const jsonStr = JSON.stringify(rawData);
-                const blob = new Blob([jsonStr], { type: 'application/json' });
-                const arrayBuf = await blob.arrayBuffer();
-                u8Buffer = new Uint8Array(arrayBuf);
+                for (let i = 0; i < numChunks; i++) {
+                    if (this.conn !== activeConn) throw new Error(t.transfer_status_closed || 'Connection closed');
+                    const start = i * CHUNK_SIZE;
+                    const end = Math.min(this.totalSize, start + CHUNK_SIZE);
+                    activeConn.send({ type: 'chunk', payload: { index: i, data: u8Buffer.slice(start, end) } });
+                    await this.waitForAck(i);
+                    this.updateProgress(end);
+                }
             } catch (e) {
-                console.error("Stringify/Encode failed:", e);
-                document.getElementById('transfer-status-text').innerText = t.transfer_status_memory_error || "Memory error!";
+                console.error('Transfer interrupted:', e);
+                if (statusEl) statusEl.innerText = e.message || (t.transfer_status_incomplete || 'Transfer interrupted');
+                try { activeConn.close(); } catch (_) {}
                 return;
             }
+
+            if (this.conn !== activeConn) return;
+            activeConn.send({ type: 'transfer-complete' });
+            if (statusEl) statusEl.innerText = t.transfer_status_finished || "Transfer complete!";
+        } finally {
+            this._sending = false;
         }
-
-        this.totalSize = u8Buffer.length;
-        const CHUNK_SIZE = 64 * 1024;
-        const numChunks = Math.ceil(this.totalSize / CHUNK_SIZE);
-        
-        this.conn.send({
-            type: 'transfer-start',
-            payload: { totalSize: this.totalSize, numChunks: numChunks, dataType: dataTypes.includes('full_db') ? 'full_db' : 'partial' }
-        });
-
-        document.getElementById('transfer-status-text').innerText = t.transfer_status_sending || "Streaming data...";
-
-        try {
-            for (let i = 0; i < numChunks; i++) {
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(this.totalSize, start + CHUNK_SIZE);
-                this.conn.send({ type: 'chunk', payload: { index: i, data: u8Buffer.slice(start, end) } });
-                await this.waitForAck(i);
-                this.updateProgress(end);
-            }
-        } catch (e) {
-            console.error('Transfer interrupted:', e);
-            const statusEl = document.getElementById('transfer-status-text');
-            if (statusEl) statusEl.innerText = e.message || (t.transfer_status_incomplete || 'Transfer interrupted');
-            if (this.conn) this.conn.close();
-            return;
-        }
-
-        this.conn.send({ type: 'transfer-complete' });
-        document.getElementById('transfer-status-text').innerText = t.transfer_status_finished || "Transfer complete!";
     },
 
     waitForAck(index, timeoutMs = 20000) {
+        const conn = this.conn;
+        if (!conn) {
+            const t = state.translations || {};
+            return Promise.reject(new Error(t.transfer_status_closed || 'Connection closed'));
+        }
         return new Promise((resolve, reject) => {
-            const handler = (data) => {
+            const t = state.translations || {};
+            let settled = false;
+            const off = (ev, fn) => {
+                if (conn.off) conn.off(ev, fn);
+                else if (conn.removeListener) conn.removeListener(ev, fn);
+            };
+            const cleanup = () => {
+                clearTimeout(timer);
+                off('data', onData);
+                off('close', onClose);
+                off('error', onError);
+                if (this._cancelAck === cancel) this._cancelAck = null;
+            };
+            const finishReject = (err) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                reject(err);
+            };
+            const cancel = (err) => finishReject(err);
+            const onData = (data) => {
+                if (settled || !data) return;
+                if (data.type === 'decline') {
+                    finishReject(new Error(t.transfer_status_declined || 'Transfer declined'));
+                    return;
+                }
                 if (data.type === 'ack' && data.payload && data.payload.index === index) {
+                    settled = true;
                     cleanup();
                     resolve();
                 }
             };
-            const timer = setTimeout(() => {
-                cleanup();
-                const t = state.translations || {};
-                reject(new Error(t.transfer_error_peer_timeout || 'Peer stopped responding. Transfer cancelled.'));
-            }, timeoutMs);
-            const cleanup = () => {
-                clearTimeout(timer);
-                if (this.conn) this.conn.off('data', handler);
-            };
-            this.conn.on('data', handler);
+            const onClose = () => finishReject(new Error(t.transfer_status_closed || 'Connection closed'));
+            const onError = (err) => finishReject(err instanceof Error ? err : new Error(err?.message || 'Connection error'));
+            const timer = setTimeout(() => finishReject(new Error(t.transfer_error_peer_timeout || 'Peer stopped responding. Transfer cancelled.')), timeoutMs);
+
+            this._cancelAck = cancel;
+            conn.on('data', onData);
+            conn.on('close', onClose);
+            conn.on('error', onError);
         });
     },
 
+    _toUint8Array(raw) {
+        if (raw instanceof Uint8Array) return raw;
+        if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+        if (ArrayBuffer.isView(raw)) return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+        if (Array.isArray(raw)) return new Uint8Array(raw);
+        return null;
+    },
+
     handleChunk(payload) {
-        this.chunks[payload.index] = payload.data;
-        this.receivedSize += payload.data.length;
-        this.updateProgress(this.receivedSize);
-        this.conn.send({ type: 'ack', payload: { index: payload.index } });
+        if (!payload) return;
+        const idx = payload.index;
+        if (!Number.isInteger(idx) || idx < 0) return;
+        if (this.expectedChunks > 0 && idx >= this.expectedChunks) return;
+        const u8 = this._toUint8Array(payload.data);
+        if (!u8) return;
+
+        if (!this._receivedChunkSet) this._receivedChunkSet = new Set();
+        if (!this._receivedChunkSet.has(idx)) {
+            this.chunks[idx] = u8;
+            this._receivedChunkSet.add(idx);
+            this.receivedSize += u8.byteLength;
+            this.updateProgress(this.receivedSize);
+        }
+        if (this.conn) this.conn.send({ type: 'ack', payload: { index: idx } });
     },
 
     updateProgress(current) {
-        const pct = Math.round((current / this.totalSize) * 100);
+        const pct = this.totalSize > 0 ? Math.min(100, Math.round((current / this.totalSize) * 100)) : 0;
         const bar = document.getElementById('transfer-progress-bar');
         const pctText = document.getElementById('transfer-pct');
         const stats = document.getElementById('transfer-stats');
@@ -740,18 +1004,28 @@ export const TransferController = {
     async finalizeTransfer() {
         const t = state.translations || {};
         try {
-            const missingChunks = this.chunks.filter(c => !c).length;
-            const totalLen = this.chunks.reduce((acc, c) => acc + (c ? c.length : 0), 0);
+            const expected = this.expectedChunks > 0 ? this.expectedChunks : this.chunks.length;
+            let missingChunks = 0;
+            let totalLen = 0;
+            for (let i = 0; i < expected; i++) {
+                const c = this.chunks[i];
+                if (!(c instanceof Uint8Array)) {
+                    missingChunks++;
+                } else {
+                    totalLen += c.byteLength;
+                }
+            }
 
-            if (totalLen === 0 || missingChunks > 0 || (this.totalSize > 0 && totalLen !== this.totalSize)) {
+            if (expected === 0 || totalLen === 0 || missingChunks > 0 || (this.totalSize > 0 && totalLen !== this.totalSize)) {
                 throw new Error(`Incomplete transfer: received ${totalLen} of ${this.totalSize} bytes, missing chunks: ${missingChunks}`);
             }
 
             const finalU8 = new Uint8Array(totalLen);
             let offset = 0;
-            for (const chunk of this.chunks) {
+            for (let i = 0; i < expected; i++) {
+                const chunk = this.chunks[i];
                 finalU8.set(chunk, offset);
-                offset += chunk.length;
+                offset += chunk.byteLength;
             }
             this.receivedData = finalU8;
             this.showMergeUI();

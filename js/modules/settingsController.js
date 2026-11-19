@@ -8,6 +8,7 @@ import { DB } from './db.js';
 import { RemoteStorage, RemoteAdapters } from './remoteStorage.js';
 import { Auth } from './auth.js';
 import { UI } from './ui.js';
+import { semanticCore } from './semantics.js';
 
 const esc = (value) => UI.escapeHTML(String(value ?? ''));
 
@@ -102,9 +103,23 @@ export const SettingsController = {
         const contentEl = row.querySelector('.fact-content');
         const oldContent = contentEl.textContent || '';
         const newContent = await UI.prompt(t.prompt_edit_fact || 'Edit memory fact:', oldContent);
-        if (newContent !== null && newContent.trim() && newContent !== oldContent) {
-            DB.updateFact(id, newContent.trim());
-            contentEl.textContent = newContent.trim();
+        if (newContent !== null && newContent.trim() && newContent.trim() !== oldContent) {
+            const trimmed = newContent.trim();
+            let embeddingArr = [];
+            try {
+                const vec = await semanticCore.getEmbedding(trimmed);
+                embeddingArr = Array.isArray(vec) ? vec : (vec?.data ? Array.from(vec.data) : []);
+            } catch (_) {
+                try {
+                    const existing = DB.query("SELECT embedding FROM memory_facts WHERE id = ?", [id])[0];
+                    if (existing && existing.embedding) {
+                        const parsed = JSON.parse(existing.embedding);
+                        if (Array.isArray(parsed)) embeddingArr = parsed;
+                    }
+                } catch (_2) {}
+            }
+            DB.updateFact(id, trimmed, embeddingArr);
+            contentEl.textContent = trimmed;
         }
     },
 
@@ -138,7 +153,7 @@ export const SettingsController = {
             max_output_tokens: getVal('inp-max-output', state.userSettings.max_output_tokens || 2048),
             show_stickers: getVal('inp-show-stickers', state.userSettings.show_stickers ?? 'true'),
             ai_temp: getVal('inp-ai-temp', state.userSettings.ai_temp ?? 0.9),
-            rss_urls: document.getElementById('inp-rss-urls')?.value || state.userSettings.rss_urls || '',
+            rss_urls: getVal('inp-rss-urls', state.userSettings.rss_urls || ''),
             search_provider: getVal('inp-search-provider', state.userSettings.search_provider || 'none'),
             search_smart: getVal('inp-search-smart', state.userSettings.search_smart ?? 'true'),
             tavily_key: getVal('inp-tavily-key', state.userSettings.tavily_key || ''),
@@ -328,7 +343,7 @@ export const SettingsController = {
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${t.label_gemini_model || 'Gemini Model'}</label>
-                                            <input type="text" id="inp-gemini-model" value="${esc(s.gemini_model || 'gemini-1.5-flash')}" placeholder="gemini-1.5-flash" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
+                                            <input type="text" id="inp-gemini-model" value="${esc(s.gemini_model || 'gemini-2.5-flash')}" placeholder="gemini-2.5-flash" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-aru-400">
                                         </div>
                                     </div>
                                 </div>
@@ -457,7 +472,7 @@ export const SettingsController = {
                                         ${memories.length === 0 ? `<tr><td colspan="2" class="py-10 text-center text-gray-400 italic">${t.empty_memory || 'У Ару пока нет записей в памяти.'}</td></tr>` :
                 memories.map(m => `
                                             <tr data-id="${m.id}">
-                                                <td class="py-3 px-1 dark:text-gray-300 pr-4 fact-content">${m.content}</td>
+                                                <td class="py-3 px-1 dark:text-gray-300 pr-4 fact-content">${esc(m.content)}</td>
                                                 <td class="py-3 px-1 text-right flex items-center justify-end gap-1">
                                                     <button onclick="app.editMemory(${m.id}, this)" class="p-1.5 text-gray-400 hover:text-aru-500 transition-colors">
                                                         <i data-lucide="edit-3" class="w-4 h-4"></i>
@@ -573,7 +588,7 @@ export const SettingsController = {
                                             <option value="default" ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'selected' : ''}>${t.label_signaling_default || 'PeerJS Cloud (По умолчанию)'}</option>
                                             <option value="custom" ${s.signaling_server && s.signaling_server !== 'peerjs-default' ? 'selected' : ''}>${t.label_signaling_custom || 'Свой сервер'}</option>
                                         </select>
-                                        <input type="text" id="inp-signaling-custom" value="${esc(s.signaling_server || '')}" placeholder="my-signaling-id" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'hidden' : ''}">
+                                        <input type="text" id="inp-signaling-custom" value="${esc(s.signaling_server || '')}" placeholder="https://peer.example.com:9000/myapp" class="w-full mt-2 p-2 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200 ${!s.signaling_server || s.signaling_server === 'peerjs-default' ? 'hidden' : ''}">
                                         <p class="text-[9px] text-gray-400 mt-1">${t.hint_signaling_server || 'PeerJS Cloud (peerjs-default) or custom server.'}</p>
                                     </div>
                                 </div>
@@ -765,11 +780,11 @@ export const SettingsController = {
         const isConfigured = llmType === 'custom' ? !!s.custom_url : !!(llmType === 'gemini' ? s.gemini_key : s.openrouter_key);
         const modelLabel = !isConfigured
             ? `<span class="text-gray-400">${t.state_model_not_set || 'Не настроена'}</span>`
-            : (modelName ? `${providerName} · ${modelName}` : providerName);
+            : (modelName ? `${providerName} · ${esc(modelName)}` : providerName);
 
         const searchProvider = s.search_provider || 'none';
         const searchOn = searchProvider !== 'none';
-        const searchName = searchProvider === 'tavily' ? 'Tavily' : (searchProvider === 'searxng' ? 'SearXNG' : searchProvider);
+        const searchName = searchProvider === 'tavily' ? 'Tavily' : (searchProvider === 'searxng' ? 'SearXNG' : esc(searchProvider));
         const searchLabel = searchOn
             ? `<span class="text-emerald-600 dark:text-emerald-400">${t.state_on || 'Вкл'} · ${searchName}</span>`
             : onOff(false, '', t.state_off || 'Выкл');
@@ -782,7 +797,7 @@ export const SettingsController = {
         const locations = [`<i data-lucide="hard-drive" class="w-3.5 h-3.5 inline-block text-gray-400"></i> ${t.state_storage_cache || 'Кэш браузера'}`];
         if (DB.fileHandle) locations.push(`<i data-lucide="file" class="w-3.5 h-3.5 inline-block text-gray-400"></i> ${t.state_storage_file || 'Файл'}`);
         if (cloudConfigured) {
-            const cloudName = RS.isUnlocked() ? (RS.displayName() || t.state_storage_cloud || 'Облако') : (t.state_storage_cloud_locked || 'Облако (заблокировано)');
+            const cloudName = RS.isUnlocked() ? esc(RS.displayName() || t.state_storage_cloud || 'Облако') : (t.state_storage_cloud_locked || 'Облако (заблокировано)');
             locations.push(`<i data-lucide="cloud" class="w-3.5 h-3.5 inline-block text-gray-400"></i> ${cloudName}`);
         }
 
@@ -969,11 +984,11 @@ export const SettingsController = {
             body = `
                 <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
                     <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="cloud" class="w-4 h-4 text-sky-500"></i> ${RS.displayName()}</h4>
+                        <h4 class="text-sm font-bold flex items-center gap-2"><i data-lucide="cloud" class="w-4 h-4 text-sky-500"></i> ${esc(RS.displayName())}</h4>
                         <span class="text-[10px] font-bold text-sky-500 uppercase tracking-widest">${t.storage_status_on || 'Активно'}</span>
                     </div>
                     <div class="text-xs text-gray-500 space-y-1">
-                        <div class="flex justify-between"><span>${t.storage_label_file || 'Файл'}</span><b class="text-gray-700 dark:text-gray-300">${RS.profile?.fileName || '—'}</b></div>
+                        <div class="flex justify-between"><span>${t.storage_label_file || 'Файл'}</span><b class="text-gray-700 dark:text-gray-300">${esc(RS.profile?.fileName || '—')}</b></div>
                         <div class="flex justify-between"><span>${t.storage_label_last_sync || 'Последняя синхронизация'}</span><b class="text-gray-700 dark:text-gray-300">${syncLabel}</b></div>
                     </div>
                 </div>
@@ -1188,11 +1203,17 @@ export const SettingsController = {
                 } else if (choice === 'copy') {
                     const bytes = await RemoteStorage.pullBytes();
                     const blob = new Blob([bytes], { type: 'application/x-sqlite3' });
+                    const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     document.body.appendChild(a);
-                    a.href = window.URL.createObjectURL(blob);
+                    a.href = url;
                     a.download = 'aru_remote_copy.sqlite';
-                    a.onclick = () => { setTimeout(() => { document.body.removeChild(a); }, 1500); };
+                    a.onclick = () => {
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                        }, 1500);
+                    };
                     a.click();
                 }
             } else {
@@ -1207,7 +1228,7 @@ export const SettingsController = {
     storageDisconnect: async () => {
         const t = state.translations || {};
         if (!(await UI.confirm(t.storage_disconnect_confirm || 'Отключить облачное хранилище? Локальная база останется на этом устройстве, файл на сервере не удаляется.'))) return;
-        try { window.SyncEngine?.disable?.(); } catch (e) { /* ignore */ }
+        try { await window.SyncEngine?.disable?.(); } catch (e) { /* ignore */ }
         await RemoteStorage.disconnect();
         SettingsController.app.updateSyncStatus('synced');
         SettingsController.renderStorageTab();
@@ -1221,6 +1242,7 @@ export const SettingsController = {
                 try {
                     await Auth.registerBiometrics(pwd, dbKey, state.userSettings?.user_name || 'Aru User');
                     DB.saveSetting('biometrics_enabled', 'true');
+                    state.userSettings = { ...state.userSettings, biometrics_enabled: 'true' };
                     UI.showToast(t.toast_biometrics_enabled || 'Биометрия успешно подключена!', 'check-circle');
                 } catch (e) {
                     console.error('Error enabling biometrics', e);
@@ -1231,10 +1253,14 @@ export const SettingsController = {
                     }
                 }
                 SettingsController.switchTab('security');
+            }, () => {
+                const toggle = document.getElementById('inp-biometrics-toggle');
+                if (toggle) toggle.checked = false;
             });
         } else {
             Auth.removeBiometrics(dbKey);
             DB.saveSetting('biometrics_enabled', 'false');
+            state.userSettings = { ...state.userSettings, biometrics_enabled: 'false' };
             UI.showToast(t.toast_biometrics_disabled || 'Биометрия отключена на этом устройстве.', 'shield-off');
             SettingsController.switchTab('security');
         }
@@ -1317,6 +1343,7 @@ export const SettingsController = {
                     if (e.name !== 'NotAllowedError') console.error('Biometrics re-registration failed', e);
                     Auth.removeBiometrics(dbKey);
                     DB.saveSetting('biometrics_enabled', 'false');
+                    state.userSettings = { ...state.userSettings, biometrics_enabled: 'false' };
                     await UI.alert(t.alert_password_bio_reset || 'Биометрию не удалось перерегистрировать - она отключена. Включите её заново.');
                 }
             }

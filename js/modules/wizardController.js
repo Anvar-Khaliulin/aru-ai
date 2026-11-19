@@ -21,20 +21,31 @@ export const WizardController = {
      * Detect user intent to create artifact (game/app/doc/analytics) and synthesize a starter artifact.
      * Returns true if an artifact was created and rendered (no LLM call needed).
      */
+    _eulaTimer: null,
+    _eulaLangCache: {},
+    _eulaActiveStrings: null,
+    _eulaSeconds: 0,
+
     showEULA: async () => {
         const modalContainer = document.getElementById('modal-container');
         const t = state.translations || {};
+        if (WizardController._eulaTimer) {
+            clearInterval(WizardController._eulaTimer);
+            WizardController._eulaTimer = null;
+        }
+        WizardController._eulaActiveStrings = t;
+        WizardController._eulaSeconds = 20;
 
         let html = `
         <div class="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden">
-            <div class="bg-white dark:bg-slate-900 w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/10">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-4xl h-[90dvh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/10" role="dialog" aria-modal="true">
                 <div class="flex-1 overflow-y-auto custom-scrollbar p-0" id="eula-content-frame">
                     <div class="flex items-center justify-center h-full">
                         <div class="w-8 h-8 border-4 border-aru-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                 </div>
                 <div class="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-center bg-slate-50 dark:bg-slate-900/50">
-                    <button id="eula-confirm-btn" disabled class="px-8 py-3 bg-gray-300 dark:bg-slate-800 text-gray-500 rounded-xl font-bold transition-all flex items-center gap-3 cursor-not-allowed">
+                    <button type="button" id="eula-confirm-btn" disabled class="px-8 py-3 bg-gray-300 dark:bg-slate-800 text-gray-500 rounded-xl font-bold transition-all flex items-center gap-3 cursor-not-allowed">
                         <span id="eula-btn-text">${t.eula_wait_prefix || 'Please wait'}... (20)</span>
                     </button>
                 </div>
@@ -56,7 +67,7 @@ export const WizardController = {
             const mainContent = doc.querySelector('main');
             if (mainContent) {
                 frame.innerHTML = `<div class="p-6 md:p-10">${mainContent.innerHTML}</div>`;
-                updateUI('en'); // Default to English content as per user request
+                await updateUI(state.lang || 'ru');
                 // Replace lucide placeholders with SVG icons inside injected EULA
                 try { lucide.createIcons(); } catch (e) { console.warn('lucide.createIcons failed on EULA injection', e); }
             }
@@ -64,20 +75,26 @@ export const WizardController = {
             console.error('Failed to load EULA', e);
         }
 
-        let seconds = 20;
         const btn = document.getElementById('eula-confirm-btn');
         const btnText = document.getElementById('eula-btn-text');
 
-        const timer = setInterval(() => {
-            seconds--;
-            if (seconds > 0) {
-                btnText.textContent = `${t.eula_wait_prefix || 'Please wait'}... (${seconds})`;
+        WizardController._eulaTimer = setInterval(() => {
+            if (!btn || !btn.isConnected) {
+                clearInterval(WizardController._eulaTimer);
+                WizardController._eulaTimer = null;
+                return;
+            }
+            const curT = WizardController._eulaActiveStrings || state.translations || {};
+            WizardController._eulaSeconds--;
+            if (WizardController._eulaSeconds > 0) {
+                if (btnText) btnText.textContent = `${curT.eula_wait_prefix || 'Please wait'}... (${WizardController._eulaSeconds})`;
             } else {
-                clearInterval(timer);
+                clearInterval(WizardController._eulaTimer);
+                WizardController._eulaTimer = null;
                 btn.disabled = false;
                 btn.classList.remove('bg-gray-300', 'dark:bg-slate-800', 'text-gray-500', 'cursor-not-allowed');
                 btn.classList.add('bg-aru-500', 'hover:bg-aru-600', 'text-white', 'shadow-lg', 'shadow-aru-500/30');
-                btnText.textContent = t.eula_confirm_btn || 'Confirm';
+                if (btnText) btnText.textContent = curT.eula_confirm_btn || 'Confirm';
                 btn.onclick = () => {
                     DB.saveSetting('rules', '1');
                     modalContainer.innerHTML = '';
@@ -87,9 +104,11 @@ export const WizardController = {
         }, 1000);
     },
 
-    updateEULALang: (container, forceLang) => {
-        let lang = forceLang || state.lang || 'en';
+    updateEULALang: async (container, forceLang) => {
+        if (!container) return;
+        let lang = forceLang || state.lang || 'ru';
         if (lang === 'kk') lang = 'kz';
+        const appLang = lang === 'kz' ? 'kk' : lang;
 
         // Toggle text blocks
         container.querySelectorAll('.lang-node').forEach(node => {
@@ -108,32 +127,35 @@ export const WizardController = {
             }
         });
 
-        // Translate the whole modal if possible
+        let dict = (appLang === state.lang && state.translations && Object.keys(state.translations).length)
+            ? state.translations
+            : WizardController._eulaLangCache[appLang];
+        if (!dict) {
+            try {
+                const resp = await fetch(`lang/${appLang}.json`);
+                if (resp.ok) {
+                    dict = await resp.json();
+                    WizardController._eulaLangCache[appLang] = dict;
+                }
+            } catch (_) {}
+        }
+        dict = dict || state.translations || {};
+        WizardController._eulaActiveStrings = dict;
+
         const modal = container.closest('.fixed');
         if (modal) {
-            // Update modal title and confirm button via applyTranslations if they have data-i18n
-            // or manually if they don't
-            const currentT = state.allTranslations ? state.allTranslations[lang === 'kz' ? 'kk' : lang] : null;
-            if (currentT) {
-                const btn = modal.querySelector('#eula-confirm-btn');
-                const btnText = modal.querySelector('#eula-btn-text');
-                if (btn && btnText) {
-                    const waitPrefix = currentT.eula_wait_prefix || 'Please wait';
-                    const confirmText = currentT.eula_confirm_btn || 'Confirm';
-                    // If button is still disabled, it shows timer. If not, it shows confirm.
-                    // This is handled by the setInterval in showEULA, but let's update fallbacks.
-                }
-
-                // Re-run applyTranslations with forced language if we have it
-                if (WizardController.app.applyTranslations) {
-                    // Temporarily swap state.lang or pass lang
-                    const oldLang = state.lang;
-                    state.lang = (lang === 'kz' ? 'kk' : lang);
-                    WizardController.app.applyTranslations(modal);
-                    try { lucide.createIcons(); } catch (e) { console.warn('lucide.createIcons failed after applyTranslations', e); }
-                    state.lang = oldLang;
-                }
+            modal.querySelectorAll('[data-i18n]').forEach((el) => {
+                const key = el.getAttribute('data-i18n');
+                if (dict[key]) el.textContent = dict[key];
+            });
+            const btn = modal.querySelector('#eula-confirm-btn');
+            const btnText = modal.querySelector('#eula-btn-text');
+            if (btn && btnText) {
+                btnText.textContent = btn.disabled
+                    ? `${dict.eula_wait_prefix || 'Please wait'}... (${Math.max(1, WizardController._eulaSeconds)})`
+                    : (dict.eula_confirm_btn || 'Confirm');
             }
+            try { if (window.lucide) lucide.createIcons(); } catch (_) {}
         }
     },
 
@@ -376,7 +398,6 @@ export const WizardController = {
             lucide.createIcons();
             return;
         }
-        const esc = (s) => String(s).replace(/'/g, "\\'");
         let hasV2 = false;
         try { hasV2 = !!(await window.SyncEngine?.hasCloudWorkspace?.()); } catch (e) { hasV2 = false; }
         const v2Row = hasV2 && mode === 'open' ? `
@@ -389,10 +410,10 @@ export const WizardController = {
                 <i data-lucide="download" class="w-4 h-4 text-aru-400"></i>
             </button>` : '';
         const rows = files.length ? files.map(f => `
-            <button onclick="WizardController.openRemoteFile('${f.id}', '${esc(f.name)}', '${mode}')" class="w-full p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-aru-400 hover:bg-aru-50 dark:hover:bg-aru-900/20 transition flex items-center gap-3 text-left">
+            <button type="button" data-remote-file-id="${esc(f.id)}" data-remote-file-name="${esc(f.name)}" data-remote-mode="${esc(mode)}" class="w-full p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-aru-400 hover:bg-aru-50 dark:hover:bg-aru-900/20 transition flex items-center gap-3 text-left">
                 <i data-lucide="database" class="w-4 h-4 text-aru-500 flex-shrink-0"></i>
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-bold text-gray-700 dark:text-gray-200 truncate">${f.name}</div>
+                    <div class="text-sm font-bold text-gray-700 dark:text-gray-200 truncate">${esc(f.name)}</div>
                     <div class="text-[10px] text-gray-400">${f.ts ? new Date(f.ts).toLocaleString() : ''} · ${Math.max(1, Math.round((f.size || 0) / 1024))} KB</div>
                 </div>
                 <i data-lucide="${mode === 'link' ? 'check-circle-2' : 'download'}" class="w-4 h-4 text-gray-300"></i>
@@ -404,10 +425,19 @@ export const WizardController = {
         body.innerHTML = `
             <div class="flex items-center justify-between mb-3">
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${mode === 'link' ? (t.remote_pick_file_link || 'Выберите файл или загрузите текущую базу') : (t.remote_pick_file || 'Выберите файл базы')}</span>
-                <button onclick="WizardController._renderRemotePicker('${mode}')" class="p-1.5 text-gray-400 hover:text-aru-500 transition-colors" title="Refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                <button onclick="WizardController._renderRemotePicker('${esc(mode)}')" class="p-1.5 text-gray-400 hover:text-aru-500 transition-colors" title="Refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
             </div>
             <div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar mb-3">${v2Row}${rows}</div>
             ${linkUpload}`;
+        body.querySelectorAll('[data-remote-file-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                WizardController.openRemoteFile(
+                    btn.dataset.remoteFileId,
+                    btn.dataset.remoteFileName,
+                    btn.dataset.remoteMode || 'open'
+                );
+            });
+        });
         lucide.createIcons();
     },
 
@@ -486,22 +516,6 @@ export const WizardController = {
             console.error('uploadLocalAsNewRemote failed', e);
             await UI.alert((t.remote_error_setup || 'Не удалось настроить облачное хранилище') + ': ' + e.message);
         }
-    },
-
-    // Called from app.init when returning from the Google consent screen (remote-open flow)
-    resumeRemoteOpen: async (oauth) => {
-        const profile = {
-            type: 'gdrive',
-            clientId: oauth.clientId,
-            accessToken: oauth.tokens.accessToken,
-            refreshToken: oauth.tokens.refreshToken,
-            accessTokenExp: Date.now() + (oauth.tokens.expiresIn || 3600) * 1000,
-            fileName: 'aru_database.sqlite',
-            createdAt: Date.now()
-        };
-        await RemoteStorage.adoptPending(profile);
-        WizardController.app.openModal('remote');
-        await WizardController._renderRemotePicker();
     },
 
     renderWizard: () => {
@@ -592,7 +606,7 @@ export const WizardController = {
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">${t.label_gemini_model || 'Gemini Model'}</label>
-                            <input type="text" id="wiz-gemini-model" value="${esc(data.gemini_model || '')}" placeholder="gemini-2.0-flash" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
+                            <input type="text" id="wiz-gemini-model" value="${esc(data.gemini_model || '')}" placeholder="gemini-2.5-flash" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm">
                         </div>
                     ` : ''}
 
@@ -938,34 +952,6 @@ export const WizardController = {
         }
     },
 
-    // Completes wizard creation after returning from the Google consent screen
-    finishGoogleCreate: async (oauth, d) => {
-        const t = state.translations || {};
-        try {
-            const profile = {
-                type: 'gdrive',
-                clientId: oauth.clientId,
-                accessToken: oauth.tokens.accessToken,
-                refreshToken: oauth.tokens.refreshToken,
-                accessTokenExp: Date.now() + (oauth.tokens.expiresIn || 3600) * 1000,
-                fileName: 'aru_database.sqlite',
-                createdAt: Date.now()
-            };
-            await RemoteStorage.saveProfile(profile, d.password);
-            const v2 = await WizardController._enableSyncV2(d.password);
-            if (!v2) {
-                await RemoteStorage.createRemoteFile('aru_database.sqlite');
-                await RemoteStorage.pushNow(DB.db.export());
-            }
-        } catch (e) {
-            // Local DB is already created; cloud link can be retried from Settings → Storage
-            console.error('finishGoogleCreate cloud setup failed', e);
-            await UI.alert((t.remote_error_setup || 'База создана локально, но настройка Google Drive не удалась. Повторите позже в Настройках → Хранилище.') + '\n' + e.message);
-        }
-        await DB.save();
-        WizardController.app.startSession();
-    },
-
     // Turns on merge-based sync for a freshly created workspace. Returns false
     // when the user declined or v2 is unavailable, so the caller keeps the
     // legacy single-file cloud flow.
@@ -1141,10 +1127,34 @@ export const WizardController = {
     resetDB: async () => {
         const t = state.translations || {};
         if (!(await UI.confirm(t.confirm_reset_db || "Внимание! Это удалит текущую базу из браузера безвозвратно. Продолжить?"))) return;
-        // Full delete: keep as explicit destructive action (Delete DB file from storage)
-        await localforage.removeItem(DB.dbPath);
-        // Also remove file handle metadata if exists
-        try { if (DB.handleKey) await localforage.removeItem(DB.handleKey); } catch (e) { console.warn('Failed to remove file handle', e); }
+        const dbPath = DB.dbPath || 'aru_db_v1';
+        try { await window.SyncEngine?.disable?.(); } catch (_) {}
+        try { window.RemoteStorage?.lock?.(); } catch (_) {}
+        const lfKeys = [
+            dbPath,
+            DB.handleKey,
+            `aru_remote_${dbPath}`,
+            `aru_remote_meta_${dbPath}`,
+            `aru_sync_trusted_${dbPath}`,
+            `aru_sync_base_${dbPath}`
+        ].filter(Boolean);
+        for (const k of lfKeys) {
+            try { await localforage.removeItem(k); } catch (e) { console.warn('Failed to remove localforage item', k, e); }
+        }
+        const lsKeys = [
+            'aru_authorized',
+            'aru_active_db',
+            'aru_last_chat',
+            'task_plugin_pending',
+            'aru_skills_project',
+            Auth.getBiometricsKey(dbPath),
+            `aru_sync_trusted_${dbPath}`,
+            `aru_sync_trust_${dbPath}`,
+            `aru_sync_meta2_${dbPath}`
+        ];
+        for (const k of lsKeys) {
+            try { localStorage.removeItem(k); } catch (_) {}
+        }
         location.reload();
     },
 
@@ -1152,6 +1162,8 @@ export const WizardController = {
     disconnectDB: async () => {
         const t = state.translations || {};
         if (!(await UI.confirm(t.confirm_disconnect_db || "Текущее подключение будет разорвано. Выберите базу для подключения. Продолжить?"))) return;
+        try { window.SyncEngine?.stop?.(); } catch (_) {}
+        try { window.RemoteStorage?.lock?.(); } catch (_) {}
         try {
             // Clear file handle in DB and storage, but keep DB data in IndexedDB
             if (DB && typeof DB.setFileHandle === 'function') await DB.setFileHandle(null);
@@ -1161,6 +1173,8 @@ export const WizardController = {
         }
         // De-authorize session and show login
         localStorage.removeItem('aru_authorized');
+        localStorage.removeItem('task_plugin_pending');
+        localStorage.removeItem('aru_skills_project');
         location.reload();
     },
 };

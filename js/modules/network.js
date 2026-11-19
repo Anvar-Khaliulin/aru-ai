@@ -50,22 +50,22 @@ export const Network = {
 
         // 3. Strategy: Custom (trusted proxy chosen by the user)
         if (strategy === 'custom' && customProxy) {
-            console.log(`Network: Using custom proxy for ${url}`);
+            console.log(`Network: Using custom proxy for ${this._redactUrl(url)}`);
             return this._fetchWrapped(this._buildProxyUrl(customProxy, url), requestOptions, timeout);
         }
 
         // 4. Context 'local_api' under auto strategy: try direct first so that
         // credentials never leak through public proxies. Fall back to public
-        // proxies ONLY when the request has no Authorization header.
+        // proxies ONLY when the request has no credentials.
         if (context === 'local_api') {
-            const hasCredentials = !!(requestOptions.headers && (requestOptions.headers['Authorization'] || requestOptions.headers.Authorization));
+            const hasCredentials = this._hasCredentials(url, requestOptions);
             try {
                 console.log(`Network: Direct route for API ${this._redactUrl(url)}`);
                 return await this._fetchDirect(url, this._withAddressSpace(requestOptions, isLocal, isLoopback), timeout);
             } catch (e) {
-                if (e instanceof TypeError) {
+                if (e instanceof TypeError || (e && e.isNetworkError)) {
                     if (hasCredentials) {
-                        throw new Error(`Direct request to ${url} failed (CORS or network). For your safety, Aru never sends API keys through public proxies. Options: enable CORS on the server, run the app on the same machine/network, or configure a trusted custom proxy in Settings → Network.`);
+                        throw new Error(`Direct request to ${this._redactUrl(url)} failed (CORS or network). For your safety, Aru never sends API keys through public proxies. Options: enable CORS on the server, run the app on the same machine/network, or configure a trusted custom proxy in Settings → Network.`);
                     }
                     console.warn('Network: local_api direct request failed, falling back to public proxies (request has no credentials)');
                     return this._fetchAutoProxy(url, requestOptions);
@@ -78,6 +78,23 @@ export const Network = {
         // For API data or RSS, try corsproxy.io first as it's cleaner, then fallback to AllOrigins
         console.log(`Network: Using auto proxy for ${this._redactUrl(url)}`);
         return this._fetchAutoProxy(url, requestOptions);
+    },
+
+    _hasCredentials(url, options) {
+        const headers = options && options.headers;
+        if (headers) {
+            if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+                if (headers.has('authorization') || headers.has('x-api-key')) return true;
+            } else if (typeof headers === 'object') {
+                for (const key of Object.keys(headers)) {
+                    const lower = key.toLowerCase();
+                    if ((lower === 'authorization' || lower === 'x-api-key') && headers[key]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return /[?&](?:key|api_key|apikey|token)=[^&\s]+/i.test(String(url || ''));
     },
 
     _hostname(url) {
@@ -98,7 +115,7 @@ export const Network = {
         if (!hostname) return false;
         const bare = hostname.replace(/^\[|\]$/g, '');
         return bare === 'localhost' || bare.endsWith('.localhost') ||
-            bare === '::1' || bare === '[::]' || bare === '0.0.0.0' ||
+            bare === '::1' || bare === '::' || bare === '0.0.0.0' ||
             bare === '127.0.0.1' || /^127\.\d+\.\d+\.\d+$/.test(bare);
     },
 
@@ -139,10 +156,12 @@ export const Network = {
                 throw new Error('Request timed out. The server is not responding.');
             }
             if (e instanceof TypeError) {
-                if (window.location.protocol === 'https:' && url.startsWith('http:')) {
-                    throw new Error("Mixed Content: Browser blocked HTTP request from HTTPS. Allow 'Insecure content' in site settings or use local version of the app.");
-                }
-                throw new Error("Network Error: Failed to fetch. Check if the server is running, CORS is enabled, and 'Insecure content' is allowed if using HTTPS.");
+                const msg = (window.location.protocol === 'https:' && url.startsWith('http:'))
+                    ? "Mixed Content: Browser blocked HTTP request from HTTPS. Allow 'Insecure content' in site settings or use local version of the app."
+                    : "Network Error: Failed to fetch. Check if the server is running, CORS is enabled, and 'Insecure content' is allowed if using HTTPS.";
+                const err = new Error(msg);
+                err.isNetworkError = true;
+                throw err;
             }
             throw e;
         }
@@ -151,11 +170,15 @@ export const Network = {
     _fetchWithTimeout(url, options = {}, ms = DEFAULT_TIMEOUT_MS) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), ms);
+        const onAbort = () => controller.abort();
         if (options && options.signal) {
             if (options.signal.aborted) controller.abort();
-            else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+            else options.signal.addEventListener('abort', onAbort, { once: true });
         }
-        return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+        return fetch(url, { ...options, signal: controller.signal }).finally(() => {
+            clearTimeout(timer);
+            if (options && options.signal) options.signal.removeEventListener('abort', onAbort);
+        });
     },
 
     /**
@@ -163,7 +186,7 @@ export const Network = {
      * timeout so one dead proxy cannot stall the whole request.
      */
     async _fetchAutoProxy(url, options) {
-        const hasCredentials = !!(options.headers && (options.headers['Authorization'] || options.headers.Authorization));
+        const hasCredentials = this._hasCredentials(url, options);
         if (hasCredentials) {
             throw new Error('For your safety, Aru never sends API keys through public proxies. Configure a trusted custom proxy in Settings → Network.');
         }
@@ -182,6 +205,7 @@ export const Network = {
                 if (res.ok) return res;
                 console.warn(`Network: Public proxy ${attempt.name} responded with ${res.status}`);
             } catch (e) {
+                if (options && options.signal && options.signal.aborted) throw e;
                 console.warn(`Network: Public proxy ${attempt.name} failed: ${e.message}`);
             }
         }

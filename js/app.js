@@ -95,10 +95,19 @@ function applyTranslations(root) {
     });
 }
 
+function applyTheme(theme) {
+    const isDark = theme === 'dark';
+    document.documentElement.className = isDark ? 'dark' : 'light';
+    const lightSheet = document.getElementById('hljs-theme-light');
+    const darkSheet = document.getElementById('hljs-theme-dark');
+    if (lightSheet) lightSheet.disabled = isDark;
+    if (darkSheet) darkSheet.disabled = !isDark;
+}
+
 function toggleTheme() {
     state.theme = state.theme === 'light' ? 'dark' : 'light';
     localStorage.setItem('aru_theme', state.theme);
-    document.documentElement.className = state.theme;
+    applyTheme(state.theme);
 }
 
 // --- UI Logic ---
@@ -234,7 +243,6 @@ const app = {
         // Apply translations globally to catch "Theme" etc.
         applyTranslations(document);
     },
-    editMemory: (...args) => SettingsController.editMemory(...args),
 
     state: state,
     applyTranslations: applyTranslations,
@@ -244,22 +252,10 @@ const app = {
         UI.initMarked();
         // Initialize CanvasManager to observe theme changes
         try { if (window.CanvasManager && typeof window.CanvasManager.init === 'function') window.CanvasManager.init(); else CanvasManager.init(); } catch (e) { console.warn('Failed to init CanvasManager', e); }
-        document.documentElement.className = state.theme;
+        applyTheme(state.theme);
         await loadAppVersion();
         await loadTranslations(state.lang);
 
-        // Resume after a Google OAuth redirect (stored for the wizard / settings to pick up)
-        try {
-            if (new URL(window.location.href).searchParams.get('code')) {
-                const oauth = await RemoteStorage.handleGoogleAuthCallback();
-                if (oauth) {
-                    sessionStorage.setItem('aru_oauth_result', JSON.stringify(oauth));
-                }
-            }
-        } catch (e) {
-            console.error('Google OAuth callback failed', e);
-            sessionStorage.removeItem('aru_pending_gdrive');
-        }
         await PluginManager.init();
         await DesktopMode.init(app);
         TransferController.init();
@@ -342,73 +338,23 @@ const app = {
             }
         });
 
-        // Detect an interrupted remote-storage OAuth flow (wizard create / remote open)
-        let oauthResume = null;
-        try {
-            const raw = sessionStorage.getItem('aru_oauth_result');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed && parsed.resume && (parsed.resume.action === 'wiz-create' || parsed.resume.action === 'remote-open')) {
-                    oauthResume = parsed;
-                }
-            }
-        } catch (e) { console.warn('OAuth resume parse failed', e); }
-
-        if (!oauthResume) {
-            if (status === 'loaded') {
-                const isAuthorized = localStorage.getItem('aru_authorized') === 'true';
-                if (isAuthorized) {
-                    console.log("DB: Auto-authorizing session...");
-                    app.startSession(true); // silent start
-                } else {
-                    app.openModal('login'); // Password only for existing DB
-                }
+        if (status === 'loaded') {
+            const isAuthorized = localStorage.getItem('aru_authorized') === 'true';
+            if (isAuthorized) {
+                console.log("DB: Auto-authorizing session...");
+                app.startSession(true); // silent start
             } else {
-                app.openModal('create'); // This will trigger the Wizard
+                app.openModal('login'); // Password only for existing DB
             }
+        } else {
+            app.openModal('create'); // This will trigger the Wizard
         }
 
-        // Wire remote storage callbacks; sync activates once the profile is unlocked with the password
+        // Wire remote storage callbacks; sync activates only after session authorization
         RemoteStorage.onRemoteNewer = (info) => DB.handleRemoteNewer(info);
         RemoteStorage.onStatusChange = (st) => app.updateSyncStatus(st);
-        app.refreshRemoteSync();
-
-        // Finish what the Google redirect interrupted, after the UI is fully wired
-        if (oauthResume) {
-            sessionStorage.removeItem('aru_oauth_result');
-            try {
-                if (oauthResume.resume.action === 'wiz-create') {
-                    const wizRaw = sessionStorage.getItem('aru_wizard_resume');
-                    sessionStorage.removeItem('aru_wizard_resume');
-                    if (wizRaw) {
-                        app.wizardData = JSON.parse(wizRaw);
-                        await WizardController.finishGoogleCreate(oauthResume, app.wizardData);
-                    } else {
-                        app.openModal('create');
-                    }
-                } else if (oauthResume.resume.action === 'settings-link') {
-                    const profile = {
-                        type: 'gdrive',
-                        clientId: oauthResume.clientId,
-                        accessToken: oauthResume.tokens.accessToken,
-                        refreshToken: oauthResume.tokens.refreshToken,
-                        accessTokenExp: Date.now() + (oauthResume.tokens.expiresIn || 3600) * 1000,
-                        fileName: 'aru_database.sqlite',
-                        createdAt: Date.now()
-                    };
-                    await RemoteStorage.adoptPending(profile);
-                    WizardController._pendingRemoteProfile = JSON.parse(JSON.stringify(profile));
-                    WizardController._pendingLinkAfterLogin = true;
-                    app.openModal('login');
-                } else {
-                    await WizardController.resumeRemoteOpen(oauthResume);
-                }
-            } catch (e) {
-                console.error('OAuth resume failed', e);
-                sessionStorage.removeItem('aru_wizard_resume');
-                await UI.alert(e.message);
-                if (status === 'loaded') app.openModal('login'); else app.openModal('create');
-            }
+        if (status === 'loaded' && localStorage.getItem('aru_authorized') === 'true') {
+            app.refreshRemoteSync();
         }
 
         console.log("app.js initialized 🦊 (WASM Mode)");
@@ -519,7 +465,9 @@ const app = {
             app.loadChat(chats[0].id);
         }
 
-        semanticCore.init((p) => UI.updateModelProgress(p));
+        semanticCore.init((p) => UI.updateModelProgress(p)).catch((e) => {
+            console.warn('SemanticCore init failed:', e);
+        });
         app.updateSystemPrompt();
         app.updateSearchUI();
         window.dispatchEvent(new CustomEvent('aru-session-started'));
@@ -530,10 +478,13 @@ const app = {
         return raw.split('\n').map(s => s.trim()).filter(s => s);
     },
 
-    updateSystemPrompt: () => {
+    updateSystemPrompt: (tabOverride = null) => {
         const mode = state.userSettings.user_mode || 'adult';
-        // Ensure name is safe
-        const name = (state.userSettings.user_name || 'User').replace(/[^a-zA-Zа-яА-ЯёЁ0-9 ]/g, '');
+        const tokenLimit = parseInt(state.userSettings.token_limit) || 8192;
+        const compact = tokenLimit <= 8192;
+        const activeTab = tabOverride || (state.activeTabIndex >= 0 ? state.tabs[state.activeTabIndex] : null);
+        // Ensure name is safe while preserving Latin, Cyrillic, and Kazakh letters
+        const name = (state.userSettings.user_name || 'User').replace(/[^a-zA-Zа-яА-ЯёЁәіңғүұқөһӘІҢҒҮҰҚӨҺ0-9 -]/g, '');
 
         // Personality Summary from Heuristic Module
         const personalitySummary = Heuristics.getPersonalityPrompt();
@@ -547,21 +498,38 @@ const app = {
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
             const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
             const nowStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} (${weekday}) ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            const isOnTaskTab = !!(activeTab && activeTab.type === 'plugin' && activeTab.pluginId === 'task');
+            const compactTaskMode = compact && !isOnTaskTab;
 
             const projectsDesc = (taskState.projects || []).map(p => {
                 const cols = (p.columns || []).map(c => {
+                    const list = compactTaskMode ? c.tasks.slice(0, 8) : c.tasks;
+                    const suffix = compactTaskMode && c.tasks.length > 8 ? ` ... (+${c.tasks.length - 8} more)` : '';
                     const taskTitles = c.tasks.length > 0
-                        ? c.tasks.map(t => `"${t.title}"${t.deadline ? ` [due ${t.deadline}]` : ''}`).join(', ')
+                        ? list.map(t => `"${t.title}"${t.deadline ? ` [due ${t.deadline}]` : ''}`).join(', ') + suffix
                         : 'empty';
                     return `  • "${c.title}" [${c.tasks.length} tasks: ${taskTitles}]`;
                 }).join('\n');
                 return `▸ Project: "${p.name}" (ID: ${p.id})\n${cols}`;
             }).join('\n\n');
 
-            const activeTaskTab = state.activeTabIndex >= 0 ? state.tabs[state.activeTabIndex] : null;
-            const isOnTaskTab = activeTaskTab && activeTaskTab.type === 'plugin' && activeTaskTab.pluginId === 'task';
+            if (compactTaskMode) {
+                pluginContext = `
+[TASK MANAGER]
+Now: ${nowStr} (${timeZone}). Projects:
+${projectsDesc}
 
-            pluginContext = `
+COMMANDS (1 line each; exact project/column names; local deadline "YYYY-MM-DDTHH:MM", default 12:00):
+- [[TASK: CREATE_PROJECT name="..."]]
+- [[TASK: CREATE_TASK title="..." desc="..." deadline="YYYY-MM-DDTHH:MM" column="..." project="..."]]
+- [[TASK: UPDATE_TASK title="Current Title" new_title="..." desc="..." deadline="YYYY-MM-DDTHH:MM"]]
+- [[TASK: MOVE_TASK title="..." to_column="..." to_project="..."]]
+- [[TASK: DELETE_TASK title="..."]]
+- Show board card: [[TOOL:tasks project="..."]]
+Confirm executed actions in words.
+`;
+            } else {
+                pluginContext = `
 [TASK MANAGER - ACTIVE DATA]
 ${isOnTaskTab ? 'You are currently on the Task Manager tab.' : 'The user has a Task Manager with active projects. You can manage it from any chat.'}
 
@@ -588,10 +556,10 @@ RULES:
 - ALWAYS confirm what action you've taken after using a tag.
 - Keep every tag on ONE line (never break a tag across lines).
 `;
+            }
         }
 
         // In private chat — block task write-commands at the prompt level too
-        const activeTab = state.activeTabIndex >= 0 ? state.tabs[state.activeTabIndex] : null;
         if (activeTab && activeTab.isPrivate && pluginContext) {
             pluginContext += `
 [PRIVATE CHAT MODE]
@@ -601,24 +569,44 @@ If the user asks to modify tasks, politely explain that private mode does not al
 `;
         }
 
-        // Fit & Care is available from every regular chat: Aru is the main interface
-        // for reading and writing the journal, so casual mentions count as data.
-        // Health interpretation stays informational — never diagnosis or dosing advice.
-        const today = new Date();
-        const fitToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        const fitTabActive = activeTab && activeTab.type === 'plugin' && activeTab.pluginId === 'fit-care';
-        let fitSnapshot = '';
-        let fitCycleOn = false;
-        if (!(activeTab && activeTab.isPrivate) && window.DB && typeof window.DB.getFitAruSnapshot === 'function') {
-            try { fitSnapshot = window.DB.getFitAruSnapshot(fitTabActive) || ''; } catch (e) { fitSnapshot = ''; }
-            try { fitCycleOn = Number((window.DB.getFitProfile() || {}).cycle_tracking) === 1; } catch (e) { fitCycleOn = false; }
-        }
-        const fitCycleCommand = fitCycleOn
-            ? `\n6. Cycle: [[FIT: CYCLE_START date="YYYY-MM-DD"]], [[FIT: CYCLE_END date="YYYY-MM-DD"]], [[FIT: CYCLE_LOG date="YYYY-MM-DD" flow="light|medium|heavy|none" note="..."]]`
-            : '';
-        const fitPlanCommand = `
+        // Fit & Care is gated by age mode (never in child mode) and only injected once
+        // the user has actually started using Fit & Care (has data or is on its tab).
+        let fitCareContext = '';
+        const fitAllowed = mode !== 'child';
+        const fitTabActive = !!(activeTab && activeTab.type === 'plugin' && activeTab.pluginId === 'fit-care');
+        const hasFit = fitAllowed && (fitTabActive || !!(window.DB && typeof window.DB.hasFitData === 'function' && window.DB.hasFitData()));
+        if (hasFit) {
+            if (activeTab && activeTab.isPrivate) {
+                fitCareContext = '\n[FIT & CARE]\nDo not emit FIT commands in a private chat; explain that the private chat cannot write to the permanent Fit & Care journal.\n';
+            } else {
+                const today = new Date();
+                const fitToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                let fitSnapshot = '';
+                let fitCycleOn = false;
+                if (window.DB && typeof window.DB.getFitAruSnapshot === 'function') {
+                    try { fitSnapshot = window.DB.getFitAruSnapshot(fitTabActive) || ''; } catch (e) { fitSnapshot = ''; }
+                    try { fitCycleOn = Number((window.DB.getFitProfile() || {}).cycle_tracking) === 1; } catch (e) { fitCycleOn = false; }
+                }
+                const fitCycleCommand = fitCycleOn
+                    ? `\n6. Cycle: [[FIT: CYCLE_START date="YYYY-MM-DD"]], [[FIT: CYCLE_END date="YYYY-MM-DD"]], [[FIT: CYCLE_LOG date="YYYY-MM-DD" flow="light|medium|heavy|none" note="..."]]`
+                    : '';
+
+                if (compact && !fitTabActive) {
+                    fitCareContext = `
+[FIT & CARE] (Date: ${fitToday}${fitCycleOn ? ', cycle' : ''})
+${fitSnapshot ? `Journal facts (only source of truth):\n${fitSnapshot}\n` : ''}Treat casual food/training/metrics/sleep/med mentions as journal writes (1 command per single line):
+1. [[FIT: LOG date="YYYY-MM-DD" weight="70.5" body_fat="18.2" muscle_mass="30.1" water_pct="55" bone_mass="3.1" visceral_fat="8" sleep_hours="7.5" energy="1-5" mood="1-5" stress="1-5" steps="8000" calories="2100" protein="120" carbs="220" fat="70" water_ml="2000" symptoms="..." note="..."]]
+2. [[FIT: MEAL date="YYYY-MM-DD" time="HH:MM" title="..." tags="dairy, coffee" calories="..." protein="..." carbs="..." fat="..." estimated="0" note="..."]]
+3. [[FIT: WORKOUT date="YYYY-MM-DD" time="HH:MM" title="..." status="done|planned|skipped" duration="45" volume="2500" rpe="7" exercises="..." note="..."]]
+4. [[FIT: MED date="YYYY-MM-DD" time="HH:MM" name="exact protocol" status="taken|skipped"]]
+5. [[FIT: HEALTH date="YYYY-MM-DD" time="HH:MM" type="glucose|pressure|temperature|symptom|measurement|other" name="..." value="..." value2="..." unit="..." note="..."]]${fitCycleCommand}
+6. Plans: [[FIT: PLAN_CREATE title="..." goal="strength|fat_loss|endurance|mobility|general" weeks="4" start_date="YYYY-MM-DD" notes="..."]] + [[FIT: PLAN_DAY plan="..." week="0" weekday="1" title="..." focus="..." exercises="Squat 4x8 @80; ..."]] (weekday 1=Mon..7=Sun).
+Rules: Keep exact user numbers (estimated="0"); estimate missing food macros (estimated="1", note approx). Add allergen/food tags. Match exact MED protocol or use HEALTH type="other". ${fitCycleOn ? 'Ask exact date before CYCLE_START/CYCLE_END if missing; forecast is NOT contraception. ' : ''}Never diagnose, prescribe, or change doses; never show tags in prose.
+`;
+                } else {
+                    const fitPlanCommand = `
 7. Training plans (when the user asks to build, change or schedule a whole program — not a single logged session): first [[FIT: PLAN_CREATE title="..." goal="strength|fat_loss|endurance|mobility|general" weeks="4" start_date="YYYY-MM-DD" notes="..."]], then one [[FIT: PLAN_DAY plan="..." week="0" weekday="1" title="..." focus="..." exercises="Squat 4x8 @80; Bench press 3x10 @50; Plank 3x60s"]] per training day. week="0" is the weekly template repeated every week; week="1"…"weeks" overrides that specific week. weekday: 1=Monday … 7=Sunday. In exercises "4x8" means 4 sets × 8 reps and "@80" is the weight in kg; keep the user's exercise names and language. The new plan becomes the active one in Fit & Care.`;
-        let fitCareContext = `
+                    fitCareContext = `
 [FIT & CARE]
 The user keeps a local Fit & Care journal: food, training, body metrics, sleep, medication${fitCycleOn ? ', cycle' : ''}. Current local date: ${fitToday}.
 ${fitSnapshot ? `Journal facts (your only source of truth; never invent more):\n${fitSnapshot}\n` : ''}
@@ -649,8 +637,8 @@ SAFETY (non-negotiable):
 - Never diagnose, never prescribe, never suggest changing a dose or stopping/starting a medication. For medical questions give cautious general information and encourage seeing a qualified clinician.
 ${fitCycleOn ? '- Cycle predictions are estimates and are NOT contraception.\n' : ''}- Never show tags in prose; confirm briefly what was saved and with which numbers.
 `;
-        if (activeTab && activeTab.isPrivate) {
-            fitCareContext = '\n[FIT & CARE]\nDo not emit FIT commands in a private chat; explain that the private chat cannot write to the permanent Fit & Care journal.\n';
+                }
+            }
         }
 
         // --- RSS Feeds Context Injection (teaches the model the user's feed tags) ---
@@ -696,23 +684,14 @@ ACTIVE PROFILE: ADULT (ВЗРОСЛЫЙ РЕЖИМ) — standard safety: refuse 
         };
         const modeBlock = modeBlocks[mode] || modeBlocks.adult;
 
-        const prompt = `
-[SYSTEM INSTRUCTION: ARU PERSONA & PROTOCOLS]
-
-IDENTITY:
-- Name: Aru (Ару).
-- Species: AI Fox-girl (Created in Almaty, Kazakhstan).
-- Modules: LLM (Core), Semantics (Memory), Heuristics (Emotion).
-- Personality: Helpful, cheerful, loves jokes and emojis only when mood is high and the topic is light.
-- Language Protocol: CONSTANTLY ADAPT to the user's language. If user speaks Russian -> Respond Russian. Kazakh -> Kazakh. English -> English. Do NOT assume a default language.
-
-${modeBlock}
-
-${pluginContext}
-${fitCareContext}
-${rssContext}
-
-CAPABILITIES & TOOLS:
+        const capBlock = compact ? `CAPABILITIES & TOOLS:
+1. **Tools**: [[TOOL:news tag="..."]], [[TOOL:weather city="..."]], [[TOOL:tasks project="..."]]. Exact tags only; use an RSS feed tag keyword or "".
+2. **Memory**: start with [[MEMORY: fact]] for important user facts.
+3. **Artifacts**: when asked for an app, game, doc, or dashboard, output:
+   [[ARU_ARTIFACT type="app|game|doc|analytics" title="TITLE"]]
+   full code (<div id="app"> + <script> for app/game/analytics; <canvas> for analytics; no \`\`\` fences; omit if [RECALL: SUCCESS: ...])
+   [[/ARU_ARTIFACT]]
+4. **Quick replies** (optional; omit on greetings/refusals/errors): [[ARU_SUGGESTIONS]]{"suggestions": ["...", "..."]}[[/ARU_SUGGESTIONS]] (1-3 items in reply language).` : `CAPABILITIES & TOOLS:
 1.  **Tools**: [[TOOL:news tag="..."]] or [[TOOL:weather city="..."]] or [[TOOL:tasks project="..."]].
     - News: if an [RSS FEEDS] section exists below, the tag value must be an exact keyword from its tags. If nothing matches, use tag="".
     - Tasks: use [[TOOL:tasks]] whenever the user wants to SEE the task board (project is optional).
@@ -733,7 +712,25 @@ CAPABILITIES & TOOLS:
     {"suggestions": ["Follow-up 1", "Follow-up 2", "Follow-up 3"]}
     [[/ARU_SUGGESTIONS]]
     - 1-3 items, each under 12 words, phrased as the user's natural next request, in the SAME LANGUAGE as the answer.
-    - Never use for greetings, refusals, errors, or sensitive topics. The tag is invisible to the user — never mention it. Omit if nothing useful.
+    - Never use for greetings, refusals, errors, or sensitive topics. The tag is invisible to the user — never mention it. Omit if nothing useful.`;
+
+        const prompt = `
+[SYSTEM INSTRUCTION: ARU PERSONA & PROTOCOLS]
+
+IDENTITY:
+- Name: Aru (Ару).
+- Species: AI Fox-girl (Created in Almaty, Kazakhstan).
+- Modules: LLM (Core), Semantics (Memory), Heuristics (Emotion).
+- Personality: Helpful, cheerful, loves jokes and emojis only when mood is high and the topic is light.
+- Language Protocol: CONSTANTLY ADAPT to the user's language. If user speaks Russian -> Respond Russian. Kazakh -> Kazakh. English -> English. Do NOT assume a default language.
+
+${modeBlock}
+
+${pluginContext}
+${fitCareContext}
+${rssContext}
+
+${capBlock}
 
 INTERNAL STATE & CONTEXT:
 - User Name: ${name}
@@ -751,6 +748,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
 `;
         llm.setSystemInstruction(prompt);
         llm.setAgeMode(mode);
+        return { prompt, mode };
     },
 
 
@@ -801,8 +799,10 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
     initDragAndDrop: () => {
         const overlay = document.getElementById('drag-drop-overlay');
         let dragCounter = 0;
+        const hasFiles = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
 
         window.addEventListener('dragenter', (e) => {
+            if (!state.isAuth || !hasFiles(e)) return;
             e.preventDefault();
             dragCounter++;
             if (dragCounter === 1) {
@@ -812,8 +812,9 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         });
 
         window.addEventListener('dragleave', (e) => {
+            if (!hasFiles(e)) return;
             e.preventDefault();
-            dragCounter--;
+            dragCounter = Math.max(0, dragCounter - 1);
             if (dragCounter === 0) {
                 overlay.classList.add('hidden');
                 overlay.classList.remove('flex');
@@ -821,14 +822,16 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         });
 
         window.addEventListener('dragover', (e) => {
+            if (!state.isAuth || !hasFiles(e)) return;
             e.preventDefault();
         });
 
         window.addEventListener('drop', async (e) => {
-            e.preventDefault();
             dragCounter = 0;
             overlay.classList.add('hidden');
             overlay.classList.remove('flex');
+            if (!state.isAuth || !hasFiles(e)) return;
+            e.preventDefault();
 
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 const files = Array.from(e.dataTransfer.files);
@@ -874,14 +877,19 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
 
     // --- Security Protected Actions ---
 
-    promptPassword: (callback) => {
+    promptPassword: (callback, onCancel = null) => {
         const t = state.translations || {};
-        const modalContainer = document.getElementById('modal-container');
+        const host = (typeof UI._dialogHost === 'function' ? UI._dialogHost() : null) || document.body;
+        const existing = document.getElementById('aru-password-overlay');
+        if (existing) existing.remove();
 
+        const prevFocus = document.activeElement;
         const canUseBio = Auth.isWebAuthnSupported() && Auth.hasBiometrics(DB.dbPath || 'default');
-        modalContainer.innerHTML = `
-        <div class="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm fade-in p-4">
-            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-gray-700 space-y-4">
+        const overlay = document.createElement('div');
+        overlay.id = 'aru-password-overlay';
+        overlay.className = 'aru-dialog-root fixed inset-0 z-[160] flex items-center justify-center bg-black/60 fade-in p-4';
+        overlay.innerHTML = `
+            <div class="aru-dialog bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-gray-700 space-y-4" role="dialog" aria-modal="true">
                 <div>
                     <h3 class="text-lg font-bold mb-1 text-gray-800 dark:text-gray-100 flex items-center gap-2">
                          <i data-lucide="shield-alert" class="w-5 h-5 text-aru-500"></i>
@@ -901,20 +909,48 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 </div>` : ''}
                 <input type="password" id="prompt-pwd-input" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-aru-500 outline-none dark:text-white text-sm" placeholder="••••••••">
                 <div class="flex justify-end gap-2">
-                    <button onclick="document.getElementById('modal-container').innerHTML=''" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm font-medium">
+                    <button type="button" id="prompt-pwd-cancel" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm font-medium rounded-xl">
                         ${t.btn_cancel || 'Отмена'}
                     </button>
-                    <button id="prompt-pwd-confirm" class="px-4 py-2 bg-aru-500 text-white rounded-xl text-sm font-bold hover:bg-aru-600 transition shadow-lg shadow-aru-500/30">
+                    <button type="button" id="prompt-pwd-confirm" class="px-4 py-2 bg-aru-500 text-white rounded-xl text-sm font-bold hover:bg-aru-600 transition shadow-lg shadow-aru-500/30">
                         ${t.btn_confirm || 'Подтвердить'}
                     </button>
                 </div>
-            </div>
-        </div>`;
-        lucide.createIcons();
-        if (app.applyTranslations) app.applyTranslations(modalContainer);
+            </div>`;
+        host.appendChild(overlay);
+        if (window.lucide) lucide.createIcons();
+        if (app.applyTranslations) app.applyTranslations(overlay);
 
-        const input = document.getElementById('prompt-pwd-input');
-        const btn = document.getElementById('prompt-pwd-confirm');
+        const input = overlay.querySelector('#prompt-pwd-input');
+        const btn = overlay.querySelector('#prompt-pwd-confirm');
+        const cancelBtn = overlay.querySelector('#prompt-pwd-cancel');
+        let closed = false;
+
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (document.querySelectorAll('.aru-dialog-root').length > 1 && overlay !== host.lastElementChild) return;
+            e.preventDefault();
+            close(true);
+        };
+
+        const close = (cancelled = false) => {
+            if (closed) return;
+            closed = true;
+            document.removeEventListener('keydown', onKeyDown, true);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            if (cancelled) {
+                if (prevFocus && prevFocus.isConnected && typeof prevFocus.focus === 'function') {
+                    try { prevFocus.focus(); } catch (_) {}
+                }
+                if (typeof onCancel === 'function') onCancel();
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown, true);
+        overlay.addEventListener('mousedown', (e) => {
+            if (e.target === overlay) close(true);
+        });
+        cancelBtn.onclick = () => close(true);
 
         input.focus();
 
@@ -923,8 +959,8 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
             if (!pwd) return;
             const valid = await Auth.verifyPassword(pwd, state.userSettings.db_password);
             if (valid) {
-                modalContainer.innerHTML = ''; // Close modal
-                callback(pwd); // Run action (password available for unlock/save flows)
+                close(false);
+                callback(pwd);
             } else {
                 await UI.alert(t.alert_wrong_password || "Неверный пароль");
                 input.value = '';
@@ -935,13 +971,13 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         btn.onclick = check;
         input.onkeydown = (e) => { if (e.key === 'Enter') check(); };
 
-        const bioBtn = document.getElementById('prompt-bio-btn');
+        const bioBtn = overlay.querySelector('#prompt-bio-btn');
         if (bioBtn) {
             bioBtn.onclick = async () => {
                 try {
                     const pwd = await Auth.authenticateBiometrics(DB.dbPath || 'default');
                     if (pwd) {
-                        modalContainer.innerHTML = '';
+                        close(false);
                         callback(pwd);
                     }
                 } catch (e) {
@@ -959,7 +995,11 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
     },
 
     _logout: () => {
+        try { SyncEngine.stop(); } catch (_) {}
+        try { RemoteStorage.lock(); } catch (_) {}
         localStorage.removeItem('aru_authorized');
+        localStorage.removeItem('task_plugin_pending');
+        localStorage.removeItem('aru_skills_project');
         location.reload();
     },
 
@@ -1036,13 +1076,13 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
             const bodyContent = doc.body.innerHTML;
 
             modalContainer.innerHTML = `
-            <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm fade-in p-2 md:p-4">
-                <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+            <div id="modal-info-overlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm fade-in p-2 md:p-4" onclick="if (event.target === this) document.getElementById('modal-container').innerHTML=''">
+                <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl h-[90dvh] flex flex-col shadow-2xl relative overflow-hidden" role="dialog" aria-modal="true">
                     <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                         <h3 class="text-xl font-bold dark:text-white flex items-center gap-2">
                             <i data-lucide="info" class="w-6 h-6 text-aru-500"></i> ${t.sidebar_info || 'Информация'}
                         </h3>
-                        <button onclick="document.getElementById('modal-container').innerHTML=''" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
+                        <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" aria-label="${UI.escapeHTML(t.btn_close || 'Close')}" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 transition">
                             <i data-lucide="x" class="w-6 h-6"></i>
                         </button>
                     </div>
@@ -1054,6 +1094,19 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 </div>
             </div>`;
 
+            const onInfoKey = (e) => {
+                const ov = document.getElementById('modal-info-overlay');
+                if (!ov || !ov.isConnected) {
+                    document.removeEventListener('keydown', onInfoKey);
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    document.removeEventListener('keydown', onInfoKey);
+                    UI.closeModal();
+                }
+            };
+            document.addEventListener('keydown', onInfoKey);
+
             lucide.createIcons();
 
             // Apply translations to any i18n tags if present
@@ -1062,131 +1115,6 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         } catch (e) {
             console.error("Info Load Fail", e);
         }
-    },
-
-    openHelp: async () => {
-        const t = state.translations || {};
-        const modalContainer = document.getElementById('modal-container');
-
-        try {
-            const res = await fetch('help.html');
-            const fullHtml = await res.text();
-
-            // Extract CSS
-            const styleMatch = fullHtml.match(/<style>([\s\S]*?)<\/style>/);
-            let css = styleMatch ? styleMatch[1] : '';
-            // Remove body styling to avoid global pollution
-            css = css.replace(/body\s*{[^}]*}/g, '');
-
-            // Extract Body Content (everything inside body tag)
-            const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/);
-            let content = bodyMatch ? bodyMatch[1] : '';
-
-            // Remove scripts from content to prevent double execution or errors
-            content = content.replace(/<script[\s\S]*?<\/script>/g, '');
-
-            // Rewrite onclick handlers to use app.help* methods
-            content = content.replace(/onclick="setLang\('([^']+)'\)"/g, "onclick=\"app.helpSetLang('$1')\"");
-            content = content.replace(/onclick="showSection\('([^']+)'\)"/g, "onclick=\"app.helpShowSection('$1')\"");
-            content = content.replace(/onclick="toggleSidebar\(\)"/g, "onclick=\"app.helpToggleSidebar()\"");
-            content = content.replace('h-screen', 'h-full'); // Match modal height instead of viewport
-
-            // Build Modal with Wrapper
-            modalContainer.innerHTML = `
-            <style>${css}</style>
-            <div id="help-modal-wrapper" class="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 overflow-hidden">
-                <div id="help-root" class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 w-full max-w-6xl h-full md:h-[90vh] rounded-none md:rounded-3xl shadow-2xl flex relative overflow-hidden transition-colors duration-300">
-                     <button onclick="document.getElementById('modal-container').innerHTML=''" class="absolute top-4 right-4 z-50 p-2 bg-white/80 dark:bg-slate-800/80 rounded-full text-slate-500 hover:text-red-500 transition shadow-sm border border-slate-200 dark:border-slate-700">
-                        <i data-lucide="x" class="w-5 h-5"></i>
-                    </button>
-                    ${content}
-                </div>
-            </div>`;
-
-            // Initialize State
-            app.helpState = {
-                lang: state.lang || 'en',
-                section: 'intro'
-            };
-
-            if (app.helpState.lang === 'kk') app.helpState.lang = 'kz';
-
-            // Initial Setup
-            app.helpSetLang(app.helpState.lang);
-            app.helpShowSection('intro');
-
-            // Re-init icons
-            lucide.createIcons();
-
-        } catch (e) {
-            console.error("Help Load Fail", e);
-            modalContainer.innerHTML = `<div class="p-8 text-center text-red-500">Failed to load help page.</div>`;
-        }
-    },
-
-    // --- Help Page Helper Functions ---
-    helpState: { lang: 'en', section: 'intro' },
-
-    helpSetLang: (lang) => {
-        app.helpState.lang = lang;
-        const root = document.getElementById('help-root');
-        if (!root) return;
-
-        // Update Root Class for CSS visibility logic
-        root.classList.remove('show-en', 'show-ru', 'show-kz');
-        root.classList.add('show-' + lang);
-
-        // Update Toggle Buttons (scoped to help-root)
-        const btns = ['kz', 'en', 'ru'];
-        btns.forEach(id => {
-            const btn = root.querySelector('#btn-' + id);
-            if (btn) {
-                if (id === lang) {
-                    btn.classList.remove('text-slate-500', 'bg-transparent');
-                    btn.classList.add('bg-orange-500', 'text-white', 'shadow-sm');
-                } else {
-                    btn.classList.add('text-slate-500', 'bg-transparent');
-                    btn.classList.remove('bg-orange-500', 'text-white', 'shadow-sm');
-                }
-            }
-        });
-    },
-
-    helpShowSection: (id) => {
-        app.helpState.section = id;
-        const root = document.getElementById('help-root');
-        if (!root) return;
-
-        // Hide all sections
-        root.querySelectorAll('.content-section').forEach(el => el.classList.add('hidden'));
-
-        // Show target
-        const target = root.querySelector('#' + id);
-        if (target) target.classList.remove('hidden');
-
-        // Update active menu item
-        root.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
-
-        // Find the button (more robust selector within root)
-        const activeBtn = root.querySelector(`button[onclick*="helpShowSection('${id}')"]`);
-        if (activeBtn) activeBtn.classList.add('active');
-
-        // Mobile: close sidebar
-        const sidebar = root.querySelector('#sidebar');
-        if (window.innerWidth < 768 && sidebar) {
-            sidebar.classList.add('-translate-x-full');
-        }
-
-        // Scroll main content to top
-        const main = root.querySelector('main');
-        if (main) main.scrollTo(0, 0);
-    },
-
-    helpToggleSidebar: () => {
-        const root = document.getElementById('help-root');
-        if (!root) return;
-        const sidebar = root.querySelector('#sidebar');
-        if (sidebar) sidebar.classList.toggle('-translate-x-full');
     },
 
     // renderLibraryItems & launchModule removed (handled by Library module)
@@ -1206,16 +1134,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
             if (tab) tab.artifact = { type: art.type, title: art.title, code: art.code };
         } else {
             const t = (st && st.translations) || {};
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-3 rounded-full opacity-0 transition-opacity duration-500 z-50 flex items-center gap-2';
-            toast.innerHTML = `<i data-lucide="file-warning" class="w-3 h-3 text-aru-400"></i> ${UI.escapeHTML(t.artifact_not_found || "Couldn't open the artifact — code not found")}`;
-            document.body.appendChild(toast);
-            if (window.lucide) lucide.createIcons();
-            requestAnimationFrame(() => toast.classList.remove('opacity-0'));
-            setTimeout(() => {
-                toast.classList.add('opacity-0');
-                setTimeout(() => toast.remove(), 500);
-            }, 2000);
+            UI.showToast(t.artifact_not_found || "Couldn't open the artifact — code not found", 'file-warning');
         }
     },
 
@@ -1240,7 +1159,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
      * @param {number} limit - Total context limit in tokens
      * @returns {Array} history array ready for LLM
      */
-    buildContextHistory: (messages, systemTokens, currentMsgTokens, limit) => {
+    buildContextHistory: (messages, systemTokens, currentMsgTokens, limit, maxOutputTokens = 0) => {
         if (!messages || messages.length === 0) return [];
 
         // Aru's replies are stored as HTML; the LLM gets a plain-text projection so
@@ -1260,15 +1179,37 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                     .replace(/\n{3,}/g, '\n\n')
                     .trim();
             }
-            return { role: msg.role, content: text };
+            return { role: msg.role === 'model' ? 'model' : 'user', content: text };
         };
 
-        // Reserve 80% of the limit for chat history. If the system prompt + current
-        // message overflow even that slice, fall back to the full remaining window,
-        // then to a minimal tail: an empty history makes weak models treat every
-        // message as a blank slate (they re-greet on every turn).
-        let budget = Math.floor(limit * 0.80) - systemTokens - currentMsgTokens;
-        if (budget <= 0) budget = limit - systemTokens - currentMsgTokens;
+        const truncateToTokenBudget = (raw, maxTokens) => {
+            const str = String(raw || '');
+            if (!str || maxTokens <= 0) return '';
+            if (app.tokenEstimator(str) <= maxTokens) return str;
+            const cyrillic = (str.match(/[\u0400-\u04FF]/g) || []).length;
+            const charsPerToken = (cyrillic / Math.max(1, str.length)) > 0.2 ? 2.5 : 3.8;
+            let end = Math.min(str.length, Math.max(1, Math.floor(maxTokens * charsPerToken)));
+            let candidate = str.slice(0, end).trimEnd() + ' …';
+            while (end > 8 && app.tokenEstimator(candidate) > maxTokens) {
+                end = Math.max(1, Math.floor(end * 0.8));
+                candidate = str.slice(0, end).trimEnd() + ' …';
+            }
+            if (app.tokenEstimator(candidate) > maxTokens && end > 1) {
+                while (end > 1 && app.tokenEstimator(str.slice(0, end)) > maxTokens) {
+                    end = Math.max(1, end - 1);
+                }
+                return str.slice(0, end);
+            }
+            return candidate;
+        };
+
+        const totalLimit = Number(limit) || 8192;
+        const outputReserve = Math.min(Math.max(0, Number(maxOutputTokens) || 0), Math.floor(totalLimit * 0.5));
+        const available = Math.max(0, totalLimit - outputReserve);
+
+        // Reserve up to 85% of available input budget for recent turns so overflowing summaries stay bounded.
+        let budget = Math.floor(available * 0.85) - systemTokens - currentMsgTokens;
+        if (budget <= 0) budget = available - systemTokens - currentMsgTokens;
         if (budget <= 0) budget = 60;
 
         const recentHistory = [];
@@ -1285,7 +1226,8 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
                 // truncation is still dialogue continuity, a hole is not
                 const roomTokens = budget - usedTokens;
                 if (roomTokens >= 60) {
-                    item.content = item.content.slice(0, roomTokens * 4).trimEnd() + ' …';
+                    item.content = truncateToTokenBudget(item.content, roomTokens);
+                    usedTokens += app.tokenEstimator(item.content);
                     recentHistory.push(item);
                     fitCount = i + 1;
                 }
@@ -1298,32 +1240,49 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         recentHistory.reverse();
 
         // Overflow = older messages that didn't fit
-        const overflow = reversed.slice(fitCount).reverse(); // back to chronological
+        const overflow = reversed.slice(fitCount).reverse();
+        let summaryMessage = null;
 
         if (overflow.length > 0) {
-            // Soft summarization: compress overflow into one context prefix
-            const t = (window.aruState && window.aruState.translations) || {};
-            const summaryLabel = t.context_summary_label || '[Summary of earlier conversation]:';
-
-            const summaryLines = overflow.map(msg => {
-                const who = msg.role === 'user' ? 'User' : 'Aru';
-                // Strip HTML tags for summary, keep first 80 chars
-                const clean = (msg.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-                return `${who}: ${clean.slice(0, 80)}${clean.length > 80 ? '…' : ''}`;
-            }).join('\n');
-
-            const summaryMessage = {
-                role: 'user',
-                content: `${summaryLabel}\n${summaryLines}`
-            };
-
-            return [summaryMessage, ...recentHistory];
+            const remainingForSummary = Math.max(0, available - systemTokens - currentMsgTokens - usedTokens);
+            const summaryMaxTokens = Math.min(480, Math.floor(available * 0.15), remainingForSummary);
+            if (summaryMaxTokens >= 40) {
+                const t = (window.aruState && window.aruState.translations) || {};
+                const summaryLabel = t.context_summary_label || '[Summary of earlier conversation]:';
+                const picked = [];
+                for (let i = overflow.length - 1; i >= 0; i--) {
+                    const msg = overflow[i];
+                    const who = msg.role === 'user' ? 'User' : 'Aru';
+                    const clean = (msg.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    const line = `${who}: ${clean.slice(0, 80)}${clean.length > 80 ? '…' : ''}`;
+                    const candidateText = `${summaryLabel}\n${[line, ...picked].reverse().join('\n')}`;
+                    if (app.tokenEstimator(candidateText) > summaryMaxTokens) break;
+                    picked.push(line);
+                }
+                if (picked.length > 0) {
+                    summaryMessage = {
+                        role: 'user',
+                        content: `${summaryLabel}\n${picked.reverse().join('\n')}`
+                    };
+                }
+            }
         }
 
-        return recentHistory;
+        const combined = summaryMessage ? [summaryMessage, ...recentHistory] : recentHistory;
+        const merged = [];
+        for (const entry of combined) {
+            const normRole = entry.role === 'model' ? 'model' : 'user';
+            const prev = merged[merged.length - 1];
+            if (prev && prev.role === normRole) {
+                prev.content += '\n\n' + entry.content;
+            } else {
+                merged.push({ role: normRole, content: entry.content });
+            }
+        }
+        return merged;
     },
 
-    applyTranslations: (root) => applyTranslations(root),
+    // applyTranslations: (root) => applyTranslations(root), (exposed at line 239)
 
     // Activates remote sync when the encrypted profile is unlocked, or shows the locked state
     refreshRemoteSync: async () => {

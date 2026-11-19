@@ -6,6 +6,8 @@ Local database client powered by SQL.js and IndexedDB for persistent storage of 
 import { UI } from './ui.js';
 import { SyncCore } from './sync/syncCore.js';
 import { ensureSyncSchema, readDirtyState } from './sync/syncSchema.js';
+import { DBSchemaMethods } from './dbSchema.js';
+import { DBFitMethods } from './dbFit.js';
 // Never leave the device through P2P transfer; the receiver enters their own.
 const TRANSFER_SECRET_SETTINGS = new Set([
     'db_password',
@@ -72,13 +74,14 @@ export const DB = {
                 try {
                     this.db = new this.SQL.Database(new Uint8Array(savedData));
 
+                    let canPersist = !this.fileHandle;
+                    if (this.fileHandle) {
+                        try { canPersist = (await this.fileHandle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch (permErr) { canPersist = false; }
+                    }
+
                     // Self-healing forward migration: upgrades existing databases in place (folders, favorites, chapters)
                     try {
                         if (this.migrateSchema()) {
-                            let canPersist = !this.fileHandle;
-                            if (this.fileHandle) {
-                                try { canPersist = (await this.fileHandle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch (permErr) { canPersist = false; }
-                            }
                             if (canPersist) {
                                 await this.save();
                             } else {
@@ -94,10 +97,14 @@ export const DB = {
                         const pending = localStorage.getItem('task_plugin_pending');
                         if (pending) {
                             const parsed = JSON.parse(pending);
-                            this.savePluginData('task', parsed);
-                            await this.save();
-                            localStorage.removeItem('task_plugin_pending');
-                            console.log('DB: flushed pending plugin data for task plugin');
+                            this.savePluginData('task', parsed, false);
+                            if (canPersist) {
+                                await this.save();
+                                localStorage.removeItem('task_plugin_pending');
+                                console.log('DB: flushed pending plugin data for task plugin');
+                            } else {
+                                console.log('DB: pending plugin data applied in memory; file write deferred until access is authorized');
+                            }
                         }
                     } catch (e) {
                         console.warn('DB: failed to flush pending plugin data', e);
@@ -131,9 +138,13 @@ export const DB = {
     async createDB(passwordHash) {
         console.log("DB: Creating new database...");
         this._syncReady = false;
+        this.fileHandle = null;
         if (!this.SQL) {
             console.log("DB: SQL not ready, re-initializing...");
             await this.init();
+        }
+        if (this.db) {
+            try { this.db.close(); } catch (_) {}
         }
         this.db = new this.SQL.Database();
         this.initSchema();
@@ -141,7 +152,8 @@ export const DB = {
         // Persists root database settings utilizing UPSERT operations to bypass schema collisions
         this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ['db_password', passwordHash], false);
         this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ['rules', '0'], false);
-        this.save();
+        await this.save();
+        try { window.dispatchEvent(new CustomEvent('aru-db-initialized', { detail: { status: 'loaded' } })); } catch (e) {}
         return true;
     },
 
@@ -149,6 +161,9 @@ export const DB = {
      * Create DB with explicit key (optional). If dbKey provided, set active DB to it.
      */
     async createDBWithKey(passwordHash, dbKey) {
+        try { window.SyncEngine?.stop?.(); } catch (_) {}
+        try { window.RemoteStorage?.lock?.(); } catch (_) {}
+        this.fileHandle = null;
         if (dbKey) {
             this.dbPath = dbKey;
             localStorage.setItem('aru_active_db', dbKey);
@@ -160,626 +175,7 @@ export const DB = {
         return await this.createDB(passwordHash);
     },
 
-    initSchema() {
-        // Core Tables
-        this.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
-        this.run(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-        this.run(`CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER,
-            role TEXT,
-            content TEXT,
-            emotion TEXT,
-            is_html INTEGER DEFAULT 0,
-            attachments TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
-        )`);
-        this.run(`CREATE TABLE IF NOT EXISTS memory_facts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            content TEXT, 
-            category TEXT, 
-            embedding TEXT, 
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
-        this.run(`CREATE TABLE IF NOT EXISTS modules_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT,
-            name TEXT,
-            content TEXT,
-            tags TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
-
-        this.run(`CREATE TABLE IF NOT EXISTS chat_artifacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER,
-            title TEXT,
-            type TEXT,
-            code TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(chat_id, title)
-        )`);
-        this.run(`CREATE INDEX IF NOT EXISTS idx_chat_artifacts_chat ON chat_artifacts(chat_id)`);
-
-        // Personality state: persistent mood/sarcasm/humor
-        this.run(`CREATE TABLE IF NOT EXISTS personality_state (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key TEXT UNIQUE,
-            mood INTEGER DEFAULT 50,
-            sarcasm INTEGER DEFAULT 0,
-            humor INTEGER DEFAULT 50,
-            affinity INTEGER DEFAULT 0,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
-
-        // Executes incremental database structure migrations tracking operational schema rules
-
-        // Verifies base setting configurations exist dynamically
-        const hasRules = this.query("SELECT key FROM settings WHERE key = 'rules'");
-        if (hasRules.length === 0) {
-            this.run("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ['rules', '0']);
-        }
-
-        // Resolves structural dependencies implicitly missing from earlier implementations
-        try {
-            this.run(`ALTER TABLE messages ADD COLUMN is_html INTEGER DEFAULT 0`);
-        } catch (e) {
-            // Suppresses conflicts for pre-existing modifications
-        }
-
-        try {
-            this.run(`ALTER TABLE chats ADD COLUMN sort_order INTEGER DEFAULT 0`);
-        } catch (e) {
-            // Suppresses conflicts for pre-existing modifications
-        }
-    },
-
-    // --- Schema Migration (forward compatible with older databases) ---
-
-    tableExists(name) {
-        const rows = this.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [name]);
-        return rows.length > 0;
-    },
-
-    hasColumn(table, column) {
-        try {
-            const rows = this.query(`PRAGMA table_info(${table})`);
-            return rows.some(r => r.name === column);
-        } catch (e) {
-            return false;
-        }
-    },
-
-    // Idempotent upgrade of any existing database file. Adds only new structures,
-    // never alters or drops existing ones, so older app versions keep working.
-    migrateSchema() {
-        let changed = false;
-        try {
-            // Baseline tables: introduced at different app versions, may be missing in old files
-            if (!this.tableExists('settings')) {
-                this.run(`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('chats')) {
-                this.run(`CREATE TABLE chats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    sort_order INTEGER DEFAULT 0,
-                    folder_id INTEGER DEFAULT NULL,
-                    is_favorite INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('messages')) {
-                this.run(`CREATE TABLE messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER,
-                    role TEXT,
-                    content TEXT,
-                    emotion TEXT,
-                    is_html INTEGER DEFAULT 0,
-                    attachments TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('memory_facts')) {
-                this.run(`CREATE TABLE memory_facts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content TEXT,
-                    category TEXT,
-                    embedding TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('modules_data')) {
-                this.run(`CREATE TABLE modules_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    type TEXT,
-                    name TEXT,
-                    content TEXT,
-                    tags TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('personality_state')) {
-                this.run(`CREATE TABLE personality_state (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    key TEXT UNIQUE,
-                    mood INTEGER DEFAULT 50,
-                    sarcasm INTEGER DEFAULT 0,
-                    humor INTEGER DEFAULT 50,
-                    affinity INTEGER DEFAULT 0,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.hasColumn('chats', 'sort_order')) {
-                this.run("ALTER TABLE chats ADD COLUMN sort_order INTEGER DEFAULT 0", [], false);
-                changed = true;
-            }
-            if (!this.hasColumn('messages', 'is_html')) {
-                this.run("ALTER TABLE messages ADD COLUMN is_html INTEGER DEFAULT 0", [], false);
-                changed = true;
-            }
-            if (!this.hasColumn('messages', 'attachments')) {
-                this.run("ALTER TABLE messages ADD COLUMN attachments TEXT", [], false);
-                changed = true;
-            }
-            if (!this.hasColumn('chats', 'folder_id')) {
-                this.run("ALTER TABLE chats ADD COLUMN folder_id INTEGER DEFAULT NULL", [], false);
-                changed = true;
-            }
-            if (!this.hasColumn('chats', 'is_favorite')) {
-                this.run("ALTER TABLE chats ADD COLUMN is_favorite INTEGER DEFAULT 0", [], false);
-                changed = true;
-            }
-            if (!this.tableExists('folders')) {
-                this.run(`CREATE TABLE folders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    sort_order INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('chat_sections')) {
-                this.run(`CREATE TABLE chat_sections (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER,
-                    title TEXT,
-                    sort_order INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('chat_chapters')) {
-                this.run(`CREATE TABLE chat_chapters (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER,
-                    section_id INTEGER,
-                    title TEXT,
-                    anchor_message_id INTEGER,
-                    sort_order INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('chat_artifacts')) {
-                this.run(`CREATE TABLE chat_artifacts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER,
-                    title TEXT,
-                    type TEXT,
-                    code TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(chat_id, title)
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_chat_artifacts_chat ON chat_artifacts(chat_id)`, [], false);
-                changed = true;
-            }
-            // Aru Skills: user-built skill library, projects, relay pipelines and run history
-            if (!this.tableExists('skills')) {
-                this.run(`CREATE TABLE skills (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    system_prompt TEXT,
-                    llm_type TEXT DEFAULT 'gemini',
-                    api_key TEXT DEFAULT '',
-                    base_url TEXT DEFAULT '',
-                    model_name TEXT DEFAULT '',
-                    temperature REAL DEFAULT 0.9,
-                    input_limit INTEGER DEFAULT 4096,
-                    max_output INTEGER DEFAULT 2048,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_projects')) {
-                this.run(`CREATE TABLE skill_projects (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    context_limit INTEGER DEFAULT 16384,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_project_items')) {
-                this.run(`CREATE TABLE skill_project_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER,
-                    kind TEXT DEFAULT 'file',
-                    name TEXT,
-                    content TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_items_project ON skill_project_items(project_id)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_pipeline_steps')) {
-                this.run(`CREATE TABLE skill_pipeline_steps (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER,
-                    skill_id INTEGER,
-                    sort_order INTEGER DEFAULT 0,
-                    enabled INTEGER DEFAULT 1,
-                    is_final INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_steps_project ON skill_pipeline_steps(project_id)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_runs')) {
-                this.run(`CREATE TABLE skill_runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER,
-                    input_text TEXT,
-                    status TEXT DEFAULT 'pending',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_runs_project ON skill_runs(project_id)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_run_steps')) {
-                this.run(`CREATE TABLE skill_run_steps (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id INTEGER,
-                    step_id INTEGER,
-                    step_order INTEGER,
-                    skill_id INTEGER,
-                    skill_title TEXT,
-                    provider TEXT,
-                    model TEXT,
-                    input_text TEXT,
-                    output_text TEXT,
-                    status TEXT DEFAULT 'pending',
-                    error TEXT,
-                    tokens_est INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_run_steps_run ON skill_run_steps(run_id)`, [], false);
-                changed = true;
-            }
-            // Relay steps record whether the model hit its output cap, so the next step
-            // can be told to finish the work instead of restarting it
-            if (this.tableExists('skill_run_steps') && !this.hasColumn('skill_run_steps', 'truncated')) {
-                this.run("ALTER TABLE skill_run_steps ADD COLUMN truncated INTEGER DEFAULT 0", [], false);
-                changed = true;
-            }
-            if (!this.tableExists('skill_artifacts')) {
-                this.run(`CREATE TABLE skill_artifacts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER,
-                    run_id INTEGER,
-                    title TEXT,
-                    type TEXT DEFAULT 'doc',
-                    code TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(project_id, title)
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_artifacts_project ON skill_artifacts(project_id)`, [], false);
-                changed = true;
-            }
-            // The chat thread of a project: user requests, relay runs and answers.
-            // `meta` carries the JSON side-data (run id, artifact ids, file names).
-            if (!this.tableExists('skill_project_messages')) {
-                this.run(`CREATE TABLE skill_project_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER,
-                    kind TEXT DEFAULT 'user',
-                    content TEXT,
-                    meta TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_skill_messages_project ON skill_project_messages(project_id)`, [], false);
-                changed = true;
-            }
-            // Aru Fit & Care: locally stored daily wellbeing and activity log.
-            // Health data intentionally stays in this device database; no external
-            // service is required for the first version of the plugin.
-            if (!this.tableExists('fit_profiles')) {
-                this.run(`CREATE TABLE fit_profiles (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    display_name TEXT DEFAULT '',
-                    target_weight REAL,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_daily_logs')) {
-                this.run(`CREATE TABLE fit_daily_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL UNIQUE,
-                    weight REAL,
-                    workout_status TEXT DEFAULT '',
-                    workout_note TEXT DEFAULT '',
-                    meal_note TEXT DEFAULT '',
-                    sleep_hours REAL,
-                    energy INTEGER,
-                    note TEXT DEFAULT '',
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_daily_logs_date ON fit_daily_logs(log_date)`, [], false);
-                changed = true;
-            }
-            if (this.tableExists('fit_daily_logs') && !this.hasColumn('fit_daily_logs', 'meal_note')) {
-                this.run("ALTER TABLE fit_daily_logs ADD COLUMN meal_note TEXT DEFAULT ''", [], false);
-                changed = true;
-            }
-
-            // Fit & Care 2.0: goals, body composition, plans, protocols, cycle tracking.
-            // All additions are forward-compatible: old rows keep working because every
-            // new column has a default and every table is created only when missing.
-            const profileColumns = [
-                ['sex', "TEXT DEFAULT ''"],
-                ['birth_year', 'INTEGER'],
-                ['height_cm', 'REAL'],
-                ['activity_level', "TEXT DEFAULT 'moderate'"],
-                ['goal', "TEXT DEFAULT 'maintain'"],
-                ['target_date', "TEXT DEFAULT ''"],
-                ['calorie_min', 'INTEGER'],
-                ['calorie_max', 'INTEGER'],
-                ['aru_tone', "TEXT DEFAULT 'supportive'"],
-                ['aru_notes', "TEXT DEFAULT ''"],
-                ['cycle_tracking', 'INTEGER DEFAULT 0'],
-                ['cycle_length', 'INTEGER DEFAULT 28'],
-                ['period_length', 'INTEGER DEFAULT 5'],
-                ['luteal_length', 'INTEGER DEFAULT 14'],
-                ['disclaimer_accepted', 'INTEGER DEFAULT 0'],
-                ['intimacy_tracking', 'INTEGER DEFAULT 0']
-            ];
-            for (const [col, def] of profileColumns) {
-                if (!this.hasColumn('fit_profiles', col)) {
-                    this.run(`ALTER TABLE fit_profiles ADD COLUMN ${col} ${def}`, [], false);
-                    changed = true;
-                }
-            }
-
-            const dailyColumns = [
-                ['body_fat', 'REAL'],
-                ['muscle_mass', 'REAL'],
-                ['water_pct', 'REAL'],
-                ['bone_mass', 'REAL'],
-                ['visceral_fat', 'REAL'],
-                ['steps', 'INTEGER'],
-                ['calories', 'INTEGER'],
-                ['protein', 'REAL'],
-                ['carbs', 'REAL'],
-                ['fat', 'REAL'],
-                ['mood', 'INTEGER'],
-                ['stress', 'INTEGER'],
-                ['symptoms', "TEXT DEFAULT '[]'"],
-                ['water_ml', 'INTEGER'],
-                ['measurement_note', "TEXT DEFAULT ''"]
-            ];
-            for (const [col, def] of dailyColumns) {
-                if (!this.hasColumn('fit_daily_logs', col)) {
-                    this.run(`ALTER TABLE fit_daily_logs ADD COLUMN ${col} ${def}`, [], false);
-                    changed = true;
-                }
-            }
-
-            if (!this.tableExists('fit_plans')) {
-                this.run(`CREATE TABLE fit_plans (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT DEFAULT '',
-                    goal TEXT DEFAULT '',
-                    start_date TEXT DEFAULT '',
-                    weeks INTEGER DEFAULT 4,
-                    status TEXT DEFAULT 'active',
-                    notes TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_plan_days')) {
-                this.run(`CREATE TABLE fit_plan_days (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    plan_id INTEGER NOT NULL,
-                    week_index INTEGER DEFAULT 0,
-                    weekday INTEGER DEFAULT 1,
-                    title TEXT DEFAULT '',
-                    focus TEXT DEFAULT '',
-                    exercises TEXT DEFAULT '[]',
-                    notes TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_plan_days_plan ON fit_plan_days(plan_id)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_workouts')) {
-                this.run(`CREATE TABLE fit_workouts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL,
-                    log_time TEXT DEFAULT '',
-                    plan_day_id INTEGER,
-                    title TEXT DEFAULT '',
-                    exercises TEXT DEFAULT '[]',
-                    duration_min INTEGER,
-                    volume_kg REAL,
-                    rpe INTEGER,
-                    status TEXT DEFAULT 'done',
-                    note TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_workouts_date ON fit_workouts(log_date)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_meals')) {
-                this.run(`CREATE TABLE fit_meals (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL,
-                    meal_time TEXT DEFAULT '',
-                    title TEXT DEFAULT '',
-                    tags TEXT DEFAULT '[]',
-                    calories INTEGER,
-                    protein REAL,
-                    carbs REAL,
-                    fat REAL,
-                    note TEXT DEFAULT '',
-                    estimated INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_meals_date ON fit_meals(log_date)`, [], false);
-                changed = true;
-            }
-            if (this.tableExists('fit_meals') && !this.hasColumn('fit_meals', 'estimated')) {
-                this.run('ALTER TABLE fit_meals ADD COLUMN estimated INTEGER DEFAULT 0', [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_protocols')) {
-                this.run(`CREATE TABLE fit_protocols (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT DEFAULT '',
-                    kind TEXT DEFAULT 'medication',
-                    dosage TEXT DEFAULT '',
-                    schedule TEXT DEFAULT '{"times":[],"days":[]}',
-                    rules TEXT DEFAULT '{}',
-                    notes TEXT DEFAULT '',
-                    active INTEGER DEFAULT 1,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_health_logs')) {
-                this.run(`CREATE TABLE fit_health_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL,
-                    log_time TEXT DEFAULT '',
-                    protocol_id INTEGER,
-                    type TEXT DEFAULT 'measurement',
-                    name TEXT DEFAULT '',
-                    value REAL,
-                    value2 REAL,
-                    unit TEXT DEFAULT '',
-                    status TEXT DEFAULT 'logged',
-                    tags TEXT DEFAULT '[]',
-                    note TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_health_logs_date ON fit_health_logs(log_date)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_cycles')) {
-                this.run(`CREATE TABLE fit_cycles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    start_date TEXT NOT NULL,
-                    end_date TEXT DEFAULT '',
-                    cycle_length INTEGER,
-                    period_length INTEGER,
-                    notes TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_cycles_start ON fit_cycles(start_date)`, [], false);
-                changed = true;
-            }
-            if (this.tableExists('fit_cycles')) {
-                // Older builds closed the previous cycle by writing the day before
-                // the next start into end_date. Today end_date means "bleeding
-                // stopped", so that pattern would read as a month-long period.
-                this.run(`UPDATE fit_cycles SET end_date = '' WHERE end_date != '' AND EXISTS (
-                    SELECT 1 FROM fit_cycles AS next
-                    WHERE date(next.start_date) = date(fit_cycles.end_date, '+1 day')
-                )`, [], false);
-                if (this.db.getRowsModified && this.db.getRowsModified() > 0) changed = true;
-            }
-            if (!this.tableExists('fit_cycle_logs')) {
-                this.run(`CREATE TABLE fit_cycle_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL UNIQUE,
-                    flow TEXT DEFAULT '',
-                    note TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_intimacy_logs')) {
-                this.run(`CREATE TABLE fit_intimacy_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL,
-                    protection TEXT DEFAULT '',
-                    note TEXT DEFAULT '',
-                    log_time TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_intimacy_date ON fit_intimacy_logs(log_date)`, [], false);
-                changed = true;
-            }
-            if (this.tableExists('fit_intimacy_logs') && !this.hasColumn('fit_intimacy_logs', 'log_time')) {
-                this.run("ALTER TABLE fit_intimacy_logs ADD COLUMN log_time TEXT DEFAULT ''", [], false);
-                changed = true;
-            }
-            if (!this.tableExists('fit_chat_messages')) {
-                this.run(`CREATE TABLE fit_chat_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    log_date TEXT NOT NULL,
-                    role TEXT DEFAULT 'user',
-                    content TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )`, [], false);
-                this.run(`CREATE INDEX IF NOT EXISTS idx_fit_chat_date ON fit_chat_messages(log_date)`, [], false);
-                changed = true;
-            }
-            if (!this.tableExists('desktop_notes')) {
-                this.run(`CREATE TABLE desktop_notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )`, [], false);
-                changed = true;
-            }
-            // Cloud merge identity: uid/rev columns and write-capture triggers.
-            // Purely additive, so databases from older app versions keep working.
-            try {
-                if (ensureSyncSchema(this.db)) changed = true;
-                this._syncReady = true;
-            } catch (syncErr) {
-                console.warn('DB: sync schema setup failed', syncErr);
-            }
-            if (changed) console.log('DB: schema migrated (folders/favorites/chapters/skills/fit-care ready)');
-        } catch (e) {
-            console.warn('DB.migrateSchema failed', e);
-        }
-        return changed;
-    },
+    ...DBSchemaMethods,
 
     // --- Personality State Helpers ---
     getPersonalityState(key = 'global') {
@@ -839,23 +235,26 @@ export const DB = {
     query(sql, params = []) {
         if (!this.db) return [];
         const stmt = this.db.prepare(sql);
-        stmt.bind(params);
-        const results = [];
-        while (stmt.step()) {
-            results.push(stmt.getAsObject());
+        try {
+            stmt.bind(params);
+            const results = [];
+            while (stmt.step()) {
+                results.push(stmt.getAsObject());
+            }
+            return results;
+        } finally {
+            stmt.free();
         }
-        stmt.free();
-        return results;
     },
 
-    savePluginData(pluginId, data) {
+    savePluginData(pluginId, data, autoSave = true) {
         try {
             const content = JSON.stringify(data);
             const existing = this.query("SELECT id FROM modules_data WHERE type = 'plugin' AND name = ?", [pluginId]);
             if (existing && existing.length > 0) {
-                this.run("UPDATE modules_data SET content = ?, created_at = CURRENT_TIMESTAMP WHERE type = 'plugin' AND name = ?", [content, pluginId]);
+                this.run("UPDATE modules_data SET content = ?, created_at = CURRENT_TIMESTAMP WHERE type = 'plugin' AND name = ?", [content, pluginId], autoSave);
             } else {
-                this.run("INSERT INTO modules_data (type, name, content) VALUES ('plugin', ?, ?)", [pluginId, content]);
+                this.run("INSERT INTO modules_data (type, name, content) VALUES ('plugin', ?, ?)", [pluginId, content], autoSave);
             }
         } catch (e) {
             console.error(`DB.savePluginData failed for ${pluginId}`, e);
@@ -937,6 +336,7 @@ export const DB = {
     updateSkill(id, data) { return this._skillUpdate('skills', id, data); },
 
     deleteSkill(id) {
+        this.run("UPDATE skill_run_steps SET skill_id = NULL WHERE skill_id = ?", [id], false);
         this.run("DELETE FROM skill_pipeline_steps WHERE skill_id = ?", [id], false);
         this.run("DELETE FROM skills WHERE id = ?", [id]);
     },
@@ -1011,6 +411,7 @@ export const DB = {
     },
 
     deletePipelineStep(id) {
+        this.run("UPDATE skill_run_steps SET step_id = NULL WHERE step_id = ?", [id], false);
         this.run("DELETE FROM skill_pipeline_steps WHERE id = ?", [id]);
     },
 
@@ -1040,6 +441,9 @@ export const DB = {
     updateSkillRun(id, data) { return this._skillUpdate('skill_runs', id, data); },
 
     deleteSkillRun(id) {
+        if (this.tableExists('skill_artifacts')) {
+            this.run("UPDATE skill_artifacts SET run_id = NULL WHERE run_id = ?", [id], false);
+        }
         this.run("DELETE FROM skill_run_steps WHERE run_id = ?", [id], false);
         this.run("DELETE FROM skill_runs WHERE id = ?", [id]);
     },
@@ -1048,10 +452,15 @@ export const DB = {
     trimSkillRuns(projectId, keep = 15) {
         const rows = this.query("SELECT id FROM skill_runs WHERE project_id = ? ORDER BY id DESC", [projectId]);
         const stale = rows.slice(keep);
+        const hasArtifacts = stale.length > 0 && this.tableExists('skill_artifacts');
         for (const r of stale) {
+            if (hasArtifacts) {
+                this.run("UPDATE skill_artifacts SET run_id = NULL WHERE run_id = ?", [r.id], false);
+            }
             this.run("DELETE FROM skill_run_steps WHERE run_id = ?", [r.id], false);
             this.run("DELETE FROM skill_runs WHERE id = ?", [r.id], false);
         }
+        if (stale.length > 0) this.save();
         return stale.length;
     },
 
@@ -1146,950 +555,7 @@ export const DB = {
         this.run("DELETE FROM skill_project_messages WHERE project_id = ?", [projectId]);
     },
 
-    // --- Aru Fit & Care ---
-
-    _fitDateKey(date) {
-        const d = date instanceof Date ? date : new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    },
-
-    _fitDateFromKey(key) {
-        return new Date(`${key}T12:00:00`);
-    },
-
-    _fitAddDays(key, days) {
-        const d = this._fitDateFromKey(key);
-        d.setDate(d.getDate() + Number(days || 0));
-        return this._fitDateKey(d);
-    },
-
-    _fitDiffDays(fromKey, toKey) {
-        const a = this._fitDateFromKey(fromKey).getTime();
-        const b = this._fitDateFromKey(toKey).getTime();
-        return Math.round((b - a) / 86400000);
-    },
-
-    _fitProfileDefaults() {
-        return {
-            id: 1, display_name: '', target_weight: null, sex: '', birth_year: null,
-            height_cm: null, activity_level: 'moderate', goal: 'maintain', target_date: '',
-            calorie_min: null, calorie_max: null, aru_tone: 'supportive', aru_notes: '',
-            cycle_tracking: 0, cycle_length: 28, period_length: 5, luteal_length: 14,
-            disclaimer_accepted: 0, intimacy_tracking: 0
-        };
-    },
-
-    getFitProfile() {
-        const rows = this.query("SELECT * FROM fit_profiles WHERE id = 1 LIMIT 1");
-        const p = Object.assign(this._fitProfileDefaults(), rows.length ? rows[0] : {});
-        p.cycle_tracking = Number(p.cycle_tracking) || 0;
-        p.disclaimer_accepted = Number(p.disclaimer_accepted) || 0;
-        p.intimacy_tracking = Number(p.intimacy_tracking) || 0;
-        p.cycle_length = Math.min(60, Math.max(15, Number(p.cycle_length) || 28));
-        p.period_length = Math.min(15, Math.max(1, Number(p.period_length) || 5));
-        p.luteal_length = Math.min(20, Math.max(7, Number(p.luteal_length) || 14));
-        return p;
-    },
-
-    saveFitProfile(data, autoSave = true) {
-        const d = Object.assign(this.getFitProfile(), data || {});
-        try {
-            this.run(`INSERT INTO fit_profiles (id, display_name, target_weight, sex, birth_year, height_cm,
-                activity_level, goal, target_date, calorie_min, calorie_max, aru_tone, aru_notes,
-                cycle_tracking, cycle_length, period_length, luteal_length, disclaimer_accepted,
-                intimacy_tracking, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(id) DO UPDATE SET
-                    display_name = excluded.display_name, target_weight = excluded.target_weight,
-                    sex = excluded.sex, birth_year = excluded.birth_year, height_cm = excluded.height_cm,
-                    activity_level = excluded.activity_level, goal = excluded.goal, target_date = excluded.target_date,
-                    calorie_min = excluded.calorie_min, calorie_max = excluded.calorie_max,
-                    aru_tone = excluded.aru_tone, aru_notes = excluded.aru_notes,
-                    cycle_tracking = excluded.cycle_tracking, cycle_length = excluded.cycle_length,
-                    period_length = excluded.period_length, luteal_length = excluded.luteal_length,
-                    disclaimer_accepted = excluded.disclaimer_accepted,
-                    intimacy_tracking = excluded.intimacy_tracking, updated_at = CURRENT_TIMESTAMP`,
-            [d.display_name || '', d.target_weight ?? null, d.sex || '', d.birth_year ?? null, d.height_cm ?? null,
-                d.activity_level || 'moderate', d.goal || 'maintain', d.target_date || '',
-                d.calorie_min ?? null, d.calorie_max ?? null, d.aru_tone || 'supportive', d.aru_notes || '',
-                Number(d.cycle_tracking) || 0, Number(d.cycle_length) || 28, Number(d.period_length) || 5,
-                Number(d.luteal_length) || 14, Number(d.disclaimer_accepted) || 0,
-                Number(d.intimacy_tracking) || 0], false);
-            if (autoSave) this.save();
-        } catch (e) {
-            // Extremely old schema without the 2.0 columns: keep the legacy write working.
-            console.warn('DB.saveFitProfile: extended write failed, using legacy columns', e);
-            this.run(`INSERT INTO fit_profiles (id, display_name, target_weight, updated_at) VALUES (1, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, target_weight = excluded.target_weight, updated_at = CURRENT_TIMESTAMP`,
-            [d.display_name || '', d.target_weight ?? null], autoSave);
-        }
-    },
-
-    _fitDailyDefaults() {
-        return {
-            weight: null, workout_status: '', workout_note: '', meal_note: '', sleep_hours: null,
-            energy: null, note: '', body_fat: null, muscle_mass: null, water_pct: null,
-            bone_mass: null, visceral_fat: null, steps: null, calories: null, protein: null,
-            carbs: null, fat: null, mood: null, stress: null, symptoms: '[]', water_ml: null,
-            measurement_note: ''
-        };
-    },
-
-    getFitDailyLogs(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_daily_logs WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC", [fromDate, toDate]);
-    },
-
-    getFitDailyLog(date) {
-        const rows = this.query("SELECT * FROM fit_daily_logs WHERE log_date = ? LIMIT 1", [date]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitDailyLog(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        const merged = Object.assign(this._fitDailyDefaults(), this.getFitDailyLog(d.log_date) || {}, d);
-        const symptoms = Array.isArray(merged.symptoms) ? JSON.stringify(merged.symptoms) : (merged.symptoms || '[]');
-        this.run(`INSERT INTO fit_daily_logs (log_date, weight, workout_status, workout_note, meal_note, sleep_hours,
-            energy, note, body_fat, muscle_mass, water_pct, bone_mass, visceral_fat, steps, calories, protein,
-            carbs, fat, mood, stress, symptoms, water_ml, measurement_note, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(log_date) DO UPDATE SET
-                weight = excluded.weight, workout_status = excluded.workout_status, workout_note = excluded.workout_note,
-                meal_note = excluded.meal_note, sleep_hours = excluded.sleep_hours, energy = excluded.energy,
-                note = excluded.note, body_fat = excluded.body_fat, muscle_mass = excluded.muscle_mass,
-                water_pct = excluded.water_pct, bone_mass = excluded.bone_mass, visceral_fat = excluded.visceral_fat,
-                steps = excluded.steps, calories = excluded.calories, protein = excluded.protein,
-                carbs = excluded.carbs, fat = excluded.fat, mood = excluded.mood, stress = excluded.stress,
-                symptoms = excluded.symptoms, water_ml = excluded.water_ml, measurement_note = excluded.measurement_note,
-                updated_at = CURRENT_TIMESTAMP`,
-        [merged.log_date, merged.weight ?? null, merged.workout_status || '', merged.workout_note || '',
-            merged.meal_note || '', merged.sleep_hours ?? null, merged.energy ?? null, merged.note || '',
-            merged.body_fat ?? null, merged.muscle_mass ?? null, merged.water_pct ?? null,
-            merged.bone_mass ?? null, merged.visceral_fat ?? null, merged.steps ?? null,
-            merged.calories ?? null, merged.protein ?? null, merged.carbs ?? null, merged.fat ?? null,
-            merged.mood ?? null, merged.stress ?? null, symptoms, merged.water_ml ?? null,
-            merged.measurement_note || ''], false);
-        if (autoSave) this.save();
-        return merged;
-    },
-
-    patchFitDailyLog(date, changes) {
-        const next = Object.assign(this._fitDailyDefaults(), this.getFitDailyLog(date) || {}, changes || {}, { log_date: date });
-        this.saveFitDailyLog(next);
-        return next;
-    },
-
-    // --- Fit & Care: training plans (week_index = 0 is the repeating template) ---
-
-    getFitPlans(status = '') {
-        if (status) return this.query("SELECT * FROM fit_plans WHERE status = ? ORDER BY start_date DESC, id DESC", [status]);
-        return this.query("SELECT * FROM fit_plans ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, start_date DESC, id DESC");
-    },
-
-    getFitPlan(id) {
-        const rows = this.query("SELECT * FROM fit_plans WHERE id = ? LIMIT 1", [Number(id)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitPlan(data, autoSave = true) {
-        const d = data || {};
-        let id = Number(d.id) || null;
-        if (d.status === 'active') {
-            this.run("UPDATE fit_plans SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE status = 'active' AND id <> ?", [id || 0], false);
-        }
-        if (id) {
-            this.run(`UPDATE fit_plans SET title = ?, goal = ?, start_date = ?, weeks = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [d.title || '', d.goal || '', d.start_date || '', Number(d.weeks) || 4, d.status || 'active', d.notes || '', id], false);
-        } else {
-            this.run(`INSERT INTO fit_plans (title, goal, start_date, weeks, status, notes)
-                VALUES (?, ?, ?, ?, ?, ?)`,
-            [d.title || '', d.goal || '', d.start_date || '', Number(d.weeks) || 4, d.status || 'active', d.notes || ''], false);
-            id = this._lastInsertId('fit_plans');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitPlan(id) {
-        this.run("DELETE FROM fit_plan_days WHERE plan_id = ?", [Number(id)], false);
-        this.run("DELETE FROM fit_plans WHERE id = ?", [Number(id)], false);
-        this.save();
-    },
-
-    getFitPlanDays(planId) {
-        return this.query("SELECT * FROM fit_plan_days WHERE plan_id = ? ORDER BY week_index ASC, weekday ASC, id ASC", [Number(planId)]);
-    },
-
-    getFitPlanDay(id) {
-        const rows = this.query("SELECT * FROM fit_plan_days WHERE id = ? LIMIT 1", [Number(id)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    getFitPlanDayForDate(planId, weekIndex, weekday) {
-        const rows = this.query(`SELECT * FROM fit_plan_days
-            WHERE plan_id = ? AND weekday = ? AND week_index IN (?, 0)
-            ORDER BY CASE WHEN week_index = ? THEN 0 ELSE 1 END, id DESC LIMIT 1`,
-        [Number(planId), Number(weekday), Number(weekIndex), Number(weekIndex)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitPlanDay(data, autoSave = true) {
-        const d = data || {};
-        const planId = Number(d.plan_id);
-        if (!planId || !d.weekday) return null;
-        const weekIndex = Number(d.week_index) || 0;
-        let id = Number(d.id) || null;
-        if (!id) {
-            const existing = this.query("SELECT id FROM fit_plan_days WHERE plan_id = ? AND week_index = ? AND weekday = ? LIMIT 1",
-                [planId, weekIndex, Number(d.weekday)]);
-            if (existing.length) id = existing[0].id;
-        }
-        const exercises = Array.isArray(d.exercises) ? JSON.stringify(d.exercises) : (d.exercises || '[]');
-        if (id) {
-            this.run(`UPDATE fit_plan_days SET week_index = ?, weekday = ?, title = ?, focus = ?, exercises = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [weekIndex, Number(d.weekday), d.title || '', d.focus || '', exercises, d.notes || '', id], false);
-        } else {
-            this.run(`INSERT INTO fit_plan_days (plan_id, week_index, weekday, title, focus, exercises, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [planId, weekIndex, Number(d.weekday), d.title || '', d.focus || '', exercises, d.notes || ''], false);
-            id = this._lastInsertId('fit_plan_days');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitPlanDay(id) {
-        this.run("DELETE FROM fit_plan_days WHERE id = ?", [Number(id)]);
-    },
-
-    // --- Fit & Care: workouts, meals, protocols and health events ---
-
-    getFitWorkouts(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_workouts WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC, log_time ASC, id ASC", [fromDate, toDate]);
-    },
-
-    getFitWorkout(id) {
-        const rows = this.query("SELECT * FROM fit_workouts WHERE id = ? LIMIT 1", [Number(id)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitWorkout(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        const exercises = Array.isArray(d.exercises) ? JSON.stringify(d.exercises) : (d.exercises || '[]');
-        let id = Number(d.id) || null;
-        if (id) {
-            this.run(`UPDATE fit_workouts SET log_date = ?, log_time = ?, plan_day_id = ?, title = ?, exercises = ?,
-                duration_min = ?, volume_kg = ?, rpe = ?, status = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [d.log_date, d.log_time || '', d.plan_day_id ?? null, d.title || '', exercises,
-                d.duration_min ?? null, d.volume_kg ?? null, d.rpe ?? null, d.status || 'done', d.note || '', id], false);
-        } else {
-            this.run(`INSERT INTO fit_workouts (log_date, log_time, plan_day_id, title, exercises, duration_min, volume_kg, rpe, status, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [d.log_date, d.log_time || '', d.plan_day_id ?? null, d.title || '', exercises,
-                d.duration_min ?? null, d.volume_kg ?? null, d.rpe ?? null, d.status || 'done', d.note || ''], false);
-            id = this._lastInsertId('fit_workouts');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitWorkout(id) {
-        this.run("DELETE FROM fit_workouts WHERE id = ?", [Number(id)]);
-    },
-
-    getFitMeals(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_meals WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC, meal_time ASC, id ASC", [fromDate, toDate]);
-    },
-
-    saveFitMeal(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        const tags = Array.isArray(d.tags) ? JSON.stringify(d.tags) : (d.tags || '[]');
-        const estimated = Number(d.estimated) ? 1 : 0;
-        let id = Number(d.id) || null;
-        if (id) {
-            this.run(`UPDATE fit_meals SET log_date = ?, meal_time = ?, title = ?, tags = ?, calories = ?, protein = ?, carbs = ?, fat = ?, note = ?, estimated = ? WHERE id = ?`,
-                [d.log_date, d.meal_time || '', d.title || '', tags, d.calories ?? null, d.protein ?? null,
-                    d.carbs ?? null, d.fat ?? null, d.note || '', estimated, id], false);
-        } else {
-            this.run(`INSERT INTO fit_meals (log_date, meal_time, title, tags, calories, protein, carbs, fat, note, estimated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [d.log_date, d.meal_time || '', d.title || '', tags, d.calories ?? null, d.protein ?? null,
-                d.carbs ?? null, d.fat ?? null, d.note || '', estimated], false);
-            id = this._lastInsertId('fit_meals');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitMeal(id) {
-        this.run("DELETE FROM fit_meals WHERE id = ?", [Number(id)]);
-    },
-
-    getFitProtocols(activeOnly = false) {
-        return activeOnly
-            ? this.query("SELECT * FROM fit_protocols WHERE active = 1 ORDER BY name COLLATE NOCASE ASC, id ASC")
-            : this.query("SELECT * FROM fit_protocols ORDER BY active DESC, name COLLATE NOCASE ASC, id ASC");
-    },
-
-    getFitProtocol(id) {
-        const rows = this.query("SELECT * FROM fit_protocols WHERE id = ? LIMIT 1", [Number(id)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    getFitProtocolByName(name) {
-        const wanted = String(name || '').trim().toLowerCase();
-        if (!wanted) return null;
-        const rows = this.query("SELECT * FROM fit_protocols WHERE lower(name) = ? LIMIT 1", [wanted]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitProtocol(data, autoSave = true) {
-        const d = data || {};
-        const schedule = Array.isArray(d.schedule) || (d.schedule && typeof d.schedule === 'object') ? JSON.stringify(d.schedule) : (d.schedule || '{"times":[],"days":[]}');
-        const rules = Array.isArray(d.rules) || (d.rules && typeof d.rules === 'object') ? JSON.stringify(d.rules) : (d.rules || '{}');
-        let id = Number(d.id) || null;
-        if (id) {
-            this.run(`UPDATE fit_protocols SET name = ?, kind = ?, dosage = ?, schedule = ?, rules = ?, notes = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [d.name || '', d.kind || 'medication', d.dosage || '', schedule, rules, d.notes || '', Number(d.active ?? 1) ? 1 : 0, id], false);
-        } else {
-            this.run(`INSERT INTO fit_protocols (name, kind, dosage, schedule, rules, notes, active)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [d.name || '', d.kind || 'medication', d.dosage || '', schedule, rules, d.notes || '', Number(d.active ?? 1) ? 1 : 0], false);
-            id = this._lastInsertId('fit_protocols');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitProtocol(id) {
-        this.run("UPDATE fit_health_logs SET protocol_id = NULL WHERE protocol_id = ?", [Number(id)], false);
-        this.run("DELETE FROM fit_protocols WHERE id = ?", [Number(id)], false);
-        this.save();
-    },
-
-    getFitHealthLogs(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_health_logs WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC, log_time ASC, id ASC", [fromDate, toDate]);
-    },
-
-    saveFitHealthLog(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        let id = Number(d.id) || null;
-        const tags = Array.isArray(d.tags) ? JSON.stringify(d.tags) : (d.tags || '[]');
-        if (id) {
-            this.run(`UPDATE fit_health_logs SET log_date = ?, log_time = ?, protocol_id = ?, type = ?, name = ?, value = ?, value2 = ?, unit = ?, status = ?, tags = ?, note = ? WHERE id = ?`,
-                [d.log_date, d.log_time || '', d.protocol_id ?? null, d.type || 'measurement', d.name || '',
-                    d.value ?? null, d.value2 ?? null, d.unit || '', d.status || 'logged', tags, d.note || '', id], false);
-        } else {
-            this.run(`INSERT INTO fit_health_logs (log_date, log_time, protocol_id, type, name, value, value2, unit, status, tags, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [d.log_date, d.log_time || '', d.protocol_id ?? null, d.type || 'measurement', d.name || '',
-                d.value ?? null, d.value2 ?? null, d.unit || '', d.status || 'logged', tags, d.note || ''], false);
-            id = this._lastInsertId('fit_health_logs');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitHealthLog(id) {
-        this.run("DELETE FROM fit_health_logs WHERE id = ?", [Number(id)]);
-    },
-
-    // --- Fit & Care: menstrual cycle and private logs ---
-
-    getFitCycles() {
-        return this.query("SELECT * FROM fit_cycles ORDER BY start_date ASC, id ASC");
-    },
-
-    getFitCycle(id) {
-        const rows = this.query("SELECT * FROM fit_cycles WHERE id = ? LIMIT 1", [Number(id)]);
-        return rows.length ? rows[0] : null;
-    },
-
-    // Cycle maths lives here alone so the Aru snapshot and the plugin UI cannot
-    // drift apart. Confidence tells how far the forecast is from real data:
-    // recorded = inside the last logged cycle, estimated = first missed cycle,
-    // stale = two or more expected starts were never logged.
-    getFitCycleStats() {
-        const profile = this.getFitProfile();
-        const cycles = this.getFitCycles().filter((cycle) => cycle.start_date);
-        const lengths = cycles
-            .map((cycle) => Number(cycle.cycle_length))
-            .filter((length) => Number.isFinite(length) && length >= 15 && length <= 60)
-            .slice(-6);
-        const profileLength = Math.min(Math.max(Number(profile.cycle_length) || 28, 15), 60);
-        const avg = lengths.length >= 2
-            ? Math.round(lengths.reduce((sum, length) => sum + length, 0) / lengths.length)
-            : profileLength;
-        const today = this._fitDateKey(new Date());
-        const past = cycles.filter((cycle) => cycle.start_date <= today);
-        const last = past.length ? past[past.length - 1] : null;
-        const daysSince = last ? this._fitDiffDays(last.start_date, today) : null;
-        const predictedCycles = last ? Math.max(0, Math.floor(daysSince / avg)) : 0;
-        return {
-            tracking: Number(profile.cycle_tracking) === 1,
-            cycles,
-            lengths,
-            avg,
-            profileLength,
-            last,
-            daysSince,
-            predictedCycles,
-            confidence: !last ? 'none' : predictedCycles === 0 ? 'recorded' : predictedCycles === 1 ? 'estimated' : 'stale',
-            irregular: lengths.length >= 2 && (Math.max(...lengths) - Math.min(...lengths)) > 4
-        };
-    },
-
-    getFitCycleInfo(date, stats = null) {
-        const key = date || this._fitDateKey(new Date());
-        const info = stats || this.getFitCycleStats();
-        if (!info.tracking) return { tracking: false, hasData: false, phase: '', day: null };
-        if (!info.cycles.length) {
-            return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
-        }
-        const reference = info.cycles.filter((cycle) => cycle.start_date <= key).pop();
-        if (!reference) return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
-        const profile = this.getFitProfile();
-        const avg = info.avg;
-        const luteal = Math.min(Math.max(Number(profile.luteal_length) || 14, 7), Math.max(avg - 7, 7));
-        const periodLength = Math.min(Math.max(Number(reference.period_length) || Number(profile.period_length) || 5, 1), avg);
-        const offset = this._fitDiffDays(reference.start_date, key);
-        const predictedCycles = Math.max(0, Math.floor(offset / avg));
-        const cycleStart = this._fitAddDays(reference.start_date, predictedCycles * avg);
-        const cycleDay = this._fitDiffDays(cycleStart, key) + 1;
-        const ovulationDay = Math.max(periodLength + 1, avg - luteal + 1);
-        const fertileStart = Math.max(periodLength + 1, ovulationDay - 5);
-        const fertileEnd = Math.min(avg, ovulationDay + 1);
-        let phase = 'luteal';
-        if (cycleDay <= periodLength) phase = 'menstrual';
-        else if (cycleDay === ovulationDay) phase = 'ovulation';
-        else if (cycleDay >= fertileStart && cycleDay <= fertileEnd) phase = 'fertile';
-        else if (cycleDay < fertileStart) phase = 'follicular';
-        return {
-            tracking: true,
-            hasData: true,
-            phase,
-            day: cycleDay,
-            avg,
-            periodLength,
-            cycleStart,
-            ovulationDay,
-            fertileStart,
-            fertileEnd,
-            nextPeriod: this._fitAddDays(cycleStart, avg),
-            predicted: predictedCycles > 0,
-            confidence: predictedCycles === 0 ? 'recorded' : predictedCycles === 1 ? 'estimated' : 'stale',
-            stale: predictedCycles >= 2,
-            predictedCycles,
-            lastStart: reference.start_date,
-            daysSinceLastStart: info.daysSince,
-            periodEndRecorded: !!reference.end_date,
-            periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
-        };
-    },
-
-    _fitWeekKey(key) {
-        const date = this._fitDateFromKey(key || this._fitDateKey(new Date()));
-        date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-        return this._fitDateKey(date);
-    },
-
-    // A cycle_length is the distance to the next recorded start, so any change to
-    // the list of starts has to recompute the neighbouring rows instead of only
-    // the one that was edited.
-    _fitRecalcCycleLengths() {
-        const rows = this.query("SELECT id, start_date, cycle_length FROM fit_cycles ORDER BY start_date ASC, id ASC");
-        for (let index = 0; index < rows.length - 1; index++) {
-            const length = this._fitDiffDays(rows[index].start_date, rows[index + 1].start_date);
-            if (length > 0 && Number(rows[index].cycle_length) !== length) {
-                this.run("UPDATE fit_cycles SET cycle_length = ? WHERE id = ?", [length, rows[index].id], false);
-            }
-        }
-    },
-
-    saveFitCycle(data, autoSave = true) {
-        const d = data || {};
-        if (!d.start_date) return null;
-        let id = Number(d.id) || null;
-        if (id) {
-            this.run("UPDATE fit_cycles SET start_date = ?, end_date = ?, cycle_length = ?, period_length = ?, notes = ? WHERE id = ?",
-                [d.start_date, d.end_date || '', d.cycle_length ?? null, d.period_length ?? null, d.notes || '', id], false);
-        } else {
-            this.run("INSERT INTO fit_cycles (start_date, end_date, cycle_length, period_length, notes) VALUES (?, ?, ?, ?, ?)",
-                [d.start_date, d.end_date || '', d.cycle_length ?? null, d.period_length ?? null, d.notes || ''], false);
-            id = this._lastInsertId('fit_cycles');
-        }
-        this._fitRecalcCycleLengths();
-        if (autoSave) this.save();
-        return id;
-    },
-
-    // Returns { id, created, reason, start_date }. A start less than 10 days after
-    // the previous one is treated as the same period (a double tap or a corrected
-    // date) and is not inserted; callers offer to move the existing start instead.
-    startFitCycle(date) {
-        const key = date || this._fitDateKey(new Date());
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
-        if (key > this._fitDateKey(new Date())) return null;
-        const same = this.query("SELECT id, start_date FROM fit_cycles WHERE start_date = ? LIMIT 1", [key]);
-        if (same.length) return { id: same[0].id, created: false, reason: 'same', start_date: same[0].start_date };
-        const previous = this.query("SELECT * FROM fit_cycles WHERE start_date < ? ORDER BY start_date DESC LIMIT 1", [key]);
-        if (previous.length) {
-            const gap = this._fitDiffDays(previous[0].start_date, key);
-            if (gap > 0 && gap < 10) {
-                return { id: previous[0].id, created: false, reason: 'recent', start_date: previous[0].start_date };
-            }
-        }
-        // period_length stays unknown until the user actually marks the end,
-        // so the history never presents the profile default as a real period.
-        this.run("INSERT INTO fit_cycles (start_date, end_date) VALUES (?, '')", [key], false);
-        const id = this._lastInsertId('fit_cycles');
-        this._fitRecalcCycleLengths();
-        this.save();
-        return { id, created: true, reason: 'inserted', start_date: key };
-    },
-
-    moveFitCycleStart(id, date) {
-        const cycle = this.getFitCycle(id);
-        const key = date || this._fitDateKey(new Date());
-        if (!cycle || !/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
-        if (key > this._fitDateKey(new Date())) return null;
-        // end_date means "the bleeding stopped", so it cannot stay before a moved start.
-        const end = cycle.end_date && cycle.end_date >= key ? cycle.end_date : '';
-        const periodLength = end ? this._fitDiffDays(key, end) + 1 : null;
-        this.run("UPDATE fit_cycles SET start_date = ?, end_date = ?, period_length = ? WHERE id = ?",
-            [key, end, periodLength, cycle.id], false);
-        this._fitRecalcCycleLengths();
-        this.save();
-        return cycle.id;
-    },
-
-    endFitCycle(date, cycleId = null) {
-        const key = date || this._fitDateKey(new Date());
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
-        if (key > this._fitDateKey(new Date())) return null;
-        let cycle = cycleId ? this.getFitCycle(cycleId) : null;
-        if (!cycle) {
-            const rows = this.query("SELECT * FROM fit_cycles WHERE start_date <= ? ORDER BY start_date DESC LIMIT 1", [key]);
-            cycle = rows.length ? rows[0] : null;
-        }
-        if (!cycle) return null;
-        const end = key < cycle.start_date ? cycle.start_date : key;
-        const periodLength = this._fitDiffDays(cycle.start_date, end) + 1;
-        this.run("UPDATE fit_cycles SET end_date = ?, period_length = ? WHERE id = ?",
-            [end, periodLength, cycle.id]);
-        this.save();
-        return cycle.id;
-    },
-
-    deleteFitCycle(id) {
-        this.run("DELETE FROM fit_cycles WHERE id = ?", [Number(id)], false);
-        this._fitRecalcCycleLengths();
-        this.save();
-    },
-
-    getFitCycleLogs(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_cycle_logs WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC", [fromDate, toDate]);
-    },
-
-    getFitCycleLog(date) {
-        const rows = this.query("SELECT * FROM fit_cycle_logs WHERE log_date = ? LIMIT 1", [date]);
-        return rows.length ? rows[0] : null;
-    },
-
-    saveFitCycleLog(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        this.run(`INSERT INTO fit_cycle_logs (log_date, flow, note) VALUES (?, ?, ?)
-            ON CONFLICT(log_date) DO UPDATE SET flow = excluded.flow, note = excluded.note`,
-        [d.log_date, d.flow || '', d.note || ''], false);
-        if (autoSave) this.save();
-    },
-
-    deleteFitCycleLog(date) {
-        this.run("DELETE FROM fit_cycle_logs WHERE log_date = ?", [date]);
-    },
-
-    getFitIntimacyLogs(fromDate, toDate) {
-        return this.query("SELECT * FROM fit_intimacy_logs WHERE log_date >= ? AND log_date <= ? ORDER BY log_date ASC, log_time ASC, id ASC", [fromDate, toDate]);
-    },
-
-    saveFitIntimacyLog(data, autoSave = true) {
-        const d = data || {};
-        if (!d.log_date) return null;
-        let id = Number(d.id) || null;
-        if (id) {
-            this.run("UPDATE fit_intimacy_logs SET log_date = ?, protection = ?, note = ?, log_time = ? WHERE id = ?",
-                [d.log_date, d.protection || '', d.note || '', d.log_time || '', id], false);
-        } else {
-            this.run("INSERT INTO fit_intimacy_logs (log_date, protection, note, log_time) VALUES (?, ?, ?, ?)",
-                [d.log_date, d.protection || '', d.note || '', d.log_time || ''], false);
-            id = this._lastInsertId('fit_intimacy_logs');
-        }
-        if (autoSave) this.save();
-        return id;
-    },
-
-    deleteFitIntimacyLog(id) {
-        this.run("DELETE FROM fit_intimacy_logs WHERE id = ?", [Number(id)]);
-    },
-
-    getFitLatestWeight() {
-        const rows = this.query("SELECT weight, log_date FROM fit_daily_logs WHERE weight IS NOT NULL ORDER BY log_date DESC, id DESC LIMIT 1");
-        return rows.length ? rows[0] : null;
-    },
-
-    // --- Fit & Care: per-day Aru chat ---
-
-    getFitChatMessages(date, limit = 40) {
-        return this.query("SELECT * FROM fit_chat_messages WHERE log_date = ? ORDER BY id ASC LIMIT ?", [date, Number(limit) || 40]);
-    },
-
-    saveFitChatMessage(date, role, content) {
-        this.run("INSERT INTO fit_chat_messages (log_date, role, content) VALUES (?, ?, ?)", [date, role || 'user', content || '']);
-        return this._lastInsertId('fit_chat_messages');
-    },
-
-    clearFitChatMessages(date) {
-        this.run("DELETE FROM fit_chat_messages WHERE log_date = ?", [date]);
-    },
-
-    // Local rule checker: compares a meal with medication doses logged on the same day.
-    // Returns factual conflicts from the user's own protocol rules, never medical advice.
-    getFitMealConflicts(meal) {
-        const m = meal || {};
-        if (!m.log_date) return [];
-        const timeToMin = (value) => {
-            const match = /^(\d{1,2}):(\d{2})/.exec(String(value || ''));
-            return match ? (Number(match[1]) * 60 + Number(match[2])) : null;
-        };
-        const mealMin = timeToMin(m.meal_time);
-        const tags = Array.isArray(m.tags) ? m.tags : (() => {
-            try { return JSON.parse(m.tags || '[]'); } catch (e) { return String(m.tags || '').split(',').map(s => s.trim()).filter(Boolean); }
-        })();
-        const normalizedTags = tags.map(t => String(t).trim().toLowerCase()).filter(Boolean);
-        const protocols = new Map(this.getFitProtocols().map(p => [Number(p.id), p]));
-        const logs = this.query(`SELECT * FROM fit_health_logs
-            WHERE log_date = ? AND protocol_id IS NOT NULL AND type = 'medication' AND status = 'taken'`,
-        [m.log_date]);
-        const conflicts = [];
-        for (const log of logs) {
-            const protocol = protocols.get(Number(log.protocol_id));
-            if (!protocol || !Number(protocol.active)) continue;
-            let rules = {};
-            try { rules = JSON.parse(protocol.rules || '{}') || {}; } catch (e) { rules = {}; }
-            const doseMin = timeToMin(log.log_time);
-            if (mealMin !== null && doseMin !== null) {
-                const gap = Math.abs(mealMin - doseMin);
-                const delay = Number(rules.min_delay_min) || 0;
-                if (delay > 0 && gap < delay) {
-                    conflicts.push({
-                        kind: 'delay',
-                        protocol_id: Number(protocol.id),
-                        protocol: protocol.name,
-                        minutes: gap,
-                        required: delay,
-                        dose_time: log.log_time,
-                        meal_time: m.meal_time,
-                        note: rules.note || ''
-                    });
-                }
-            }
-            const avoid = Array.isArray(rules.avoid_tags) ? rules.avoid_tags.map(t => String(t).toLowerCase()) : [];
-            const windowMin = Number(rules.tag_window_min) || 240;
-            if (avoid.length && normalizedTags.length) {
-                const hit = normalizedTags.find(tag => avoid.some(a => tag.includes(a) || a.includes(tag)));
-                const withinWindow = mealMin === null || doseMin === null || Math.abs(mealMin - doseMin) <= windowMin;
-                if (hit && withinWindow) {
-                    conflicts.push({
-                        kind: 'tag',
-                        tag: hit,
-                        protocol_id: Number(protocol.id),
-                        protocol: protocol.name,
-                        minutes: mealMin !== null && doseMin !== null ? Math.abs(mealMin - doseMin) : null,
-                        dose_time: log.log_time,
-                        meal_time: m.meal_time,
-                        note: rules.note || ''
-                    });
-                }
-            }
-        }
-        return conflicts;
-    },
-
-    getFitAllData() {
-        return {
-            app: 'aru-fit-care',
-            version: 2,
-            exported_at: new Date().toISOString(),
-            profile: this.getFitProfile(),
-            daily_logs: this.query("SELECT * FROM fit_daily_logs ORDER BY log_date ASC"),
-            plans: this.query("SELECT * FROM fit_plans ORDER BY id ASC"),
-            plan_days: this.query("SELECT * FROM fit_plan_days ORDER BY id ASC"),
-            workouts: this.query("SELECT * FROM fit_workouts ORDER BY id ASC"),
-            meals: this.query("SELECT * FROM fit_meals ORDER BY id ASC"),
-            protocols: this.query("SELECT * FROM fit_protocols ORDER BY id ASC"),
-            health_logs: this.query("SELECT * FROM fit_health_logs ORDER BY id ASC"),
-            cycles: this.query("SELECT * FROM fit_cycles ORDER BY id ASC"),
-            cycle_logs: this.query("SELECT * FROM fit_cycle_logs ORDER BY id ASC"),
-            intimacy_logs: this.query("SELECT * FROM fit_intimacy_logs ORDER BY id ASC"),
-            chat_messages: this.query("SELECT * FROM fit_chat_messages ORDER BY id ASC")
-        };
-    },
-
-    clearFitData(autoSave = true) {
-        const tables = ['fit_chat_messages', 'fit_intimacy_logs', 'fit_cycle_logs', 'fit_cycles',
-            'fit_health_logs', 'fit_protocols', 'fit_meals', 'fit_workouts', 'fit_plan_days',
-            'fit_plans', 'fit_daily_logs', 'fit_profiles'];
-        for (const table of tables) this.run(`DELETE FROM ${table}`, [], false);
-        if (autoSave) this.save();
-    },
-
-    replaceFitData(data, autoSave = true) {
-        const d = data || {};
-        this.clearFitData(false);
-        this.saveFitProfile(d.profile || {}, false);
-        const insert = (sql, params) => this.run(sql, params, false);
-        for (const row of d.daily_logs || []) this.saveFitDailyLog(row, false);
-        for (const row of d.plans || []) {
-            insert(`INSERT OR REPLACE INTO fit_plans (id, title, goal, start_date, weeks, status, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.title || '', row.goal || '', row.start_date || '', row.weeks ?? 4,
-                row.status || 'active', row.notes || '', row.created_at || null, row.updated_at || null]);
-        }
-        for (const row of d.plan_days || []) {
-            insert(`INSERT OR REPLACE INTO fit_plan_days (id, plan_id, week_index, weekday, title, focus, exercises, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.plan_id ?? null, row.week_index ?? 0, row.weekday ?? 1, row.title || '',
-                row.focus || '', row.exercises || '[]', row.notes || '', row.created_at || null, row.updated_at || null]);
-        }
-        for (const row of d.workouts || []) {
-            insert(`INSERT OR REPLACE INTO fit_workouts (id, log_date, log_time, plan_day_id, title, exercises, duration_min, volume_kg, rpe, status, note, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.log_date, row.log_time || '', row.plan_day_id ?? null, row.title || '',
-                row.exercises || '[]', row.duration_min ?? null, row.volume_kg ?? null, row.rpe ?? null,
-                row.status || 'done', row.note || '', row.created_at || null, row.updated_at || null]);
-        }
-        for (const row of d.meals || []) {
-            insert(`INSERT OR REPLACE INTO fit_meals (id, log_date, meal_time, title, tags, calories, protein, carbs, fat, note, estimated, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.log_date, row.meal_time || '', row.title || '', row.tags || '[]',
-                row.calories ?? null, row.protein ?? null, row.carbs ?? null, row.fat ?? null,
-                row.note || '', Number(row.estimated) ? 1 : 0, row.created_at || null]);
-        }
-        for (const row of d.protocols || []) {
-            insert(`INSERT OR REPLACE INTO fit_protocols (id, name, kind, dosage, schedule, rules, notes, active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.name || '', row.kind || 'medication', row.dosage || '',
-                row.schedule || '{"times":[],"days":[]}', row.rules || '{}', row.notes || '',
-                Number(row.active ?? 1) ? 1 : 0, row.created_at || null, row.updated_at || null]);
-        }
-        for (const row of d.health_logs || []) {
-            insert(`INSERT OR REPLACE INTO fit_health_logs (id, log_date, log_time, protocol_id, type, name, value, value2, unit, status, tags, note, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.log_date, row.log_time || '', row.protocol_id ?? null, row.type || 'measurement',
-                row.name || '', row.value ?? null, row.value2 ?? null, row.unit || '', row.status || 'logged',
-                row.tags || '[]', row.note || '', row.created_at || null]);
-        }
-        for (const row of d.cycles || []) {
-            insert(`INSERT OR REPLACE INTO fit_cycles (id, start_date, end_date, cycle_length, period_length, notes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [row.id ?? null, row.start_date, row.end_date || '', row.cycle_length ?? null,
-                row.period_length ?? null, row.notes || '', row.created_at || null]);
-        }
-        for (const row of d.cycle_logs || []) {
-            insert(`INSERT OR REPLACE INTO fit_cycle_logs (id, log_date, flow, note, created_at) VALUES (?, ?, ?, ?, ?)`,
-                [row.id ?? null, row.log_date, row.flow || '', row.note || '', row.created_at || null]);
-        }
-        for (const row of d.intimacy_logs || []) {
-            insert(`INSERT OR REPLACE INTO fit_intimacy_logs (id, log_date, protection, note, log_time, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-                [row.id ?? null, row.log_date, row.protection || '', row.note || '', row.log_time || '', row.created_at || null]);
-        }
-        for (const row of d.chat_messages || []) {
-            insert(`INSERT OR REPLACE INTO fit_chat_messages (id, log_date, role, content, created_at) VALUES (?, ?, ?, ?, ?)`,
-                [row.id ?? null, row.log_date, row.role || 'user', row.content || '', row.created_at || null]);
-        }
-        if (autoSave) this.save();
-    },
-
-    // Compact, privacy-conscious snapshot used by the main chat system prompt.
-    // Intimate logs and free-form notes are deliberately excluded here.
-    getFitAruSnapshot(detailed = false) {
-        try {
-            const p = this.getFitProfile();
-            const today = this._fitDateKey(new Date());
-            const from = this._fitAddDays(today, detailed ? -13 : -6);
-            const logs = this.getFitDailyLogs(from, today);
-            const workouts = this.getFitWorkouts(from, today);
-            const meals = this.getFitMeals(today, today);
-            const plans = this.getFitPlans('active');
-            const protocols = this.getFitProtocols(true);
-            const cycles = this.getFitCycles();
-            const hasData = p.display_name || p.target_weight != null || p.goal !== 'maintain' || logs.length || workouts.length || plans.length || protocols.length || cycles.length;
-            if (!hasData) return '';
-
-            const lines = [];
-            const goalLabels = { lose: 'lose weight', maintain: 'maintain weight', gain: 'gain weight', health: 'general health', performance: 'performance' };
-            const profileBits = [];
-            if (p.goal) profileBits.push(`goal: ${goalLabels[p.goal] || p.goal}`);
-            if (p.target_weight != null) profileBits.push(`target weight: ${p.target_weight} kg${p.target_date ? ` by ${p.target_date}` : ''}`);
-            if (p.height_cm) profileBits.push(`height: ${p.height_cm} cm`);
-            if (p.sex) profileBits.push(`sex: ${p.sex}`);
-            if (p.birth_year) profileBits.push(`born ${p.birth_year}`);
-            if (p.activity_level) profileBits.push(`activity: ${p.activity_level}`);
-            const toneLabels = { supportive: 'supportive', neutral: 'neutral and factual', coach: 'concise coaching' };
-            if (p.aru_tone && p.aru_tone !== 'supportive') profileBits.push(`preferred Aru tone: ${toneLabels[p.aru_tone] || p.aru_tone}`);
-            if (p.calorie_min != null || p.calorie_max != null) {
-                profileBits.push(`calorie corridor: ${p.calorie_min != null ? p.calorie_min : '—'}–${p.calorie_max != null ? p.calorie_max : '—'} kcal`);
-            }
-            if (profileBits.length) lines.push(`Profile: ${profileBits.join(', ')}.`);
-
-            const span = detailed ? 14 : 7;
-            const avgOf = (rows, field) => {
-                const values = rows
-                    .map(r => r[field])
-                    .filter(v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v)))
-                    .map(Number);
-                return values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
-            };
-
-            const weighted = logs.filter(l => l.weight != null);
-            if (weighted.length) {
-                const first = weighted[0];
-                const last = weighted[weighted.length - 1];
-                const delta = Number(last.weight) - Number(first.weight);
-                lines.push(`Weight (last ${span} days): latest ${last.weight} kg on ${last.log_date}, ${weighted.length} entries, change ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} kg.`);
-            }
-
-            const doneWorkouts = workouts.filter(w => w.status === 'done');
-            if (workouts.length) {
-                const minutes = doneWorkouts.reduce((s, w) => s + (Number(w.duration_min) || 0), 0);
-                const volume = doneWorkouts.reduce((s, w) => s + (Number(w.volume_kg) || 0), 0);
-                const rpeAvg = avgOf(doneWorkouts, 'rpe');
-                const bits = [
-                    `${doneWorkouts.length} done`,
-                    `${workouts.filter(w => w.status === 'planned').length} planned`,
-                    `${workouts.filter(w => w.status === 'skipped').length} skipped`
-                ];
-                if (minutes) bits.push(`${minutes} min total`);
-                if (volume) bits.push(`volume ${Math.round(volume)} kg`);
-                if (rpeAvg != null) bits.push(`avg RPE ${rpeAvg.toFixed(1)}`);
-                lines.push(`Training (last ${span} days): ${bits.join(', ')}.`);
-                if (detailed && doneWorkouts.length) {
-                    lines.push(`Recent sessions: ${doneWorkouts.slice(-6).map(w => `${w.log_date} "${w.title}"${w.duration_min ? ` ${w.duration_min}min` : ''}${w.rpe ? ` RPE${w.rpe}` : ''}`).join('; ')}.`);
-                }
-            }
-
-            const nutritionBits = [];
-            const calorieAvg = avgOf(logs, 'calories');
-            if (calorieAvg != null) nutritionBits.push(`avg ${Math.round(calorieAvg)} kcal`);
-            const proteinAvg = avgOf(logs, 'protein');
-            if (proteinAvg != null) nutritionBits.push(`protein ${Math.round(proteinAvg)} g`);
-            const waterAvg = avgOf(logs, 'water_ml');
-            if (waterAvg != null) nutritionBits.push(`water ${Math.round(waterAvg)} ml`);
-            const todayKcal = meals.reduce((s, m) => s + (Number(m.calories) || 0), 0);
-            if (meals.length) nutritionBits.push(`today ${meals.length} meal(s)${todayKcal ? ` ~${Math.round(todayKcal)} kcal` : ''}`);
-            if (nutritionBits.length) lines.push(`Nutrition (last ${span} days): ${nutritionBits.join(', ')}.`);
-
-            const recoveryBits = [];
-            const sleepAvg = avgOf(logs, 'sleep_hours');
-            if (sleepAvg != null) recoveryBits.push(`sleep ${sleepAvg.toFixed(1)} h`);
-            const energyAvg = avgOf(logs, 'energy');
-            if (energyAvg != null) recoveryBits.push(`energy ${energyAvg.toFixed(1)}/5`);
-            const moodAvg = avgOf(logs, 'mood');
-            if (moodAvg != null) recoveryBits.push(`mood ${moodAvg.toFixed(1)}/5`);
-            const stressAvg = avgOf(logs, 'stress');
-            if (stressAvg != null) recoveryBits.push(`stress ${stressAvg.toFixed(1)}/5`);
-            const symptomCounts = new Map();
-            for (const log of logs) {
-                let list = [];
-                try { list = JSON.parse(log.symptoms || '[]') || []; } catch (e) { list = []; }
-                if (Array.isArray(list)) for (const item of list) symptomCounts.set(item, (symptomCounts.get(item) || 0) + 1);
-            }
-            if (symptomCounts.size) {
-                recoveryBits.push(`symptoms: ${[...symptomCounts.entries()].slice(0, 5).map(([name, count]) => `${name} ×${count}`).join(', ')}`);
-            }
-            if (recoveryBits.length) lines.push(`Recovery (last ${span} days): ${recoveryBits.join(', ')}.`);
-
-            if (plans.length) {
-                const plan = plans[0];
-                let planLine = `Active plan: "${plan.title}" (${plan.weeks} weeks, started ${plan.start_date})`;
-                if (plan.start_date) {
-                    const weekStart = this._fitWeekKey(plan.start_date);
-                    const planEnd = this._fitAddDays(weekStart, Number(plan.weeks) * 7 - 1);
-                    if (today >= plan.start_date && today <= planEnd) {
-                        const week = Math.floor(this._fitDiffDays(weekStart, today) / 7) + 1;
-                        const weekday = ((this._fitDateFromKey(today).getDay() + 6) % 7) + 1;
-                        const day = this.getFitPlanDayForDate(plan.id, week, weekday);
-                        planLine += `, week ${week}/${plan.weeks} of the plan`;
-                        if (day) planLine += `, today: "${day.title || day.focus || 'session'}"`;
-                        else planLine += ', no session scheduled today';
-                    } else if (today > planEnd) {
-                        planLine += `, finished on ${planEnd}`;
-                    } else {
-                        planLine += `, starts on ${plan.start_date}`;
-                    }
-                }
-                lines.push(planLine + '.');
-            }
-
-            const todayLog = logs.find(l => l.log_date === today);
-            const todayBits = [];
-            if (todayLog) {
-                if (todayLog.weight != null) todayBits.push(`weight ${todayLog.weight} kg`);
-                if (todayLog.workout_status) todayBits.push(`workout ${todayLog.workout_status}`);
-                if (todayLog.sleep_hours != null) todayBits.push(`sleep ${todayLog.sleep_hours} h`);
-                if (todayLog.energy != null) todayBits.push(`energy ${todayLog.energy}/5`);
-                if (detailed && todayLog.mood != null) todayBits.push(`mood ${todayLog.mood}/5`);
-                if (detailed && todayLog.stress != null) todayBits.push(`stress ${todayLog.stress}/5`);
-            }
-            if (detailed && meals.length) todayBits.push(`meals: ${meals.map(m => m.title).filter(Boolean).slice(0, 6).join('; ')}`);
-            if (todayBits.length) lines.push(`Today: ${todayBits.join('; ')}.`);
-
-            const scheduled = [];
-            const todayHealth = this.query("SELECT * FROM fit_health_logs WHERE log_date = ? AND type = 'medication'", [today]);
-            const weekday = ((this._fitDateFromKey(today).getDay() + 6) % 7) + 1;
-            for (const protocol of protocols) {
-                let sched = {};
-                try { sched = JSON.parse(protocol.schedule || '{}') || {}; } catch (e) {}
-                const days = Array.isArray(sched.days) ? sched.days : [];
-                if (days.length && !days.includes(weekday)) continue;
-                const times = Array.isArray(sched.times) ? sched.times : [];
-                const taken = todayHealth.filter(l => Number(l.protocol_id) === Number(protocol.id) && l.status === 'taken').length;
-                scheduled.push(`${protocol.name || 'medication'}${protocol.dosage ? ' ' + protocol.dosage : ''}${times.length ? ' at ' + times.join('/') : ''}${taken ? ` (taken ${taken})` : ' (not taken yet)'}`);
-            }
-            if (scheduled.length) lines.push(`Medications today: ${scheduled.join('; ')}.`);
-
-            if (Number(p.cycle_tracking)) {
-                const cycle = this.getFitCycleInfo(today);
-                if (cycle.hasData) {
-                    const bits = [
-                        `last logged period start ${cycle.lastStart}`,
-                        `typical cycle ${cycle.avg} days${cycle.confidence === 'recorded' ? '' : ' (estimate)'}`
-                    ];
-                    if (cycle.periodEndRecorded) bits.push(`bleeding ended ${cycle.periodEnd}`);
-                    else bits.push(`bleeding end not logged (phase estimates assume ${cycle.periodLength} days)`);
-                    bits.push(`${cycle.confidence === 'recorded' ? 'cycle' : 'estimated cycle'} day ${cycle.day} (${cycle.phase})`);
-                    bits.push(`next period expected around ${cycle.nextPeriod} (forecast, not contraception)`);
-                    lines.push(`Cycle tracking: ${bits.join(', ')}.`);
-                    if (cycle.stale) {
-                        lines.push(`Cycle warning: no period start has been logged for ${cycle.daysSinceLastStart} days, which is at least two expected cycles. Forecast dates are stale and must not be treated as reliable. If the user mentions a period, ask for the exact first day and record CYCLE_START; never invent a start date.`);
-                    } else if (cycle.confidence === 'estimated') {
-                        lines.push(`Cycle note: the current phase is forecast from the average because this period start is not logged yet. Ask the user to confirm or record the first day when it happens.`);
-                    }
-                } else {
-                    lines.push('Cycle tracking is on, but no period start has been recorded yet, so no cycle facts or forecasts exist. If the user says her period started, record CYCLE_START with the real date.');
-                }
-            }
-            if (p.aru_notes) lines.push(`User's instructions for Aru in Fit & Care: ${String(p.aru_notes).slice(0, 1200)}`);
-            return lines.join('\n');
-        } catch (e) {
-            console.warn('DB.getFitAruSnapshot failed', e);
-            return '';
-        }
-    },
+    ...DBFitMethods,
 
     // --- Skills export/import helpers ---
 
@@ -2183,7 +649,7 @@ export const DB = {
         for (const rs of data.skill_run_steps || []) {
             const rid = mapRun.get(Number(rs.run_id));
             if (rid === undefined) continue;
-            this.run("INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            this.run("INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [rid, mapStep.get(Number(rs.step_id)) ?? null, num(rs.step_order ?? 0), mapSkill.get(Number(rs.skill_id)) ?? null, rs.skill_title || '', rs.provider || '', rs.model || '', rs.input_text || '', rs.output_text || '', rs.status || 'pending', rs.error ?? null, num(rs.tokens_est ?? 0), num(rs.truncated ?? 0), rs.created_at || null], false);
         }
         for (const a of data.skill_artifacts || []) {
@@ -2617,20 +1083,29 @@ export const DB = {
 
                 await localforage.setItem(this.dbPath, data);
 
+                let fileWriteFailed = false;
                 if (this.fileHandle) {
+                    let writable = null;
                     try {
-                        const writable = await this.fileHandle.createWritable();
+                        writable = await this.fileHandle.createWritable();
                         await writable.write(data);
                         await writable.close();
+                        writable = null;
                     } catch (fileErr) {
+                        fileWriteFailed = true;
+                        if (writable) {
+                            try { await writable.abort(); } catch (_) {}
+                        }
                         console.error('DB.save: file write failed', fileErr);
                         window.app?.updateSyncStatus('error');
                     }
                 }
 
                 // Cloud sync: v2 merges snapshots, legacy pushes the file. Never both.
+                let cloudActive = false;
                 try {
                     if (!this._syncApplying && window.RemoteStorage && RemoteStorage.isUnlocked()) {
+                        cloudActive = true;
                         if (window.SyncEngine?.isEnabled?.()) {
                             window.SyncEngine.onLocalSave();
                         } else {
@@ -2641,7 +1116,7 @@ export const DB = {
                     console.warn('DB.save: remote scheduling failed', remoteErr);
                 }
 
-                if (window.app && window.app.updateSyncStatus) {
+                if (!fileWriteFailed && (this.fileHandle || !cloudActive) && window.app && window.app.updateSyncStatus) {
                     setTimeout(() => window.app.updateSyncStatus('synced'), 500);
                 }
             } catch (e) {
@@ -2711,12 +1186,7 @@ export const DB = {
             });
 
             // Executes heuristic analysis preventing accidental operational data loss during import sequences
-            const success = await this.smartLoad(handle);
-            if (success) {
-                await this.setFileHandle(handle);
-                return true;
-            }
-            return false;
+            return await this.smartLoad(handle);
         } catch (e) {
             console.warn("Open picker cancelled or failed", e);
             return false;
@@ -2725,13 +1195,14 @@ export const DB = {
 
     // Smartly compare file content with local DB to prevent overwriting newer data
     async smartLoad(handle) {
+        let tempDB = null;
         try {
             const file = await handle.getFile();
             // Migrates external blob data to an isolated WebAssembly buffer layer
             const arrayBuffer = await file.arrayBuffer();
             const u8 = new Uint8Array(arrayBuffer);
-            const tempSQL = await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
-            const tempDB = new tempSQL.Database(u8);
+            const tempSQL = this.SQL || await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
+            tempDB = new tempSQL.Database(u8);
 
             // Checks synchronization intervals validating operational safety constraints
             let fileTS = 0;
@@ -2758,31 +1229,41 @@ export const DB = {
                 const loadFile = await UI.confirm(msg);
 
                 if (!loadFile) {
-                    // Keep local, but attach handle and SAVE current to it
+                    // Keep local, attach new handle and save current DB to it
                     console.log("DB: Keeping local data, overwriting stale file.");
-                    return true; // We return true so setFileHandle proceeds, then we save.
+                    try { tempDB.close(); } catch (_) {}
+                    tempDB = null;
+                    await this.setFileHandle(handle);
+                    await this.save();
+                    return true;
                 }
             }
 
             // If we are here, we load the file (either it's newer, or user insisted)
-
-            // Create a unique key for this file if it's a new import context
-            // But actually, for "Open", we usually want to replace the current context.
-            // We'll keep the logic simple: overwrite current DB instance.
+            window.SyncEngine?.stop?.();
+            window.RemoteStorage?.lock?.();
             const name = (file.name || 'import').replace(/[^a-z0-9\.\-_]/gi, '_');
             const key = `aru_db_file_${name}_${Date.now()}`;
             this.dbPath = key;
-            this.handleKey = `aru_handle_${this.dbPath}`; 
+            this.handleKey = `aru_handle_${this.dbPath}`;
             localStorage.setItem('aru_active_db', key);
 
+            if (this.db && this.db !== tempDB) {
+                try { this.db.close(); } catch (_) {}
+            }
             this.SQL = tempSQL; // Ensure we use the same SQL instance
             this._syncReady = false;
             this.db = tempDB;
+            tempDB = null;
             this.migrateSchema(); // Forward migration for databases created by older app versions
-            await this.save(); // Save the loaded data to IndexedDB
+            await this.setFileHandle(handle); // Update handle BEFORE saving so old disk file is never overwritten
+            await this.save(); // Save the loaded data to IndexedDB and new handle
             return true;
 
         } catch (e) {
+            if (tempDB) {
+                try { tempDB.close(); } catch (_) {}
+            }
             console.error("DB: smartLoad failed", e);
             const t = window.aruState?.translations || {};
             await UI.alert((t.alert_load_file_error || "Error loading file: ") + e.message);
@@ -2793,7 +1274,7 @@ export const DB = {
     // Loads a DB image from raw bytes (remote storage) with the same freshness guard as smartLoad.
     // force=true skips the guard (user explicitly chose "take remote").
     async smartLoadFromBytes(u8, { force = false } = {}) {
-        const tempSQL = await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
+        const tempSQL = this.SQL || await window.initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
         const tempDB = new tempSQL.Database(u8);
 
         let fileTS = 0;
@@ -2812,6 +1293,10 @@ export const DB = {
             return false;
         }
 
+        if (this.db && this.db !== tempDB) {
+            try { this.db.close(); } catch (_) {}
+        }
+        this.fileHandle = null;
         this.SQL = tempSQL;
         this._syncReady = false;
         this.db = tempDB;
@@ -2859,20 +1344,26 @@ export const DB = {
         try { st.userSettings = this.getSettings(); } catch (e) { }
 
         if (st.tabs) {
+            const prevActive = (st.activeTabIndex >= 0 && st.activeTabIndex < st.tabs.length) ? st.tabs[st.activeTabIndex] : null;
             const alive = new Set(this.getChats().map(c => String(c.id)));
-            st.tabs = st.tabs.filter(t => t.type === 'plugin' || alive.has(String(t.chatId)));
-            if (!st.tabs.some(t => t.chatId == st.currentChatId)) {
+            st.tabs = st.tabs.filter(t => t.type === 'plugin' || t.isPrivate || alive.has(String(t.chatId)));
+            if (prevActive && st.tabs.includes(prevActive)) {
+                st.activeTabIndex = st.tabs.indexOf(prevActive);
+            } else {
                 st.activeTabIndex = st.tabs.length ? st.tabs.length - 1 : -1;
-                st.currentChatId = st.tabs.length ? st.tabs[st.activeTabIndex].chatId : null;
             }
+            const activeTab = st.activeTabIndex >= 0 ? st.tabs[st.activeTabIndex] : null;
+            st.currentChatId = (activeTab && activeTab.type !== 'plugin') ? activeTab.chatId : null;
         }
 
         if (window.app) {
             try { window.app.loadChatsList(); } catch (e) { }
+            try { window.app.renderTabs?.(); } catch (e) { }
             // Reloading the open chat while any reply is still generating would
             // wipe the visible answer and look like the generation was interrupted.
             const generating = !!(st.tabs && st.tabs.some(t => t && t.isSending));
-            if (st.currentChatId != null && !generating) {
+            const activeTab = (st.tabs && st.activeTabIndex >= 0) ? st.tabs[st.activeTabIndex] : null;
+            if (activeTab && activeTab.type !== 'plugin' && !activeTab.isPrivate && st.currentChatId != null && !generating) {
                 try { await window.app.loadChat(st.currentChatId); } catch (e) { }
             }
             try { window.app.updateSearchUI?.(); } catch (e) { }
@@ -2923,11 +1414,17 @@ export const DB = {
                 } else if (choice === 'copy') {
                     const bytes = await RemoteStorage.pullBytes();
                     const blob = new Blob([bytes], { type: 'application/x-sqlite3' });
+                    const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     document.body.appendChild(a);
-                    a.href = window.URL.createObjectURL(blob);
+                    a.href = url;
                     a.download = 'aru_remote_copy.sqlite';
-                    a.onclick = () => { setTimeout(() => { document.body.removeChild(a); }, 1500); };
+                    a.onclick = () => {
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                        }, 1500);
+                    };
                     a.click();
                 }
             }
@@ -2967,12 +1464,18 @@ export const DB = {
         await this.save(); // Ensure latest is saved
         const data = this.db.export();
         const blob = new Blob([data], { type: 'application/x-sqlite3' });
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         document.body.appendChild(a);
-        a.href = window.URL.createObjectURL(blob);
+        a.href = url;
         const name = filenamePrefix.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         a.download = `${name}_${new Date().toISOString().slice(0, 10)}.sqlite`;
-        a.onclick = () => { setTimeout(() => { document.body.removeChild(a); }, 1500); };
+        a.onclick = () => {
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 1500);
+        };
         a.click();
     },
 
@@ -2996,7 +1499,13 @@ export const DB = {
             r.onload = async () => {
                 try {
                     if (!this.SQL) await this.init();
+                    window.SyncEngine?.stop?.();
+                    window.RemoteStorage?.lock?.();
                     const u8 = new Uint8Array(r.result);
+                    if (this.db) {
+                        try { this.db.close(); } catch (_) {}
+                    }
+                    this._syncReady = false;
                     this.db = new this.SQL.Database(u8);
 
                     // Reset File Handle on manual import as it breaks the link to previous file
@@ -3005,6 +1514,7 @@ export const DB = {
 
                     this.migrateSchema(); // Forward migration for databases created by older app versions
                     await this.save();
+                    try { window.dispatchEvent(new CustomEvent('aru-db-initialized', { detail: { status: 'loaded' } })); } catch (e) {}
                     resolve(true);
                 } catch (e) {
                     reject(e);
@@ -3134,59 +1644,69 @@ export const DB = {
                 const imported = JSON.parse(dataStr);
                 
                 const tempDb = new this.SQL.Database();
-                tempDb.run(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, sort_order INTEGER DEFAULT 0, folder_id INTEGER DEFAULT NULL, is_favorite INTEGER DEFAULT 0)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, role TEXT, content TEXT, emotion TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_html INTEGER DEFAULT 0, attachments TEXT)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS personality_state (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, mood INTEGER DEFAULT 50, sarcasm INTEGER DEFAULT 0, humor INTEGER DEFAULT 50, affinity INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS memory_facts (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, category TEXT, embedding TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS modules_data (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, content TEXT, tags TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_sections (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_chapters (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, section_id INTEGER, title TEXT, anchor_message_id INTEGER, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-                tempDb.run(`CREATE TABLE IF NOT EXISTS chat_artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, type TEXT, code TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(chat_id, title))`);
-                for (const ddl of this._skillDdl()) tempDb.run(ddl);
+                try {
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, sort_order INTEGER DEFAULT 0, folder_id INTEGER DEFAULT NULL, is_favorite INTEGER DEFAULT 0)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, role TEXT, content TEXT, emotion TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_html INTEGER DEFAULT 0, attachments TEXT)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS personality_state (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, mood INTEGER DEFAULT 50, sarcasm INTEGER DEFAULT 0, humor INTEGER DEFAULT 50, affinity INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS memory_facts (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, category TEXT, embedding TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS modules_data (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, content TEXT, tags TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS chat_sections (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS chat_chapters (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, section_id INTEGER, title TEXT, anchor_message_id INTEGER, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+                    tempDb.run(`CREATE TABLE IF NOT EXISTS chat_artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, title TEXT, type TEXT, code TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(chat_id, title))`);
+                    for (const ddl of this._skillDdl()) tempDb.run(ddl);
 
-                const data = imported.data;
-                if (data.chats) {
-                    for (const chat of data.chats) tempDb.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0]);
-                    for (const m of data.messages) tempDb.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.attachments || null, m.created_at || null]);
-                    if (data.folders) {
-                        for (const f of data.folders) tempDb.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null]);
+                    const data = imported.data;
+                    if (data.chats) {
+                        for (const chat of data.chats) tempDb.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0]);
+                        for (const m of data.messages || []) tempDb.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.attachments || null, m.created_at || null]);
+                        if (data.folders) {
+                            for (const f of data.folders) tempDb.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null]);
+                        }
+                        if (data.sections) {
+                            for (const s of data.sections) tempDb.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null]);
+                        }
+                        if (data.chapters) {
+                            for (const c of data.chapters) tempDb.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null]);
+                        }
+                        if (data.chat_artifacts) {
+                            for (const a of data.chat_artifacts) tempDb.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null]);
+                        }
                     }
-                    if (data.sections) {
-                        for (const s of data.sections) tempDb.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null]);
+                    if (data.settings) {
+                        for (const s of data.settings) tempDb.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value || '']);
+                        for (const p of data.personality || []) tempDb.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood || 50, p.sarcasm || 0, p.humor || 50, p.affinity || 0, p.updated_at || null]);
+                        for (const m of data.memory || []) tempDb.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content || '', m.category || '', m.embedding || '', m.created_at || null]);
                     }
-                    if (data.chapters) {
-                        for (const c of data.chapters) tempDb.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null]);
+                    if (data.artifacts) {
+                        for (const a of data.artifacts) tempDb.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [a.id, a.type || '', a.name || '', a.content || '', a.tags || '', a.created_at || null]);
                     }
-                    if (data.chat_artifacts) {
-                        for (const a of data.chat_artifacts) tempDb.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null]);
+                    if (data.tasks) {
+                        for (const t of data.tasks) tempDb.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [t.id, t.type || '', t.name || '', t.content || '', t.tags || '', t.created_at || null]);
                     }
+                    if (data.skills) {
+                        this._insertSkillDataRaw(tempDb, data);
+                    }
+                    exportU8 = tempDb.export();
+                } finally {
+                    try { tempDb.close(); } catch (_) {}
                 }
-                if (data.settings) {
-                    for (const s of data.settings) tempDb.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value || '']);
-                    for (const p of data.personality) tempDb.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood || 50, p.sarcasm || 0, p.humor || 50, p.affinity || 0, p.updated_at || null]);
-                    for (const m of data.memory) tempDb.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content || '', m.category || '', m.embedding || '', m.created_at || null]);
-                }
-                if (data.artifacts) {
-                    for (const a of data.artifacts) tempDb.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [a.id, a.type || '', a.name || '', a.content || '', a.tags || '', a.created_at || null]);
-                }
-                if (data.tasks) {
-                    for (const t of data.tasks) tempDb.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [t.id, t.type || '', t.name || '', t.content || '', t.tags || '', t.created_at || null]);
-                }
-                if (data.skills) {
-                    this._insertSkillDataRaw(tempDb, data);
-                }
-                exportU8 = tempDb.export();
             }
 
             const blob = new Blob([exportU8], { type: 'application/x-sqlite3' });
+            const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             document.body.appendChild(a);
-            a.href = window.URL.createObjectURL(blob);
+            a.href = url;
             const prefix = isFullDb ? 'full' : 'partial';
             a.download = `aru_transfer_${prefix}_${Date.now()}.sqlite`;
-            a.onclick = () => { setTimeout(() => { document.body.removeChild(a); }, 1500); };
+            a.onclick = () => {
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 1500);
+            };
             a.click();
             return 'downloaded';
         }
@@ -3207,123 +1727,149 @@ export const DB = {
             // silently lock the user out of their own device.
             const localPasswordRow = this.query("SELECT value FROM settings WHERE key='db_password'")[0];
 
-            if (mode === 'overwrite') {
-                if (data.chats) { 
-                    this.run("DELETE FROM messages", [], false); this.run("DELETE FROM chat_chapters", [], false); this.run("DELETE FROM chat_sections", [], false); this.run("DELETE FROM chats"); 
-                    for (const chat of data.chats) this.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0], false);
-                    for (const m of data.messages) this.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null], false);
-                    // Folders/sections/chapters exist only in payloads from newer app versions; keep local ones otherwise
-                    if (data.folders) {
-                        this.run("DELETE FROM folders", [], false);
-                        for (const f of data.folders) this.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null], false);
-                    }
-                    if (data.sections) {
-                        for (const s of data.sections) this.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null], false);
-                    }
-                    if (data.chapters) {
-                        for (const c of data.chapters) this.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
-                    }
-                    if (data.chat_artifacts) {
+            this.db.run('BEGIN TRANSACTION');
+            try {
+                if (mode === 'overwrite') {
+                    if (data.chats) {
+                        this.run("DELETE FROM messages", [], false);
+                        this.run("DELETE FROM chat_chapters", [], false);
+                        this.run("DELETE FROM chat_sections", [], false);
                         this.run("DELETE FROM chat_artifacts", [], false);
-                        for (const a of data.chat_artifacts) this.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
+                        this.run("DELETE FROM chats", [], false);
+                        for (const chat of data.chats) {
+                            this.run("INSERT INTO chats (id, title, sort_order, created_at, updated_at, folder_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)", [chat.id, chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.folder_id !== undefined ? chat.folder_id : null, chat.is_favorite || 0], false);
+                        }
+                        for (const m of data.messages || []) {
+                            this.run("INSERT INTO messages (id, chat_id, role, content, emotion, is_html, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [m.id, m.chat_id, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.attachments !== undefined ? m.attachments : null, m.created_at || null], false);
+                        }
+                        // Folders/sections/chapters exist only in payloads from newer app versions; keep local ones otherwise
+                        if (data.folders) {
+                            this.run("DELETE FROM folders", [], false);
+                            for (const f of data.folders) this.run("INSERT INTO folders (id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [f.id, f.title || '', f.sort_order || 0, f.created_at || null], false);
+                        }
+                        if (data.sections) {
+                            for (const s of data.sections) this.run("INSERT INTO chat_sections (id, chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?, ?)", [s.id, s.chat_id, s.title || '', s.sort_order || 0, s.created_at || null], false);
+                        }
+                        if (data.chapters) {
+                            for (const c of data.chapters) this.run("INSERT INTO chat_chapters (id, chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [c.id, c.chat_id, c.section_id !== undefined ? c.section_id : null, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
+                        }
+                        if (data.chat_artifacts) {
+                            for (const a of data.chat_artifacts) this.run("INSERT INTO chat_artifacts (id, chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [a.id, a.chat_id, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
+                        }
                     }
-                }
-                if (data.settings) { 
-                    this.run("DELETE FROM settings"); this.run("DELETE FROM personality_state"); this.run("DELETE FROM memory_facts"); 
-                    for (const s of data.settings) this.run("INSERT INTO settings (key, value) VALUES (?, ?)", [s.key, s.value]);
-                    if (localPasswordRow) this.run("INSERT INTO settings (key, value) VALUES (?, ?)", ['db_password', localPasswordRow.value], false);
-                    for (const p of data.personality) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
-                    for (const m of data.memory) this.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content, m.category, m.embedding, m.created_at]);
-                }
-                if (data.artifacts) { 
-                    this.run("DELETE FROM modules_data WHERE type != 'plugin'"); 
-                    for (const a of data.artifacts) this.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [a.id, a.type, a.name, a.content, a.tags, a.created_at]);
-                }
-                if (data.tasks) { 
-                    this.run("DELETE FROM modules_data WHERE type = 'plugin' AND name = 'task'"); 
-                    for (const t of data.tasks) this.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [t.id, t.type, t.name, t.content, t.tags, t.created_at]);
-                }
-                if (data.skills) {
-                    this.run("DELETE FROM skill_run_steps", [], false);
-                    this.run("DELETE FROM skill_runs", [], false);
-                    this.run("DELETE FROM skill_pipeline_steps", [], false);
-                    this.run("DELETE FROM skill_project_items", [], false);
-                    if (this.tableExists('skill_artifacts')) this.run("DELETE FROM skill_artifacts", [], false);
-                    if (this.tableExists('skill_project_messages')) this.run("DELETE FROM skill_project_messages", [], false);
-                    this.run("DELETE FROM skill_projects", [], false);
-                    this.run("DELETE FROM skills");
-                    this._insertSkillDataRaw(this, data);
-                }
-            } else if (mode === 'merge') {
-                if (data.chats) {
-                    for (const chat of data.chats) {
-                        const oldId = chat.id;
-                        // Folder references are not carried over on merge (folder ids would collide with local ones)
-                        this.run("INSERT INTO chats (title, sort_order, created_at, updated_at, is_favorite) VALUES (?, ?, ?, ?, ?)", [chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.is_favorite || 0], false);
-                        const res = this.exec("SELECT last_insert_rowid() as id");
-                        const newId = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
+                    if (data.settings) {
+                        this.run("DELETE FROM settings", [], false);
+                        this.run("DELETE FROM personality_state", [], false);
+                        this.run("DELETE FROM memory_facts", [], false);
+                        for (const s of data.settings) {
+                            if (s.key === 'last_save_ts' || s.key === 'db_password') continue;
+                            this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [s.key, s.value], false);
+                        }
+                        if (localPasswordRow) this.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['db_password', localPasswordRow.value], false);
+                        for (const p of data.personality || []) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at], false);
+                        for (const m of data.memory || []) this.run("INSERT INTO memory_facts (id, content, category, embedding, created_at) VALUES (?, ?, ?, ?, ?)", [m.id, m.content, m.category, m.embedding, m.created_at], false);
+                    }
+                    if (data.artifacts) {
+                        this.run("DELETE FROM modules_data WHERE type != 'plugin'", [], false);
+                        for (const a of data.artifacts) this.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [a.id, a.type, a.name, a.content, a.tags, a.created_at], false);
+                    }
+                    if (data.tasks) {
+                        this.run("DELETE FROM modules_data WHERE type = 'plugin' AND name = 'task'", [], false);
+                        for (const t of data.tasks) this.run("INSERT INTO modules_data (id, type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)", [t.id, t.type, t.name, t.content, t.tags, t.created_at], false);
+                    }
+                    if (data.skills) {
+                        this.run("DELETE FROM skill_run_steps", [], false);
+                        this.run("DELETE FROM skill_runs", [], false);
+                        this.run("DELETE FROM skill_pipeline_steps", [], false);
+                        this.run("DELETE FROM skill_project_items", [], false);
+                        if (this.tableExists('skill_artifacts')) this.run("DELETE FROM skill_artifacts", [], false);
+                        if (this.tableExists('skill_project_messages')) this.run("DELETE FROM skill_project_messages", [], false);
+                        this.run("DELETE FROM skill_projects", [], false);
+                        this.run("DELETE FROM skills", [], false);
+                        this._insertSkillDataRaw(this, data);
+                    }
+                } else if (mode === 'merge') {
+                    if (data.chats) {
+                        for (const chat of data.chats) {
+                            const oldId = chat.id;
+                            // Folder references are not carried over on merge (folder ids would collide with local ones)
+                            this.run("INSERT INTO chats (title, sort_order, created_at, updated_at, is_favorite) VALUES (?, ?, ?, ?, ?)", [chat.title || 'Chat', chat.sort_order || 0, chat.created_at || null, chat.updated_at || null, chat.is_favorite || 0], false);
+                            const res = this.exec("SELECT last_insert_rowid() as id");
+                            const newId = (res && res[0] && res[0].values && res[0].values[0]) ? res[0].values[0][0] : null;
 
-                        const messages = data.messages.filter(m => String(m.chat_id) === String(oldId));
-                        for (const m of messages) {
-                            this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.created_at || null], false);
-                        }
-
-                        // Re-create sections/chapters under the merged chat with remapped ids
-                        const sections = (data.sections || []).filter(s => String(s.chat_id) === String(oldId));
-                        const sectionMap = {};
-                        for (const s of sections) {
-                            this.run("INSERT INTO chat_sections (chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [newId, s.title || '', s.sort_order || 0, s.created_at || null], false);
-                            const sres = this.exec("SELECT last_insert_rowid() as id");
-                            sectionMap[s.id] = (sres && sres[0] && sres[0].values && sres[0].values[0]) ? sres[0].values[0][0] : null;
-                        }
-                        const chapters = (data.chapters || []).filter(c => String(c.chat_id) === String(oldId));
-                        for (const c of chapters) {
-                            const mappedSection = (c.section_id !== undefined && c.section_id !== null && sectionMap[c.section_id] !== undefined) ? sectionMap[c.section_id] : null;
-                            this.run("INSERT INTO chat_chapters (chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, mappedSection, c.title || '', c.anchor_message_id !== undefined ? c.anchor_message_id : null, c.sort_order || 0, c.created_at || null], false);
-                        }
-                        const artifacts = (data.chat_artifacts || []).filter(a => String(a.chat_id) === String(oldId));
-                        for (const a of artifacts) {
-                            this.run("INSERT INTO chat_artifacts (chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
-                        }
-                    }
-                }
-                if (data.settings) {
-                    for (const s of data.settings) {
-                        if (s.key === 'db_password') continue;
-                        this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [s.key, s.value]);
-                    }
-                    for (const p of data.personality) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET mood = excluded.mood, sarcasm = excluded.sarcasm, humor = excluded.humor, affinity = excluded.affinity, updated_at = excluded.updated_at", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at]);
-                    for (const m of data.memory) this.run("INSERT INTO memory_facts (content, category, embedding, created_at) VALUES (?, ?, ?, ?)", [m.content, m.category, m.embedding, m.created_at]);
-                }
-                if (data.artifacts) {
-                    for (const a of data.artifacts) this.run("INSERT INTO modules_data (type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?)", [a.type, a.name, a.content, a.tags, a.created_at]);
-                }
-                if (data.tasks) {
-                    for (const t of data.tasks) {
-                        const existing = this.query("SELECT id, content FROM modules_data WHERE name = 'task' AND type = 'plugin' LIMIT 1");
-                        if (existing.length === 0) {
-                            this.run("INSERT INTO modules_data (type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?)", [t.type, t.name, t.content, t.tags, t.created_at]);
-                        } else {
-                            try {
-                                const newParsed = JSON.parse(t.content);
-                                const oldParsed = JSON.parse(existing[0].content);
-                                
-                                if (newParsed && newParsed.projects) {
-                                    if (!oldParsed.projects) oldParsed.projects = [];
-                                    for (const np of newParsed.projects) {
-                                        const idx = oldParsed.projects.findIndex(op => op.id === np.id);
-                                        if (idx !== -1) oldParsed.projects[idx] = np;
-                                        else oldParsed.projects.push(np);
-                                    }
-                                    this.run("UPDATE modules_data SET content = ? WHERE id = ?", [JSON.stringify(oldParsed), existing[0].id]);
+                            const messages = (data.messages || []).filter(m => String(m.chat_id) === String(oldId));
+                            const msgIdMap = {};
+                            for (const m of messages) {
+                                this.run("INSERT INTO messages (chat_id, role, content, emotion, is_html, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [newId, m.role || 'user', m.content || '', m.emotion !== undefined ? m.emotion : null, m.is_html || 0, m.attachments !== undefined ? m.attachments : null, m.created_at || null], false);
+                                const mres = this.exec("SELECT last_insert_rowid() as id");
+                                const newMsgId = (mres && mres[0] && mres[0].values && mres[0].values[0]) ? mres[0].values[0][0] : null;
+                                if (m.id !== undefined && m.id !== null && newMsgId !== null) {
+                                    msgIdMap[String(m.id)] = newMsgId;
                                 }
-                            } catch(e) {}
+                            }
+
+                            // Re-create sections/chapters under the merged chat with remapped ids
+                            const sections = (data.sections || []).filter(s => String(s.chat_id) === String(oldId));
+                            const sectionMap = {};
+                            for (const s of sections) {
+                                this.run("INSERT INTO chat_sections (chat_id, title, sort_order, created_at) VALUES (?, ?, ?, ?)", [newId, s.title || '', s.sort_order || 0, s.created_at || null], false);
+                                const sres = this.exec("SELECT last_insert_rowid() as id");
+                                sectionMap[s.id] = (sres && sres[0] && sres[0].values && sres[0].values[0]) ? sres[0].values[0][0] : null;
+                            }
+                            const chapters = (data.chapters || []).filter(c => String(c.chat_id) === String(oldId));
+                            for (const c of chapters) {
+                                const mappedSection = (c.section_id !== undefined && c.section_id !== null && sectionMap[c.section_id] !== undefined) ? sectionMap[c.section_id] : null;
+                                const mappedAnchor = (c.anchor_message_id !== undefined && c.anchor_message_id !== null) ? (msgIdMap[String(c.anchor_message_id)] ?? null) : null;
+                                this.run("INSERT INTO chat_chapters (chat_id, section_id, title, anchor_message_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, mappedSection, c.title || '', mappedAnchor, c.sort_order || 0, c.created_at || null], false);
+                            }
+                            const artifacts = (data.chat_artifacts || []).filter(a => String(a.chat_id) === String(oldId));
+                            for (const a of artifacts) {
+                                this.run("INSERT INTO chat_artifacts (chat_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [newId, a.title || '', a.type || '', a.code || '', a.created_at || null, a.updated_at || null], false);
+                            }
                         }
                     }
+                    if (data.settings) {
+                        for (const s of data.settings) {
+                            if (s.key === 'db_password' || s.key === 'last_save_ts') continue;
+                            this.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [s.key, s.value], false);
+                        }
+                        for (const p of data.personality || []) this.run("INSERT INTO personality_state (key, mood, sarcasm, humor, affinity, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET mood = excluded.mood, sarcasm = excluded.sarcasm, humor = excluded.humor, affinity = excluded.affinity, updated_at = excluded.updated_at", [p.key, p.mood, p.sarcasm, p.humor, p.affinity, p.updated_at], false);
+                        for (const m of data.memory || []) this.run("INSERT INTO memory_facts (content, category, embedding, created_at) VALUES (?, ?, ?, ?)", [m.content, m.category, m.embedding, m.created_at], false);
+                    }
+                    if (data.artifacts) {
+                        for (const a of data.artifacts) this.run("INSERT INTO modules_data (type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?)", [a.type, a.name, a.content, a.tags, a.created_at], false);
+                    }
+                    if (data.tasks) {
+                        for (const t of data.tasks) {
+                            const existing = this.query("SELECT id, content FROM modules_data WHERE name = 'task' AND type = 'plugin' LIMIT 1");
+                            if (existing.length === 0) {
+                                this.run("INSERT INTO modules_data (type, name, content, tags, created_at) VALUES (?, ?, ?, ?, ?)", [t.type, t.name, t.content, t.tags, t.created_at], false);
+                            } else {
+                                try {
+                                    const newParsed = JSON.parse(t.content);
+                                    const oldParsed = JSON.parse(existing[0].content);
+
+                                    if (newParsed && newParsed.projects) {
+                                        if (!oldParsed.projects) oldParsed.projects = [];
+                                        for (const np of newParsed.projects) {
+                                            const idx = oldParsed.projects.findIndex(op => op.id === np.id);
+                                            if (idx !== -1) oldParsed.projects[idx] = np;
+                                            else oldParsed.projects.push(np);
+                                        }
+                                        this.run("UPDATE modules_data SET content = ? WHERE id = ?", [JSON.stringify(oldParsed), existing[0].id], false);
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                    if (data.skills) {
+                        this._mergeSkillData(data);
+                    }
                 }
-                if (data.skills) {
-                    this._mergeSkillData(data);
-                }
+                this.db.run('COMMIT');
+            } catch (txErr) {
+                try { this.db.run('ROLLBACK'); } catch (_) {}
+                throw txErr;
             }
 
             await this.save();

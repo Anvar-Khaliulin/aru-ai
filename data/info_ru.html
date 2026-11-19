@@ -40,7 +40,7 @@
     </script>
     <script>
         tailwind.config = {
-            darkMode: 'media',
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -99,7 +99,7 @@
         </header>
 
         <section class="bg-white dark:bg-gray-900 rounded-2xl p-6 md:p-10 shadow-sm border-l-4 border-orange-500 relative overflow-hidden">
-            <i data-lucide="quote" class="absolute top-4 right-4 w-24 h-24 text-gray-100 dark:text-gray-800 opacity-50 -z-10 transform rotate-12"></i>
+            <i data-lucide="quote" class="absolute top-4 right-4 w-24 h-24 text-gray-100 dark:text-gray-800 opacity-50 z-0 pointer-events-none transform rotate-12"></i>
             <h2 class="text-2xl font-bold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
                 <i data-lucide="leaf" class="text-orange-500 w-6 h-6"></i> Философия Ару
             </h2>
@@ -242,14 +242,6 @@
 
                 <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
                     <div class="flex items-center gap-3 mb-3">
-                        <i data-lucide="clipboard-check" class="w-6 h-6 text-orange-500"></i>
-                        <h3 class="font-bold dark:text-white">Менеджер задач</h3>
-                    </div>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Ведите проекты и задачи на Kanban-доске: добавляйте колонки, сроки и карточки, а Ару сможет учитывать их в контексте беседы.</p>
-                </div>
-
-                <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center gap-3 mb-3">
                         <i data-lucide="blocks" class="w-6 h-6 text-indigo-500"></i>
                         <h3 class="font-bold dark:text-white">Aru Skills</h3>
                     </div>
@@ -352,7 +344,7 @@
                 </div>
                 
                 <div class="space-y-3">
-                    <a href="https://ko-fi.com/aru_ai" target="_blank" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
+                    <a href="https://ko-fi.com/aru_ai" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
                         <div class="flex items-center gap-3">
                             <i data-lucide="coffee" class="text-pink-400 w-6 h-6"></i>
                             <span class="font-medium">Ko-fi (Банковские карты)</span>
@@ -360,7 +352,7 @@
                         <i data-lucide="external-link" class="w-4 h-4 text-gray-500 group-hover:text-white transition-colors"></i>
                     </a>
                     
-                    <a href="https://paypal.me/sudoibot" target="_blank" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
+                    <a href="https://paypal.me/sudoibot" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group">
                         <div class="flex items-center gap-3">
                             <i data-lucide="wallet" class="text-blue-400 w-6 h-6"></i>
                             <span class="font-medium">PayPal</span>
@@ -386,7 +378,7 @@
                         </div>
                     </a>
 
-                    <a href="https://t.me/mnebezluka" target="_blank" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
+                    <a href="https://t.me/mnebezluka" target="_blank" rel="noopener noreferrer" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
                         <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
                             <i data-lucide="send" class="w-5 h-5"></i>
                         </div>
@@ -396,7 +388,7 @@
                         </div>
                     </a>
 
-                    <a href="https://t.me/purplecoon" target="_blank" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
+                    <a href="https://t.me/purplecoon" target="_blank" rel="noopener noreferrer" class="flex items-center gap-4 text-gray-300 hover:text-blue-400 transition-colors">
                         <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
                             <i data-lucide="message-circle" class="w-5 h-5"></i>
                         </div>
@@ -412,6 +404,15 @@
     </footer>
     <script>
         lucide.createIcons();
+    </script>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('aru_theme');
+                var dark = t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (dark) document.documentElement.classList.add('dark');
+            } catch (_) {}
+        })();
     </script>
 </body>
 </html>

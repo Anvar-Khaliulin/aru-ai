@@ -3,16 +3,12 @@
 Semantic core generating vectors (embeddings) for text to enable Retrieval-Augmented Generation (RAG).
 ---chat.aru-lab.space---PWA---
 */
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
-
-env.allowLocalModels = false;
-env.useBrowserCache = true;
-
 export class SemanticCore {
     constructor() {
         this.pipe = null;
         this.modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight and high-performance model for embeddings
         this.readyPromise = null;
+        this._transformers = null;
     }
 
     init(progressCallback) {
@@ -22,15 +18,25 @@ export class SemanticCore {
         if (this.readyPromise) return this.readyPromise;
 
         this.readyPromise = (async () => {
+            let reportedProgress = false;
             try {
+                if (!this._transformers) {
+                    this._transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+                }
+                const { pipeline, env } = this._transformers;
+                env.allowLocalModels = false;
+                env.useBrowserCache = true;
+
                 // Initializes the feature-extraction pipeline
                 this.pipe = await pipeline('feature-extraction', this.modelName, {
                     progress_callback: (data) => {
-                        if (progressCallback) {
-                            // Data status is 'progress', data.progress ranges from 0-100
-                            if (data.status === 'progress') {
-                                progressCallback(Math.round(data.progress));
-                            }
+                        if (!progressCallback || !data) return;
+                        // Data status is 'progress', data.progress ranges from 0-100
+                        if (data.status === 'progress') {
+                            reportedProgress = true;
+                            progressCallback(Math.round(data.progress));
+                        } else if ((data.status === 'done' || data.status === 'ready') && reportedProgress) {
+                            progressCallback(100);
                         }
                     }
                 });
@@ -40,6 +46,10 @@ export class SemanticCore {
                 this.readyPromise = null;
                 console.error("Failed to load semantic model", e);
                 throw e;
+            } finally {
+                if (progressCallback && reportedProgress) {
+                    progressCallback(100);
+                }
             }
         })();
 

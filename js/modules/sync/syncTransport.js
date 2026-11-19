@@ -22,16 +22,16 @@ export class SyncTransport {
         this.adapter = adapter;
     }
 
-    async readBytes(name) {
-        return this.adapter.readNamed(name);
+    async readBytes(name, opts) {
+        return this.adapter.readNamed(name, opts);
     }
 
     async writeBytes(name, bytes, opts) {
         return this.adapter.writeNamed(name, bytes, opts);
     }
 
-    async readJson(name) {
-        const bytes = await this.readBytes(name);
+    async readJson(name, opts) {
+        const bytes = await this.readBytes(name, opts);
         if (!bytes) return null;
         try {
             return JSON.parse(new TextDecoder().decode(bytes));
@@ -41,40 +41,40 @@ export class SyncTransport {
         }
     }
 
-    async writeJson(name, value) {
-        return this.writeBytes(name, new TextEncoder().encode(JSON.stringify(value)));
+    async writeJson(name, value, opts) {
+        return this.writeBytes(name, new TextEncoder().encode(JSON.stringify(value)), opts);
     }
 
-    async readHead() {
-        const head = await this.readJson(SYNC_FILES.head);
+    async readHead(opts) {
+        const head = await this.readJson(SYNC_FILES.head, opts);
         if (!head || head.v !== HEAD_VERSION || !head.baseId || !head.head) return null;
         return head;
     }
 
-    async writeHead(head) {
-        return this.writeJson(SYNC_FILES.head, { ...head, v: HEAD_VERSION, updatedAt: new Date().toISOString() });
+    async writeHead(head, opts) {
+        return this.writeJson(SYNC_FILES.head, { ...head, v: HEAD_VERSION, updatedAt: new Date().toISOString() }, opts);
     }
 
-    async readSnapshot(name, workspaceKey) {
-        const raw = await this.readBytes(name);
+    async readSnapshot(name, workspaceKey, opts) {
+        const raw = await this.readBytes(name, opts);
         if (!raw) return null;
         return SyncCore.decryptBytes(workspaceKey, raw);
     }
 
     // Encrypts and uploads a snapshot. The returned descriptor goes into the head.
-    async writeSnapshot(bytes, { generation, workspaceKey, parents = [], lineage = [], baseId, deviceId, deviceName, rev }) {
+    async writeSnapshot(bytes, { generation, workspaceKey, parents = [], lineage = [], baseId, deviceId, deviceName, rev }, opts = {}) {
         const safeGen = String(generation).padStart(6, '0');
         const name = `${SYNC_FILES.snapshotPrefix}${safeGen}_${deviceId}_${SyncCore.revSuffix(rev)}.bin`;
         const encrypted = await SyncCore.encryptBytes(workspaceKey, bytes);
         // Snapshot names are unique (generation + device + rev), so the provider
         // can create the file directly instead of looking it up first.
-        await this.writeBytes(name, encrypted, { fresh: true });
+        await this.writeBytes(name, encrypted, { ...opts, fresh: true });
         return {
             v: HEAD_VERSION,
             baseId,
             head: name,
             parents,
-            lineage: lineage.slice(-100),
+            lineage: lineage.slice(-500),
             generation,
             rev,
             device: deviceId,
@@ -128,10 +128,14 @@ export class SyncTransport {
 
     async cleanupSnapshots(activeHead, keep = 12) {
         try {
+            const genOf = (name) => {
+                const m = /^aru_sync_snap_(\d+)_/.exec(String(name || ''));
+                return m ? parseInt(m[1], 10) : -1;
+            };
             const files = await this.adapter.listAllFiles();
             const snaps = files
                 .filter(f => f.name.startsWith(SYNC_FILES.snapshotPrefix) && f.name !== activeHead)
-                .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+                .sort((a, b) => (genOf(b.name) - genOf(a.name)) || b.name.localeCompare(a.name) || ((b.ts || 0) - (a.ts || 0)));
             for (const file of snaps.slice(keep)) {
                 await this.adapter.removeNamed(file.name).catch(e => console.warn('Sync cleanup failed', file.name, e));
             }

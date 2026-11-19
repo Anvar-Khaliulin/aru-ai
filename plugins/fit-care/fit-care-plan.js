@@ -106,7 +106,7 @@ Object.assign(window.FitCarePlugin, {
                         ${plan.notes ? `<p style="font-size:.7rem;opacity:.85">${this.esc(plan.notes)}</p>` : ''}
                     </div>
                     <div class="fit-plan-banner-stats">
-                        <div class="fit-plan-banner-stat"><b>${plan.weeks}</b><span>${this.esc(this.t('plan_weeks'))}</span></div>
+                        <div class="fit-plan-banner-stat"><b>${this.esc(plan.weeks)}</b><span>${this.esc(this.t('plan_weeks'))}</span></div>
                         <div class="fit-plan-banner-stat"><b>${sessionsPerWeek}</b><span>${this.esc(this.t('plan_sessions'))}</span></div>
                         ${progress ? `<div class="fit-plan-banner-stat"><b>${progress.percent}%</b><span>${this.esc(this.t('plan_progress'))}</span></div>` : ''}
                     </div>
@@ -342,7 +342,7 @@ Object.assign(window.FitCarePlugin, {
                             <span>${this.esc(this.t('plan_exercises'))}</span>
                             <span>${this.esc(this.t('plan_sets'))}</span>
                             <span>${this.esc(this.t('plan_reps'))}</span>
-                            <span>${this.esc(this.t('plan_weight'))}</span>
+                            <span class="fit-ex-weight">${this.esc(this.t('plan_weight'))}</span>
                             <span></span>
                         </div>
                         <div id="fit-exercise-rows" class="fit-exercise-list">
@@ -386,8 +386,8 @@ Object.assign(window.FitCarePlugin, {
             <div class="fit-exercise-row">
                 <input name="ex_name" maxlength="120" value="${this.esc(item.name || '')}" placeholder="${this.esc(this.t('plan_exercises'))}">
                 <input name="ex_sets" type="number" min="0" step="1" value="${this.esc(item.sets ?? '')}" placeholder="${this.esc(this.t('plan_sets'))}">
-                <input name="ex_reps" type="number" min="0" step="1" value="${this.esc(item.reps ?? '')}" placeholder="${this.esc(this.t('plan_reps'))}">
-                <input name="ex_weight" type="number" min="0" step="0.5" value="${this.esc(item.weight ?? '')}" placeholder="${this.esc(this.t('plan_weight'))}">
+                <input name="ex_reps" type="text" maxlength="24" value="${this.esc(item.reps ?? '')}" placeholder="${this.esc(this.t('plan_reps'))}">
+                <input name="ex_weight" class="fit-ex-weight" type="number" min="0" step="0.5" value="${this.esc(item.weight ?? '')}" placeholder="${this.esc(this.t('plan_weight'))}">
                 <button type="button" class="fit-btn-icon" data-fit-action="plan-remove-exercise" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="x"></i></button>
             </div>
         `;
@@ -406,10 +406,13 @@ Object.assign(window.FitCarePlugin, {
                 const input = row.querySelector(selector);
                 return input && input.value !== '' ? Number(input.value) : null;
             };
+            const repsInput = row.querySelector('[name="ex_reps"]');
+            const repsRaw = repsInput ? String(repsInput.value).trim() : '';
+            const reps = !repsRaw ? null : (/^\d+$/.test(repsRaw) ? Number(repsRaw) : repsRaw);
             exercises.push({
                 name: String(name.value).trim(),
                 sets: valueOf('[name="ex_sets"]'),
-                reps: valueOf('[name="ex_reps"]'),
+                reps,
                 weight: valueOf('[name="ex_weight"]')
             });
         });

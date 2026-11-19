@@ -9,11 +9,12 @@ import { CanvasManager } from './canvas.js';
 import { Tools } from './tools.js';
 import { DB } from './db.js';
 import { UI } from './ui.js';
+import { Safety } from './safety.js';
 
 // JS \b treats Cyrillic as a non-word character, so explicit lookarounds are
-// needed for ru/kk cues ("создай", "Ару") to match at all.
+// needed for ru/kk cues ("создай", "Ару") to match at all (without lookbehind for Safari < 16.4).
 const wordBoundary = (word) => new RegExp(
-    `(?<![a-zа-яёәіңөұүқғһ0-9])${String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-zа-яёәіңөұүқғһ0-9])`,
+    `(?:^|[^a-zа-яёәіңөұүқғһ0-9])${String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-zа-яёәіңөұүқғһ0-9])`,
     'i'
 );
 
@@ -36,6 +37,9 @@ export const Triggers = {
 
     async getRelevantContext(userQuery) {
         try {
+            if (!DB.db || DB.query("SELECT 1 FROM memory_facts LIMIT 1").length === 0) {
+                return '';
+            }
             // Initiates dimensional semantic text extraction and mapping arrays
             const vector = await semanticCore.getEmbedding(userQuery);
 
@@ -128,7 +132,7 @@ export const Triggers = {
                 console.debug('Triggers.processResponseForMemory: skipSave is true, only cleaning response');
                 let cleanResponse = llmResponse || '';
                 cleanResponse = cleanResponse.replace(/(?:\[\[|\[)\s*MEMORY:\s*[\s\S]*?\s*(?:\]\]|\])/gi, '');
-                cleanResponse = cleanResponse.replace(/\(\s*(?:System|Система|Status|Статус|MOOD|SARCASM|AFFINITY|FLAGS):?[\s\S]*?\)/gi, '');
+                cleanResponse = cleanResponse.replace(/\(\s*(?:System|Система|Status|Статус|MOOD|SARCASM|AFFINITY|FLAGS)\s*:[\s\S]*?\)/gi, '');
                 cleanResponse = cleanResponse.replace(/<p>\s*<\/p>/gi, '');
                 return cleanResponse.trim();
             }
@@ -155,7 +159,7 @@ export const Triggers = {
             try {
                 cleanResponse = cleanResponse.replace(/(?:\[\[|\[)\s*MEMORY:\s*[\s\S]*?\s*(?:\]\]|\])/gi, '');
                 // Silences residual system inference logs preventing contextual interaction breakage
-                cleanResponse = cleanResponse.replace(/\(\s*(?:System|Система|Status|Статус|MOOD|SARCASM|AFFINITY|FLAGS):?[\s\S]*?\)/gi, '');
+                cleanResponse = cleanResponse.replace(/\(\s*(?:System|Система|Status|Статус|MOOD|SARCASM|AFFINITY|FLAGS)\s*:[\s\S]*?\)/gi, '');
                 // Sanitizes empty paragraph node structures normalizing graphical visual layers
                 cleanResponse = cleanResponse.replace(/<p>\s*<\/p>/gi, '');
                 cleanResponse = cleanResponse.trim();
@@ -174,25 +178,30 @@ export const Triggers = {
                         const n = parseInt(s, 10);
                         return (n >= 3 && n <= 99) ? String(n) : null;
                     };
+                    const nonNames = new Set(['как', 'что', 'где', 'там', 'тут', 'есть', 'да', 'нет', 'ару', 'aru', 'here', 'there', 'sure', 'yes', 'no', 'well', 'now', 'user']);
+                    const isPlausibleName = (s) => {
+                        const clean = (s || '').trim();
+                        return clean.length >= 2 && !nonNames.has(clean.toLowerCase());
+                    };
 
-                    const nameRu = text.match(/(?:Привет,\s*|я знаю, что тебя зовут\s*|тебя зовут\s*|тебя зовут,?\s*)([А-ЯЁA-Z][а-яёА-ЯA-Za-z\-']{1,30})/i);
+                    const nameRu = text.match(/(?:[Пп]ривет,\s*|[Яя] знаю, что тебя зовут\s*|[Тт]ебя зовут,?\s*)([А-ЯЁӘІҢҒҮҰҚӨҺA-Z][а-яёәіңғүұқөһa-z\-']{1,30})/);
                     // Year-word is MANDATORY and range-checked: bare "тебе 2/100" matched
                     // everything from "варианта" to "процентов" and poisoned memory with junk ages.
                     const ageRuM = text.match(/(?:тебе|вам)\s+(\d{1,3})\s*(?:год|года|годы|лет)(?![а-яё])/i);
 
-                    if (nameRu && nameRu[1]) heuristics.push(`Имя: ${nameRu[1].trim()}`);
+                    if (nameRu && isPlausibleName(nameRu[1])) heuristics.push(`Имя: ${nameRu[1].trim()}`);
                     if (ageRuM) { const a = saneAge(ageRuM[1]); if (a) heuristics.push(`Возраст: ${a}`); }
 
                     // Identifies associative parameters utilizing generalized ASCII language bindings
-                    const nameEn = text.match(/(?:Hi,\s*|Hello,\s*|I know your name is\s*|your name is\s*)([A-Z][a-z\-']{1,30})/i);
+                    const nameEn = text.match(/(?:[Hh]i,\s*|[Hh]ello,\s*|[Ii] know your name is\s*|[Yy]our name is\s*)([A-Z][a-z\-']{1,30})/);
                     const ageEnM = text.match(/(?:you are|you're)\s+(\d{1,3})\s*years?\s+old\b/i) || text.match(/\bage\s+is\s+(\d{1,3})\b/i);
-                    if (nameEn && nameEn[1]) heuristics.push(`Name: ${nameEn[1].trim()}`);
+                    if (nameEn && isPlausibleName(nameEn[1])) heuristics.push(`Name: ${nameEn[1].trim()}`);
                     if (ageEnM) { const a = saneAge(ageEnM[1]); if (a) heuristics.push(`Age: ${a}`); }
 
                     // Identifies associative parameters utilizing specific Turkic grammatical heuristics
-                    const nameKz = text.match(/(?:Менің атым|Сіздің атыңыз|сенің атың)\s*[:,\-]?\s*([А-ЯӘІӨҰҮA-Z][а-яәіөүұүА-ЯA-Za-z\-']{1,30})/i);
+                    const nameKz = text.match(/(?:[Сс]іздің атыңыз|[Сс]енің атың)\s*[:,\-]?\s*([А-ЯӘІҢҒҮҰҚӨҺA-Z][а-яәіңғүұқөһa-z\-']{1,30})/);
                     const ageKzM = text.match(/(?:жасыңыз|жасың|жасы)\s*(\d{1,3})/i);
-                    if (nameKz && nameKz[1]) heuristics.push(`Аты: ${nameKz[1].trim()}`);
+                    if (nameKz && isPlausibleName(nameKz[1])) heuristics.push(`Аты: ${nameKz[1].trim()}`);
                     if (ageKzM) { const a = saneAge(ageKzM[1]); if (a) heuristics.push(`Жасы: ${a}`); }
 
                     if (heuristics.length > 0) {
@@ -258,14 +267,14 @@ export const Triggers = {
                     const similar = await DB.searchFacts(vecArr, this.DUPLICATE_SIMILARITY, 3);
                     if (similar && similar.length > 0) {
                         const best = similar[0]; // sorted by similarity desc
-                        if (best.similarity >= 0.97) {
-                            // Same fact, changed value (e.g. new age): update in place so RAG
-                            // never serves the stale value. Distinct-but-close facts stay untouched.
-                            console.log('Triggers.saveMemories: near-identical memory, updating in place', { fact, id: best.id, similarity: best.similarity });
+                        const sameText = String(best.content || '').trim().toLowerCase() === String(fact || '').trim().toLowerCase();
+                        if (sameText || best.similarity >= 0.995) {
+                            console.log('Triggers.saveMemories: duplicate memory already stored, skipping', { fact, id: best.id, similarity: best.similarity });
+                        } else {
+                            // Related fact with updated value (e.g. age 25 -> 26): update in place.
+                            console.log('Triggers.saveMemories: updating related memory in place', { fact, id: best.id, similarity: best.similarity });
                             await DB.updateFact(best.id, fact, vecArr);
                             this.showMemoryToast();
-                        } else {
-                            console.log('Triggers.saveMemories: found similar memory, skipping save', { fact, similar: similar.map(s => ({ id: s.id, similarity: s.similarity })) });
                         }
                         continue; // Cancels write transaction maintaining dataset cleanliness
                     }
@@ -647,16 +656,17 @@ export const Triggers = {
 
         for (const match of matches) {
             const [fullMatch, command, argsStr] = match;
+            const cmd = String(command || '').toUpperCase();
             const args = {};
-            const argRegex = /(\w+)\s*=\s*(?:"|'|&quot;)([\s\S]*?)(?:"|'|&quot;)/g;
+            const argRegex = /(\w+)\s*=\s*(?:"([\s\S]*?)"|'([\s\S]*?)'|&quot;([\s\S]*?)&quot;)/g;
             let argMatch;
             while ((argMatch = argRegex.exec(argsStr)) !== null) {
-                args[argMatch[1]] = argMatch[2];
+                args[argMatch[1].toLowerCase()] = (argMatch[2] ?? argMatch[3] ?? argMatch[4] ?? '');
             }
 
             // In private mode — block all write commands
-            if (isPrivate && WRITE_COMMANDS.has(command)) {
-                console.log(`Trigger Task: BLOCKED in private mode — ${command}`);
+            if (isPrivate && WRITE_COMMANDS.has(cmd)) {
+                console.log(`Trigger Task: BLOCKED in private mode — ${cmd}`);
                 cleanResponse = cleanResponse.replace(fullMatch, '');
                 if (!privateBlockShown) {
                     const t = (window.aruState && window.aruState.translations) || {};
@@ -668,7 +678,7 @@ export const Triggers = {
                 continue;
             }
 
-            console.log(`Trigger Task: Executing ${command}`, args);
+            console.log(`Trigger Task: Executing ${cmd}`, args);
 
             if (window.TaskPlugin) {
                 try {
@@ -708,7 +718,7 @@ export const Triggers = {
                         return null;
                     };
 
-                    switch (command) {
+                    switch (cmd) {
                         case 'CREATE_PROJECT': {
                             if (!args.name) break;
                             const existing = taskPlugin.state.projects.find(p => p.name.toLowerCase() === args.name.toLowerCase());
@@ -716,17 +726,24 @@ export const Triggers = {
                                 notices.push(this.taskT('task_notice_project_exists', { project: args.name }, `Project "${args.name}" already exists.`));
                                 break;
                             }
-                            taskPlugin.state.projects.push({
+                            const newProj = {
                                 id: uid('p'),
                                 name: args.name,
                                 columns: defaultColumns()
-                            });
+                            };
+                            taskPlugin.state.projects.push(newProj);
+                            if (!taskPlugin.state.activeProjectId) {
+                                taskPlugin.selectProject(newProj.id);
+                            } else {
+                                taskPlugin.renderProjects();
+                            }
                             taskPlugin.saveState();
-                            taskPlugin.renderProjects();
                             break;
                         }
 
                         case 'CREATE_TASK': {
+                            const hadActiveProject = !!taskPlugin.state.activeProjectId;
+                            let createdProject = false;
                             let targetProject = findProject(args.project);
                             if (!targetProject) {
                                 const projName = args.project || (typeof taskPlugin.getT === 'function'
@@ -734,7 +751,8 @@ export const Triggers = {
                                     : 'My First Project');
                                 targetProject = { id: uid('p'), name: projName, columns: defaultColumns() };
                                 taskPlugin.state.projects.push(targetProject);
-                                if (!taskPlugin.state.activeProjectId) taskPlugin.state.activeProjectId = targetProject.id;
+                                createdProject = true;
+                                if (!hadActiveProject) taskPlugin.state.activeProjectId = targetProject.id;
                                 notices.push(this.taskT('task_notice_project_created', { project: projName }, `Project "${projName}" was created.`));
                             }
 
@@ -754,12 +772,17 @@ export const Triggers = {
                                 deadline: this._normalizeTaskDeadline(args.deadline)
                             });
                             taskPlugin.saveState();
-                            taskPlugin.renderBoard();
+                            if (createdProject) {
+                                taskPlugin.selectProject(taskPlugin.state.activeProjectId || targetProject.id);
+                            } else {
+                                taskPlugin.renderBoard();
+                            }
                             break;
                         }
 
                         case 'MOVE_TASK': {
-                            const found = findTask(args.id || args.title);
+                            const scopedProject = args.project ? findProject(args.project) : null;
+                            const found = findTask(args.id || args.title, scopedProject);
                             if (!found) {
                                 notices.push(this.taskT('task_notice_task_not_found', { title: args.title || args.id || '' }, `Task "${args.title || args.id || ''}" was not found.`));
                                 break;
@@ -799,7 +822,8 @@ export const Triggers = {
                         }
 
                         case 'DELETE_TASK': {
-                            const found = findTask(args.id || args.title);
+                            const scopedProject = args.project ? findProject(args.project) : null;
+                            const found = findTask(args.id || args.title, scopedProject);
                             if (!found) {
                                 notices.push(this.taskT('task_notice_task_not_found', { title: args.title || args.id || '' }, `Task "${args.title || args.id || ''}" was not found.`));
                                 break;
@@ -837,9 +861,12 @@ export const Triggers = {
 
     fitDate(value, fallback) {
         const text = String(value || '').trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
-        const date = new Date(`${text}T12:00:00`);
-        return Number.isNaN(date.getTime()) ? fallback : text;
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+        if (!m) return fallback;
+        const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+        const date = new Date(y, mo - 1, d, 12, 0, 0);
+        if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return fallback;
+        return text;
     },
 
     fitTime(value) {
@@ -917,10 +944,11 @@ export const Triggers = {
                 exercise.weight = this.fitNumber(weight[1]);
                 rest = rest.slice(0, weight.index);
             }
-            const setsReps = /(\d{1,2})\s*[x×]\s*(\d{1,3})\s*$/i.exec(rest);
+            const setsReps = /(\d{1,2})\s*[x×х]\s*(\d{1,3}(?:\s*[-–]\s*\d{1,3}|\s*(?:s|с|сек))?)\s*$/i.exec(rest);
             if (setsReps) {
                 exercise.sets = Number(setsReps[1]);
-                exercise.reps = Number(setsReps[2]);
+                const rawReps = setsReps[2].replace(/\s+/g, '');
+                exercise.reps = /^\d+$/.test(rawReps) ? Number(rawReps) : rawReps.replace(/(?:с|сек)$/i, 's');
                 rest = rest.slice(0, setsReps.index);
             }
             exercise.name = rest.replace(/[\s,\-–—]+$/, '').trim() || item;
@@ -964,6 +992,10 @@ export const Triggers = {
         const matches = [...String(llmResponse).matchAll(this.PATTERNS.FIT)];
         if (!matches.length) return llmResponse;
         let clean = String(llmResponse);
+        if ((state.userSettings?.user_mode || 'adult') === 'child') {
+            for (const match of matches) clean = clean.replace(match[0], '');
+            return clean.trim();
+        }
         const notices = [];
         const today = new Date();
         const todayKey = /^\d{4}-\d{2}-\d{2}$/.test(String(fallbackDate))
@@ -1209,7 +1241,7 @@ export const Triggers = {
                 console.error(`Triggers: Fit command ${name} failed`, e);
             }
         }
-        if (wrote && window.FitCarePlugin && typeof window.FitCarePlugin.refresh === 'function') {
+        if (wrote && window.FitCarePlugin && typeof window.FitCarePlugin.refresh === 'function' && !(window.FitCarePlugin.state && window.FitCarePlugin.state.chatBusy)) {
             try { window.FitCarePlugin.refresh(); } catch (e) { /* plugin not mounted */ }
         }
         return (clean.trim() + (notices.length ? `\n\n*${notices.join(' ')}*` : '')).trim();
@@ -1256,7 +1288,7 @@ export const Triggers = {
 
     //4. TRIGGER ACTION (Tools)
 
-    async processResponseForTools(llmResponse) {
+    async processResponseForTools(llmResponse, options = {}) {
         let cleanResponse = llmResponse;
 
         // Find all tool tags: [[TOOL:name args]]
@@ -1269,16 +1301,17 @@ export const Triggers = {
 
         for (const match of matches) {
             const fullMatch = match[0];
-            const toolName = match[1];
+            const toolName = String(match[1] || '').toLowerCase();
             const argsStr = match[2] || '';
             const offset = match.index;
 
-            // Check if inside <pre> or <code>
+            // Check if inside <pre>, <code>, or an HTML tag attribute (prevents attribute breakout XSS)
             const before = cleanResponse.substring(0, offset);
             const insideCode = (before.lastIndexOf('<code') > before.lastIndexOf('</code>')) ||
                 (before.lastIndexOf('<pre') > before.lastIndexOf('</pre>'));
+            const insideTag = before.lastIndexOf('<') > before.lastIndexOf('>');
 
-            if (insideCode) continue;
+            if (insideCode || insideTag) continue;
 
             if (seenTags.has(fullMatch)) {
                 replacements.push({ original: fullMatch, replacement: '', index: offset });
@@ -1290,19 +1323,20 @@ export const Triggers = {
             // Fetch widget HTML
             let replacementHTML = '';
             try {
+                const decodedArgs = argsStr.replace(/&quot;/g, '"').replace(/&#0*39;/g, "'");
+                const extractArg = (name) => {
+                    const m = new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i').exec(decodedArgs);
+                    return m ? (m[1] ?? m[2] ?? '') : '';
+                };
                 if (toolName === 'weather') {
-                    const cityMatch = argsStr.replace(/&quot;/g, '"').match(/city="(.*?)"/);
-                    const city = cityMatch ? cityMatch[1] : 'Almaty';
+                    const city = extractArg('city') || 'Almaty';
                     replacementHTML = await Tools.getWeatherCard(city);
                 } else if (toolName === 'news') {
-                    const tagMatch = argsStr.replace(/&quot;/g, '"').match(/tag="([^"]*)"/);
-                    const langMatch = argsStr.replace(/&quot;/g, '"').match(/lang="([^"]*)"/);
-                    const filter = tagMatch ? tagMatch[1] : (langMatch ? langMatch[1] : '');
+                    const filter = extractArg('tag') || extractArg('lang') || '';
                     const urls = window.app.getRSSUrls();
                     replacementHTML = await Tools.getNewsCard(urls, filter);
                 } else if (toolName === 'tasks') {
-                    const projMatch = argsStr.replace(/&quot;/g, '"').match(/project="([^"]*)"/);
-                    replacementHTML = await Tools.getTasksCard(projMatch ? projMatch[1] : '');
+                    replacementHTML = await Tools.getTasksCard(extractArg('project'));
                 }
             } catch (e) {
                 console.error("Tool Error", e);
@@ -1326,7 +1360,7 @@ export const Triggers = {
         // clearly asks to "show news", "show weather" or "show tasks", inject the appropriate widget.
         // Cues are matched against prose only: a game's `showScreen()` or a
         // `tasks` array inside a code block must not spawn a kanban board.
-        if (replacements.length === 0) {
+        if (replacements.length === 0 && !(options && options.skipFallback)) {
             try {
                 const hasArtifact = cleanResponse.includes('openArtifact(');
                 const visibleText = cleanResponse
@@ -1337,10 +1371,11 @@ export const Triggers = {
                     .replace(/\s+/g, ' ')
                     .toLowerCase();
                 const lower = visibleText;
+                const isChildRefusal = Safety.isChildMode() && /(?:не могу|нельзя|cannot|can't|sorry|кешір|болмайды|не подходит)/i.test(lower);
                 const urls = window.app?.getRSSUrls ? window.app.getRSSUrls() : [];
 
-                if (hasArtifact) {
-                    // Artifact replies already have their own card; widgets would stack on top.
+                if (hasArtifact || isChildRefusal) {
+                    // Artifact replies already have their own card; child refusals must not inject widgets.
                 } else {
                     // News cues
                     if (/(покажи|показать|покажите|show).*(новост|news)/.test(lower)) {
@@ -1354,8 +1389,9 @@ export const Triggers = {
                         const widget = await Tools.getTasksCard('');
                         cleanResponse += '\n\n' + widget;
                     }
-                    // Weather cues (supports Russian, English, and simple Kazakh heuristics)
-                    if (/(погода|weather|forecast|ауа райы|ауа рай)/.test(lower)) {
+                    // Weather cues (require display/forecast intent, not mere prose mention of "weather")
+                    const weatherIntent = /(покажи|какая|прогноз|show|what(?:'s| is)|forecast|көрсет|қандай).*(погод|weather|ауа рай)/;
+                    if (weatherIntent.test(lower)) {
                         let city = 'Almaty';
                         const ruMatch = lower.match(/погода в ([a-zа-яё\-\s]+)/);
                         const enMatch = lower.match(/weather in ([a-z\-\s]+)/);

@@ -3,23 +3,29 @@
 File parser utility extracting textual content from PDF, DOCX, XLSX, and TXT uploads.
 ---chat.aru-lab.space---PWA---
 */
+import { loadPdfJs, loadMammoth, loadXlsx } from './lazyLoader.js';
+
 export const FileProcessor = {
 
     async parseFile(file) {
-        const type = file.type;
+        const type = file.type || '';
+        const lowerName = (file.name || '').toLowerCase();
         console.log(`Processing file: ${file.name} (${type})`);
 
         try {
-            if (type === 'application/pdf') {
+            if (type === 'application/pdf' || lowerName.endsWith('.pdf')) {
                 return await this.readPDF(file);
             }
-            else if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            else if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || lowerName.endsWith('.docx')) {
                 return await this.readDOCX(file);
             }
-            else if (type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || type === 'application/vnd.ms-excel' || file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
+            else if (lowerName.endsWith('.csv') || type === 'text/csv') {
+                return await this.readText(file);
+            }
+            else if (type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || type === 'application/vnd.ms-excel' || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
                 return await this.readXLSX(file);
             }
-            else if (type.startsWith('text/') || file.name.endsWith('.js') || file.name.endsWith('.php') || file.name.endsWith('.html') || file.name.endsWith('.json')) {
+            else if (type.startsWith('text/') || /\.(?:txt|md|js|ts|jsx|tsx|py|php|html|htm|css|json|xml|yaml|yml|sql|log|sh|env|ini|toml)$/.test(lowerName)) {
                 return await this.readText(file);
             }
             else {
@@ -31,8 +37,9 @@ export const FileProcessor = {
         }
     },
 
-    // Excel spreadsheet parsing utility (XLSX, CSV)
+    // Excel spreadsheet parsing utility (XLSX)
     async readXLSX(file) {
+        await loadXlsx();
         const arrayBuffer = await file.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer);
         let fullContent = '';
@@ -48,21 +55,27 @@ export const FileProcessor = {
 
     // PDF document parsing utility
     async readPDF(file) {
+        await loadPdfJs();
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         let fullText = '';
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += `[Page ${i}]\n${pageText}\n\n`;
+        try {
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += `[Page ${i}]\n${pageText}\n\n`;
+            }
+        } finally {
+            try { await pdf.destroy(); } catch (_) {}
         }
         return `FILE CONTENT (${file.name}):\n${fullText}`;
     },
 
     // Word document (DOCX) parsing utility
     async readDOCX(file) {
+        await loadMammoth();
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
         return `FILE CONTENT (${file.name}):\n${result.value}`;
@@ -73,7 +86,7 @@ export const FileProcessor = {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(`FILE CONTENT (${file.name}):\n${e.target.result}`);
-            reader.onerror = (e) => reject(e);
+            reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
             reader.readAsText(file);
         });
     }

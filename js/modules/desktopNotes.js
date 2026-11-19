@@ -181,7 +181,15 @@ export class DesktopNotes {
         this._on(this.editor, 'drop', (event) => event.preventDefault());
         this._on(this.editor, 'dragover', (event) => event.preventDefault());
         this._on(this.editor, 'click', (event) => {
-            if (event.target.closest('a')) event.preventDefault();
+            const anchor = event.target.closest('a');
+            if (!anchor) return;
+            event.preventDefault();
+            if (event.ctrlKey || event.metaKey) {
+                const href = anchor.getAttribute('href') || '';
+                if (/^(https?:|mailto:|tel:)/i.test(href)) {
+                    window.open(href, '_blank', 'noopener,noreferrer');
+                }
+            }
         });
         this._on(this.root, 'keydown', (event) => {
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -478,7 +486,10 @@ export class DesktopNotes {
 
     _updateStatus() {
         this.heading.textContent = this.title.trim() || this.t(this.selectedId === null ? 'new_note' : 'note_untitled');
-        this.status.textContent = this.dirty || this.failed ? this.t('notes_dirty') : this.notice ? this.t(this.notice) : '';
+        const errText = this.t('notes_error') !== 'notes_error'
+            ? this.t('notes_error')
+            : (window.aruState?.translations?.sync_status_error || 'Error');
+        this.status.textContent = this.failed ? errText : (this.dirty ? this.t('notes_dirty') : (this.notice ? this.t(this.notice) : ''));
         this._syncActions();
     }
 

@@ -39,7 +39,7 @@ export const aruGlobalState = {
         let mutated = false;
 
         for (const k of allowed) {
-            if (k in updates && typeof updates[k] === 'number') {
+            if (k in updates && Number.isFinite(updates[k])) {
                 _personality[k] = Math.max(0, Math.min(100, Math.round(updates[k])));
                 mutated = true;
             }

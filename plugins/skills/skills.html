@@ -5,10 +5,10 @@ ARU SKILLS PLUGIN - UI FRAGMENT
 -->
 <link rel="stylesheet" href="plugins/skills/skills.css">
 
-<div id="skills-plugin-root">
-    <div id="skills-layout">
-        <section id="skills-main">
-            <header id="skills-header">
+<div id="skills-plugin-root" class="skills-plugin-root">
+    <div id="skills-layout" class="skills-layout">
+        <section id="skills-main" class="skills-main">
+            <header id="skills-header" class="skills-header">
                 <div class="skills-brand">
                     <div class="skills-logo">
                         <i data-lucide="blocks" class="w-5 h-5"></i>
@@ -29,16 +29,16 @@ ARU SKILLS PLUGIN - UI FRAGMENT
                     </button>
                     <button type="button" id="skills-rail-toggle" class="btn-skills btn-skills-icon"
                         data-skills-i18n-title="skills_rail_toggle" title="Relay panel" onclick="SkillsPlugin.toggleRail()">
-                        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                        <i data-lucide="panel-right" class="w-4 h-4"></i>
                     </button>
                 </div>
             </header>
 
-            <main id="skills-thread">
+            <main id="skills-thread" class="skills-thread">
                 <!-- Messages injected by SkillsPlugin.renderThread() -->
             </main>
 
-            <footer id="skills-composer">
+            <footer id="skills-composer" class="skills-composer">
                 <div id="skills-composer-error" class="skills-run-status error hidden"></div>
                 <div id="skills-composer-attachments" class="hidden"></div>
                 <div class="skills-composer-box">
@@ -46,7 +46,7 @@ ARU SKILLS PLUGIN - UI FRAGMENT
                         oninput="SkillsPlugin.onComposerInput(this)"
                         onkeydown="SkillsPlugin.onComposerKey(event)"></textarea>
                     <button type="button" id="skills-send-btn" class="skills-send-btn"
-                        title="Send" onclick="SkillsPlugin.send()">
+                        title="Send" onclick="SkillsPlugin.onSendClick()">
                         <i data-lucide="arrow-up" class="w-4 h-4"></i>
                     </button>
                 </div>
@@ -73,8 +73,8 @@ ARU SKILLS PLUGIN - UI FRAGMENT
             </footer>
         </section>
 
-        <aside id="skills-rail">
-            <div id="skills-rail-body">
+        <aside id="skills-rail" class="skills-rail">
+            <div id="skills-rail-body" class="skills-rail-body">
                 <!-- Rail sections injected by SkillsPlugin.renderRail() -->
             </div>
         </aside>
@@ -82,7 +82,7 @@ ARU SKILLS PLUGIN - UI FRAGMENT
     </div>
 
     <!-- Shared modal: projects, skill library, skill settings -->
-    <div id="skills-modal" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <div id="skills-modal" role="dialog" aria-modal="true" aria-labelledby="skills-modal-title" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-4">
         <div class="absolute inset-0" onclick="SkillsPlugin.closeModal()"></div>
         <div id="skills-modal-card"
             class="bg-white dark:bg-gray-800 w-full rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-700">

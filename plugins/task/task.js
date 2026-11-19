@@ -14,29 +14,165 @@ window.TaskPlugin = {
     // This script runs before js/app.js (and therefore before DB.init()), so
     // persistence must wait until the real database has been read at least once.
     _dbReady: false,
+    _domMounted: false,
+    _globalListenersBound: false,
+
+    bindGlobalListeners() {
+        if (this._globalListenersBound) return;
+        this._globalListenersBound = true;
+        window.addEventListener('aru-db-initialized', () => {
+            if (!(window.DB && window.DB.db)) return;
+            this._dbReady = true;
+            this.loadFromDB();
+            if (this._domMounted && document.getElementById('task-plugin-root')) {
+                this.selectProject(this.state.activeProjectId);
+                this._refreshIcons();
+            }
+        });
+        window.addEventListener('aru-sync-applied', () => {
+            if (!(window.DB && window.DB.db)) return;
+            this.loadFromDB();
+            if (this._domMounted && document.getElementById('task-plugin-root')) {
+                this.selectProject(this.state.activeProjectId);
+                this._refreshIcons();
+            }
+        });
+        window.addEventListener('aru-lang-changed', () => {
+            if (this._domMounted && document.getElementById('task-plugin-root')) {
+                this.applyI18n();
+                this.renderProjects();
+                this.renderBoard();
+                this._refreshIcons();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (document.querySelector('#aru-dialog-host .aru-dialog-root')) return;
+            const modal = document.getElementById('task-detail-modal');
+            if (modal && !modal.classList.contains('hidden')) {
+                e.stopPropagation();
+                this.closeTaskModal();
+            }
+        });
+    },
+
+    bindDomListeners(root) {
+        if (!root || root._taskDomBound) return;
+        root._taskDomBound = true;
+        root.addEventListener('click', (e) => {
+            const modal = document.getElementById('task-detail-modal');
+            if (modal && e.target === modal) {
+                this.closeTaskModal();
+                return;
+            }
+            const actionEl = e.target.closest('[data-task-action]');
+            if (!actionEl || !root.contains(actionEl)) return;
+            const action = actionEl.dataset.taskAction;
+            const projectId = actionEl.dataset.projectId || '';
+            const colId = actionEl.dataset.colId || '';
+            const taskId = actionEl.dataset.taskId || '';
+
+            switch (action) {
+                case 'select-project':
+                    this.selectProject(projectId);
+                    if (window.innerWidth <= 768 && this.state.isSidebarOpen) {
+                        this.state.isSidebarOpen = false;
+                        this.syncSidebarDOM();
+                    }
+                    break;
+                case 'rename-project':
+                    e.stopPropagation();
+                    this.renameProject(projectId);
+                    break;
+                case 'delete-project':
+                    e.stopPropagation();
+                    this.deleteProject(projectId);
+                    break;
+                case 'rename-column':
+                    e.stopPropagation();
+                    this.renameColumn(colId);
+                    break;
+                case 'delete-column':
+                    e.stopPropagation();
+                    this.deleteColumn(colId);
+                    break;
+                case 'add-column':
+                    e.stopPropagation();
+                    this.addColumn();
+                    break;
+                case 'add-task':
+                    e.stopPropagation();
+                    this.addTask(colId);
+                    break;
+                case 'open-task':
+                    this.openTaskModal(colId, taskId || null);
+                    break;
+                case 'save-task':
+                    this.saveTask(colId, taskId || null);
+                    break;
+                case 'delete-task':
+                    this.deleteTask(colId, taskId);
+                    break;
+                case 'close-modal':
+                    this.closeTaskModal();
+                    break;
+            }
+        });
+    },
+
+    _refreshIcons() {
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
+    },
+
+    syncSidebarDOM() {
+        const root = document.getElementById('task-plugin-root');
+        const backdrop = document.getElementById('task-sidebar-backdrop');
+        if (!root) return;
+        root.classList.toggle('sidebar-collapsed', !this.state.isSidebarOpen);
+        if (backdrop) {
+            backdrop.classList.toggle('hidden', !this.state.isSidebarOpen);
+        }
+    },
 
     init() {
-        console.log("Task Plugin: Initialized");
         this._dbReady = !!(window.DB && window.DB.db);
+        this.bindGlobalListeners();
         this.loadFromDB();
-        this.applyI18n();
-        this.selectProject(this.state.activeProjectId);
         const root = document.getElementById('task-plugin-root');
-        if (root) root.classList.toggle('sidebar-collapsed', !this.state.isSidebarOpen);
-        if (window.lucide) lucide.createIcons();
-
-        if (!this._dbReady) {
-            // One-shot: re-read state once the database reports it is ready,
-            // otherwise seeded defaults would overwrite real stored data.
-            window.addEventListener('aru-db-initialized', () => {
-                if (!(window.DB && window.DB.db)) return;
-                this._dbReady = true;
-                this.loadFromDB();
-                this.selectProject(this.state.activeProjectId);
-                if (window.lucide) lucide.createIcons();
-                console.log("Task Plugin: DB ready, state re-loaded", this.state);
-            }, { once: true });
+        this._domMounted = !!root;
+        if (root) {
+            this.state.isSidebarOpen = window.innerWidth > 768;
+            this.bindDomListeners(root);
+            this.applyI18n();
+            this.selectProject(this.state.activeProjectId);
+            this.syncSidebarDOM();
+            this._refreshIcons();
         }
+    },
+
+    onActivate() {
+        if (!this._domMounted || !document.getElementById('task-plugin-root')) {
+            this.init();
+            return;
+        }
+        this.applyI18n();
+        this.renderProjects();
+        this.renderBoard();
+        this.syncSidebarDOM();
+        this._refreshIcons();
+    },
+
+    onDeactivate() {
+        this.closeTaskModal();
+    },
+
+    onClose() {
+        this.closeTaskModal();
+        this.sortables.forEach(s => { try { s.destroy(); } catch (_) {} });
+        this.sortables = [];
+        this._domMounted = false;
     },
 
     getT(key, fallback) {
@@ -101,48 +237,74 @@ window.TaskPlugin = {
         });
     },
 
+    _seedStarterProject() {
+        const columns = this.getDefaultColumns();
+        columns[0].tasks.push({
+            id: this._uid('t'),
+            title: this.getT('task_seed_task', 'Explore Aru'),
+            desc: this.getT('task_seed_task_desc', 'Try opening the library and setting a custom model.'),
+            deadline: ''
+        });
+        this.state.projects = [
+            {
+                id: this._uid('p'),
+                name: this.getT('task_seed_project', 'My First Project'),
+                columns
+            }
+        ];
+        this.state.activeProjectId = this.state.projects[0].id;
+    },
+
     loadFromDB() {
-        if (window.DB) {
+        if (window.DB && window.DB.db) {
+            this.state.projects = [];
+            this.state.activeProjectId = null;
             const saved = window.DB.getPluginData('task');
-            if (saved && saved.projects) {
+            if (saved && Array.isArray(saved.projects)) {
                 this.state.projects = saved.projects;
-                this.state.activeProjectId = saved.activeProjectId || (saved.projects.length > 0 ? saved.projects[0].id : null);
-                const activeExists = saved.projects.some(p => p.id === this.state.activeProjectId);
-                if (!activeExists) {
-                    this.state.activeProjectId = saved.projects.length > 0 ? saved.projects[0].id : null;
-                }
-                console.log("Task Plugin: Loaded from DB", this.state);
+                const activeExists = saved.projects.some(p => p.id === saved.activeProjectId);
+                this.state.activeProjectId = activeExists
+                    ? saved.activeProjectId
+                    : (saved.projects.length > 0 ? saved.projects[0].id : null);
                 return;
             }
+            this._seedStarterProject();
+            return;
         }
 
-        // Default if empty or DB not ready
+        // Default before DB initialization (pre-auth / wizard)
         if (this.state.projects.length === 0) {
-            const columns = this.getDefaultColumns();
-            columns[0].tasks.push({
-                id: this._uid('t'),
-                title: this.getT('task_seed_task', 'Explore Aru'),
-                desc: this.getT('task_seed_task_desc', 'Try opening the library and setting a custom model.'),
-                deadline: ''
-            });
-            this.state.projects = [
-                {
-                    id: this._uid('p'),
-                    name: this.getT('task_seed_project', 'My First Project'),
-                    columns
-                }
-            ];
-            this.state.activeProjectId = this.state.projects[0].id;
+            this._seedStarterProject();
         }
     },
 
+    _findProjectAndColumn(colId, taskId) {
+        const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
+        if (!project) return { project: null, col: null, task: null };
+        let col = colId ? project.columns.find(c => c.id === colId) : null;
+        if (!taskId) return { project, col, task: null };
+        let task = col ? col.tasks.find(t => t.id === taskId) : null;
+        if (!task) {
+            for (const candidate of project.columns) {
+                const found = candidate.tasks.find(t => t.id === taskId);
+                if (found) {
+                    col = candidate;
+                    task = found;
+                    break;
+                }
+            }
+        }
+        return { project, col, task };
+    },
+
     async addProject() {
-        const name = await window.UI.prompt(this.getT('task_new_project') + ":");
+        const raw = await window.UI.prompt(this.getT('task_new_project') + ':');
+        const name = raw ? raw.trim() : '';
         if (!name) return;
 
         const project = {
             id: this._uid('p'),
-            name: name,
+            name,
             columns: this.getDefaultColumns()
         };
 
@@ -152,11 +314,25 @@ window.TaskPlugin = {
         this.saveState();
     },
 
+    async renameProject(id) {
+        const project = this.state.projects.find(p => p.id === id);
+        if (!project) return;
+        const raw = await window.UI.prompt(this.getT('task_rename_project', 'Rename project') + ':', project.name);
+        const name = raw ? raw.trim() : '';
+        if (!name || name === project.name) return;
+        project.name = name;
+        this.selectProject(project.id);
+        this.saveState();
+    },
+
     selectProject(id) {
         this.state.activeProjectId = id;
         const project = this.state.projects.find(p => p.id === id);
         const nameEl = document.getElementById('active-project-name');
-        if (nameEl) nameEl.innerText = project ? project.name : this.getT('task_empty_board');
+        if (nameEl) nameEl.innerText = project ? project.name : this.getT('plugin_task_name', 'Task Manager');
+
+        const addColBtn = document.getElementById('btn-add-column');
+        if (addColBtn) addColBtn.disabled = !project;
 
         this.renderProjects();
         this.renderBoard();
@@ -164,19 +340,24 @@ window.TaskPlugin = {
 
     renderProjects() {
         const list = document.getElementById('task-projects-list');
-        if (!list) return; // Headless mode or UI not loaded
+        if (!list) return;
 
         list.innerHTML = this.state.projects.map(p => `
-            <div class="project-node group ${p.id === this.state.activeProjectId ? 'active' : ''}" onclick="TaskPlugin.selectProject('${this.esc(p.id)}')">
-                <i data-lucide="${p.id === this.state.activeProjectId ? 'folder-open' : 'folder'}" class="w-4 h-4"></i>
+            <div class="project-node group ${p.id === this.state.activeProjectId ? 'active' : ''}" data-task-action="select-project" data-project-id="${this.esc(p.id)}">
+                <i data-lucide="${p.id === this.state.activeProjectId ? 'folder-open' : 'folder'}" class="w-4 h-4 shrink-0"></i>
                 <span class="flex-1 truncate">${this.esc(p.name)}</span>
-                <button class="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition" onclick="event.stopPropagation(); TaskPlugin.deleteProject('${this.esc(p.id)}')">
-                    <i data-lucide="trash-2" class="w-3 h-3"></i>
-                </button>
+                <div class="project-actions shrink-0">
+                    <button type="button" class="p-1 hover:text-purple-500 transition" title="${this.esc(this.getT('task_rename_project', 'Rename project'))}" data-task-action="rename-project" data-project-id="${this.esc(p.id)}">
+                        <i data-lucide="pencil" class="w-3 h-3"></i>
+                    </button>
+                    <button type="button" class="p-1 hover:text-red-500 transition" title="${this.esc(this.getT('task_delete', 'Delete'))}" data-task-action="delete-project" data-project-id="${this.esc(p.id)}">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
+                </div>
             </div>
         `).join('');
 
-        if (window.lucide) lucide.createIcons();
+        this._refreshIcons();
     },
 
     renderDeadlineBadge(t) {
@@ -186,7 +367,7 @@ window.TaskPlugin = {
         const overdue = d.getTime() < Date.now();
         const cls = overdue
             ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-            : 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400';
+            : 'bg-purple-50 dark:bg-purple-900/25 text-purple-600 dark:text-purple-300';
         return `
             <div class="mt-3 py-1 px-2 rounded-lg text-[10px] font-bold inline-flex items-center gap-1.5 ${cls}">
                 <i data-lucide="clock" class="w-3 h-3"></i>
@@ -196,74 +377,102 @@ window.TaskPlugin = {
 
     renderBoard() {
         const container = document.getElementById('board-columns');
-        if (!container) return; // Headless mode or UI not loaded
+        if (!container) return;
+
+        // Destroy old sortables before DOM swap
+        this.sortables.forEach(s => { try { s.destroy(); } catch (_) {} });
+        this.sortables = [];
 
         const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
         if (!project) {
             container.innerHTML = `
-                <div class="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50 p-8 text-center">
-                    <i data-lucide="clipboard-check" class="w-16 h-16 mb-4"></i>
+                <div class="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-75 p-8 text-center gap-4">
+                    <i data-lucide="clipboard-check" class="w-16 h-16 opacity-60"></i>
                     <p>${this.esc(this.getT('task_empty_board'))}</p>
                 </div>`;
-            if (window.lucide) lucide.createIcons();
+            this._refreshIcons();
             return;
         }
 
-        // Destroy old sortables
-        this.sortables.forEach(s => s.destroy());
-        this.sortables = [];
+        if (!project.columns || project.columns.length === 0) {
+            container.innerHTML = `
+                <div class="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center gap-4">
+                    <i data-lucide="columns" class="w-12 h-12 opacity-60"></i>
+                    <p class="text-sm">${this.esc(this.getT('task_empty_columns', 'No columns yet. Add one to organize tasks.'))}</p>
+                    <button type="button" class="btn-task btn-task-primary flex items-center gap-2" data-task-action="add-column">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        ${this.esc(this.getT('task_add_first_column', 'Add Column'))}
+                    </button>
+                </div>`;
+            this._refreshIcons();
+            return;
+        }
 
         container.innerHTML = project.columns.map(col => `
-            <div class="task-column flex flex-col h-full bg-gray-100 dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-800" data-col-id="${this.esc(col.id)}">
-                <div class="column-header p-4 flex justify-between items-center">
-                    <span class="font-bold text-sm tracking-tight">${this.esc(col.title)}</span>
-                    <button class="p-1.5 text-gray-400 hover:text-red-500 transition" onclick="TaskPlugin.deleteColumn('${this.esc(col.id)}')">
-                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
+            <div class="task-column" data-col-id="${this.esc(col.id)}">
+                <div class="column-header">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-bold text-sm tracking-tight truncate">${this.esc(col.title)}</span>
+                        <span class="column-count" data-col-count="${this.esc(col.id)}">${col.tasks.length}</span>
+                    </div>
+                    <div class="flex items-center gap-0.5 shrink-0">
+                        <button type="button" class="p-1.5 text-gray-400 hover:text-purple-500 transition rounded-lg" title="${this.esc(this.getT('task_rename_column', 'Rename column'))}" data-task-action="rename-column" data-col-id="${this.esc(col.id)}">
+                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button type="button" class="p-1.5 text-gray-400 hover:text-red-500 transition rounded-lg" title="${this.esc(this.getT('task_delete', 'Delete'))}" data-task-action="delete-column" data-col-id="${this.esc(col.id)}">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="cards-list flex-1 p-3 overflow-y-auto min-h-[50px] space-y-3" id="list-${this.esc(col.id)}">
+
+                <div class="cards-list flex-1 p-3 overflow-y-auto min-h-[50px] space-y-3" id="list-${this.esc(col.id)}" data-list-col-id="${this.esc(col.id)}">
                     ${col.tasks.map(t => `
-                        <div class="task-card bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm cursor-grab active:cursor-grabbing hover:border-purple-300 transition-colors" 
-                             data-id="${this.esc(t.id)}" onclick="TaskPlugin.openTaskModal('${this.esc(col.id)}', '${this.esc(t.id)}')">
+                        <div class="task-card" data-id="${this.esc(t.id)}" data-task-action="open-task" data-col-id="${this.esc(col.id)}" data-task-id="${this.esc(t.id)}">
                             <div class="flex justify-between items-start gap-2">
-                                <h4 class="font-bold text-sm text-gray-800 dark:text-gray-100">${this.esc(t.title)}</h4>
+                                <h4 class="font-bold text-sm text-gray-800 dark:text-gray-100 break-words">${this.esc(t.title)}</h4>
                             </div>
-                            ${t.desc ? `<p class="text-[11px] text-gray-500 mt-2 line-clamp-3">${this.esc(t.desc)}</p>` : ''}
+                            ${t.desc ? `<p class="text-[11px] text-gray-500 dark:text-gray-400 mt-2 line-clamp-3 break-words">${this.esc(t.desc)}</p>` : ''}
                             ${this.renderDeadlineBadge(t)}
                         </div>
                     `).join('')}
                 </div>
-                
-                <button class="m-3 p-3 bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-400 hover:text-purple-500 hover:border-purple-400 transition-all flex items-center justify-center gap-2" onclick="TaskPlugin.addTask('${this.esc(col.id)}')">
+
+                <button type="button" class="task-col-add-btn" data-task-action="add-task" data-col-id="${this.esc(col.id)}">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                     ${this.esc(this.getT('task_new_card'))}
                 </button>
             </div>
         `).join('');
 
-        // Initialize Sortable.js for each column
-        project.columns.forEach(col => {
-            const listEl = document.getElementById(`list-${col.id}`);
-            if (listEl) {
-                const s = new Sortable(listEl, {
-                    group: 'tasks',
-                    animation: 150,
-                    ghostClass: 'opacity-20',
-                    onEnd: (evt) => {
-                        this.handleTaskMove(evt);
-                    }
-                });
-                this.sortables.push(s);
-            }
-        });
+        if (typeof Sortable !== 'undefined') {
+            project.columns.forEach(col => {
+                const listEl = document.getElementById(`list-${col.id}`);
+                if (listEl) {
+                    const s = new Sortable(listEl, {
+                        group: 'tasks',
+                        animation: 150,
+                        delay: 250,
+                        delayOnTouchOnly: true,
+                        touchStartThreshold: 5,
+                        filter: 'button',
+                        preventOnFilter: false,
+                        ghostClass: 'task-ghost',
+                        onEnd: (evt) => {
+                            this.handleTaskMove(evt);
+                        }
+                    });
+                    this.sortables.push(s);
+                }
+            });
+        }
 
-        if (window.lucide) lucide.createIcons();
+        this._refreshIcons();
     },
 
     handleTaskMove(evt) {
-        const fromColId = evt.from.id.replace('list-', '');
-        const toColId = evt.to.id.replace('list-', '');
+        if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+        const fromColId = (evt.from.dataset && evt.from.dataset.listColId) || evt.from.id.replace('list-', '');
+        const toColId = (evt.to.dataset && evt.to.dataset.listColId) || evt.to.id.replace('list-', '');
         const taskId = evt.item.getAttribute('data-id');
         const newIndex = evt.newIndex;
 
@@ -281,23 +490,42 @@ window.TaskPlugin = {
         if (!task) return;
 
         toCol.tasks.splice(newIndex, 0, task);
+        evt.item.dataset.colId = toColId;
+
+        const fromBadge = document.querySelector(`[data-col-count="${fromColId}"]`);
+        if (fromBadge) fromBadge.textContent = String(fromCol.tasks.length);
+        const toBadge = document.querySelector(`[data-col-count="${toColId}"]`);
+        if (toBadge) toBadge.textContent = String(toCol.tasks.length);
 
         this.saveState();
-        console.log(`Task ${taskId} moved from ${fromColId} to ${toColId}`);
     },
 
     async addColumn() {
         const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
         if (!project) return;
 
-        const title = await window.UI.prompt(this.getT('task_new_column') + ":");
+        const raw = await window.UI.prompt(this.getT('task_new_column') + ':');
+        const title = raw ? raw.trim() : '';
         if (!title) return;
 
         project.columns.push({
             id: this._uid('c'),
-            title: title,
+            title,
             tasks: []
         });
+        this.renderBoard();
+        this.saveState();
+    },
+
+    async renameColumn(colId) {
+        const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
+        if (!project) return;
+        const col = project.columns.find(c => c.id === colId);
+        if (!col) return;
+        const raw = await window.UI.prompt(this.getT('task_rename_column', 'Rename column') + ':', col.title);
+        const title = raw ? raw.trim() : '';
+        if (!title || title === col.title) return;
+        col.title = title;
         this.renderBoard();
         this.saveState();
     },
@@ -307,39 +535,47 @@ window.TaskPlugin = {
     },
 
     openTaskModal(colId, taskId = null) {
-        const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
-        if (!project) return;
-        const col = project.columns.find(c => c.id === colId);
-        if (!col) return;
-        const task = taskId ? col.tasks.find(t => t.id === taskId) : { title: '', desc: '', deadline: '' };
-        if (!task) return;
+        const { project, col, task } = this._findProjectAndColumn(colId, taskId);
+        if (!project || !col) return;
+        const item = task || { title: '', desc: '', deadline: '' };
 
         const modal = document.getElementById('task-detail-modal');
         const content = document.getElementById('task-modal-content');
         if (!modal || !content) return;
 
+        const colOptions = project.columns.map(c =>
+            `<option value="${this.esc(c.id)}" ${c.id === col.id ? 'selected' : ''}>${this.esc(c.title)}</option>`
+        ).join('');
+
         content.innerHTML = `
-            <div class="space-y-5">
+            <div class="space-y-4">
                 <div class="task-modal-field">
-                    <label class="task-modal-label">${this.esc(this.getT('task_title'))}</label>
-                    <input type="text" id="task-edit-title" class="task-modal-input" value="${this.esc(task.title)}" placeholder="${this.esc(this.getT('task_placeholder_title', 'What needs to be done?'))}">
+                    <label class="task-modal-label" for="task-edit-title">${this.esc(this.getT('task_title'))}</label>
+                    <input type="text" id="task-edit-title" class="task-modal-input" value="${this.esc(item.title)}" placeholder="${this.esc(this.getT('task_placeholder_title', 'What needs to be done?'))}">
                 </div>
                 <div class="task-modal-field">
-                    <label class="task-modal-label">${this.esc(this.getT('task_desc'))}</label>
-                    <textarea id="task-edit-desc" class="task-modal-input min-h-[100px] resize-none" placeholder="${this.esc(this.getT('task_placeholder_desc', 'Add more details...'))}">${this.esc(task.desc)}</textarea>
+                    <label class="task-modal-label" for="task-edit-desc">${this.esc(this.getT('task_desc'))}</label>
+                    <textarea id="task-edit-desc" class="task-modal-input min-h-[100px] resize-none" placeholder="${this.esc(this.getT('task_placeholder_desc', 'Add more details...'))}">${this.esc(item.desc)}</textarea>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="task-modal-field">
-                        <label class="task-modal-label">${this.esc(this.getT('task_deadline'))}</label>
-                        <input type="datetime-local" id="task-edit-deadline" class="task-modal-input" value="${this.esc(this.toInputValue(task.deadline))}">
+                        <label class="task-modal-label" for="task-edit-deadline">${this.esc(this.getT('task_deadline'))}</label>
+                        <input type="datetime-local" id="task-edit-deadline" class="task-modal-input" value="${this.esc(this.toInputValue(item.deadline))}">
+                    </div>
+                    <div class="task-modal-field">
+                        <label class="task-modal-label" for="task-edit-column">${this.esc(this.getT('task_column_label', 'Column'))}</label>
+                        <select id="task-edit-column" class="task-modal-input">${colOptions}</select>
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <button onclick="TaskPlugin.saveTask('${this.esc(colId)}', ${taskId ? `'${this.esc(taskId)}'` : 'null'})" class="flex-1 py-2.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl font-bold transition text-sm">
+                    <button type="button" class="btn-task btn-task-primary flex-1" data-task-action="save-task" data-col-id="${this.esc(col.id)}" data-task-id="${this.esc(taskId || '')}">
                         ${this.esc(taskId ? this.getT('task_save') : this.getT('task_create'))}
                     </button>
+                    <button type="button" class="btn-task btn-task-outline" data-task-action="close-modal">
+                        ${this.esc(this.getT('task_cancel', 'Cancel'))}
+                    </button>
                     ${taskId ? `
-                    <button onclick="TaskPlugin.deleteTask('${this.esc(colId)}', '${this.esc(taskId)}')" class="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-bold transition" title="${this.esc(this.getT('task_delete'))}">
+                    <button type="button" class="px-3.5 py-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 rounded-xl font-bold transition" title="${this.esc(this.getT('task_delete'))}" data-task-action="delete-task" data-col-id="${this.esc(col.id)}" data-task-id="${this.esc(taskId)}">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>` : ''}
                 </div>
@@ -347,7 +583,17 @@ window.TaskPlugin = {
         `;
 
         modal.classList.remove('hidden');
-        if (window.lucide) lucide.createIcons();
+        const titleInput = document.getElementById('task-edit-title');
+        if (titleInput) {
+            titleInput.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter' && !ev.isComposing) {
+                    ev.preventDefault();
+                    this.saveTask(col.id, taskId);
+                }
+            });
+            setTimeout(() => { try { titleInput.focus({ preventScroll: true }); } catch (_) {} }, 30);
+        }
+        this._refreshIcons();
     },
 
     closeTaskModal() {
@@ -360,26 +606,33 @@ window.TaskPlugin = {
         if (!titleEl) return;
         const title = titleEl.value.trim();
         if (!title) return window.UI.showToast(this.getT('task_title_required', 'Title is required'), 'alert-circle');
-        const desc = document.getElementById('task-edit-desc').value;
-        const deadline = document.getElementById('task-edit-deadline').value;
+        const descEl = document.getElementById('task-edit-desc');
+        const deadlineEl = document.getElementById('task-edit-deadline');
+        const colSelectEl = document.getElementById('task-edit-column');
+        const desc = descEl ? descEl.value : '';
+        const deadline = deadlineEl ? deadlineEl.value : '';
 
-        const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
-        if (!project) return;
-        const col = project.columns.find(c => c.id === colId);
-        if (!col) return;
+        const { project, col, task } = this._findProjectAndColumn(colId, taskId || null);
+        if (!project || !col) return;
+
+        const targetColId = (colSelectEl && colSelectEl.value) ? colSelectEl.value : col.id;
+        const targetCol = project.columns.find(c => c.id === targetColId) || col;
 
         if (taskId) {
-            const task = col.tasks.find(t => t.id === taskId);
             if (!task) return;
             task.title = title;
             task.desc = desc;
             task.deadline = deadline;
+            if (targetCol !== col) {
+                col.tasks = col.tasks.filter(t => t.id !== task.id);
+                targetCol.tasks.push(task);
+            }
         } else {
-            col.tasks.push({
+            targetCol.tasks.push({
                 id: this._uid('t'),
-                title: title,
-                desc: desc,
-                deadline: deadline
+                title,
+                desc,
+                deadline
             });
         }
 
@@ -390,11 +643,9 @@ window.TaskPlugin = {
 
     async deleteTask(colId, taskId) {
         if (!(await window.UI.confirm(this.getT('task_confirm_delete', 'Delete this task?')))) return;
-        const project = this.state.projects.find(p => p.id === this.state.activeProjectId);
-        if (!project) return;
-        const col = project.columns.find(c => c.id === colId);
-        if (!col) return;
-        col.tasks = col.tasks.filter(t => t.id !== taskId);
+        const { col, task } = this._findProjectAndColumn(colId, taskId);
+        if (!col || !task) return;
+        col.tasks = col.tasks.filter(t => t.id !== task.id);
 
         this.closeTaskModal();
         this.renderBoard();
@@ -422,33 +673,23 @@ window.TaskPlugin = {
 
     toggleSidebar() {
         const root = document.getElementById('task-plugin-root');
-        const backdrop = document.getElementById('task-sidebar-backdrop');
         if (!root) return;
-
         this.state.isSidebarOpen = !this.state.isSidebarOpen;
-        root.classList.toggle('sidebar-collapsed', !this.state.isSidebarOpen);
-
-        if (backdrop) {
-            backdrop.classList.toggle('hidden', !this.state.isSidebarOpen);
-        }
+        this.syncSidebarDOM();
     },
 
     saveState() {
         if (!this._dbReady) {
-            // The wizard may create the DB later in this session (empty -> created),
-            // so adopt it as soon as it truly exists; otherwise skip persistence.
             if (window.DB && window.DB.db) {
                 this._dbReady = true;
-                this.loadFromDB();
             } else {
                 console.warn('Task Plugin: save skipped — DB not initialized yet');
                 return;
             }
         }
 
-        // Decouple state from any runtime references and strip potential circularities
         const projectsClean = JSON.parse(JSON.stringify(this.state.projects, (key, value) => {
-            if (value && value.nodeType) return undefined; // Skip DOM nodes
+            if (value && value.nodeType) return undefined;
             return value;
         }));
         const stateToSave = {
@@ -456,33 +697,23 @@ window.TaskPlugin = {
             activeProjectId: this.state.activeProjectId
         };
 
-        // If DB is ready — persist immediately and trigger DB.save()
         try {
             if (window.DB && window.DB.db) {
                 try {
                     window.DB.savePluginData('task', stateToSave);
-                    // ensure DB backend persists to storage/file
                     if (typeof window.DB.save === 'function') window.DB.save();
-                    console.log("Task Plugin: Saved to DB");
+                    try { localStorage.removeItem('task_plugin_pending'); } catch (_) {}
                 } catch (e) {
-                    console.error("Task Plugin: DB save failed", e);
-                    // Fallback: queue for later flush
-                    try { localStorage.setItem('task_plugin_pending', JSON.stringify(stateToSave)); console.log('Task Plugin: queued pending save (DB error)'); } catch (ee) {}
+                    console.error('Task Plugin: DB save failed', e);
+                    try { localStorage.setItem('task_plugin_pending', JSON.stringify(stateToSave)); } catch (ee) {}
                 }
             } else {
-                // DB not available yet — queue in localStorage for flush after DB init
-                try {
-                    localStorage.setItem('task_plugin_pending', JSON.stringify(stateToSave));
-                    console.log('Task Plugin: queued pending save (DB not ready)');
-                } catch (e) {
-                    console.error('Task Plugin: failed to queue pending save', e);
-                }
+                try { localStorage.setItem('task_plugin_pending', JSON.stringify(stateToSave)); } catch (e) {}
             }
         } catch (e) {
             console.error('Task Plugin: unexpected saveState error', e);
         }
 
-        // Dispatch event for Aru to know state changed
         window.dispatchEvent(new CustomEvent('task-plugin-update', { detail: this.state }));
     }
 };

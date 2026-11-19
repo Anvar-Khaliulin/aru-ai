@@ -11,17 +11,20 @@ export const Tools = {
     // --- WEATHER ---
     async getWeatherCard(locationName = 'Almaty') {
         try {
-            const langParam = state.lang || 'ru';
+            const langParam = (state.lang || 'ru').split('-')[0];
             const geoRes = await Network.fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1&language=${langParam}&format=json`, {}, 'cors_safe');
             const geoData = await geoRes.json();
 
-            const labels = {
+            const labelsMap = {
                 kk: { wind: 'Жел', error: 'Қала табылмады', fail: 'Қате', now: 'Қазір', humidity: 'Ылғал', forecast: 'болжам' },
                 ru: { wind: 'Ветер', error: 'Город не найден', fail: 'Ошибка', now: 'Сейчас', humidity: 'Влажн', forecast: 'прогноз' },
                 en: { wind: 'Wind', error: 'City not found', fail: 'Error', now: 'Now', humidity: 'Humidity', forecast: 'forecast' }
-            }[langParam || 'ru'];
+            };
+            const labels = labelsMap[langParam] || labelsMap.ru;
 
-            if (!geoData.results) return `<div class="p-3 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl text-xs flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i> ${labels.error}: ${locationName}</div>`;
+            if (!geoData.results || !geoData.results.length) {
+                return `<div class="p-3 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl text-xs flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i> ${Tools._esc(labels.error)}: ${Tools._esc(locationName)}</div>`;
+            }
 
             const { latitude, longitude, name, country } = geoData.results[0];
             const weatherRes = await Network.fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`, {}, 'cors_safe');
@@ -39,15 +42,19 @@ export const Tools = {
 
             let forecastHtml = '';
             for (let i = 1; i < 4; i++) {
-                const date = new Date(daily.time[i]);
-                const dayName = date.toLocaleDateString(state.lang, { weekday: 'short' });
+                const date = new Date(daily.time[i] + 'T12:00:00');
+                const dayName = date.toLocaleDateString(state.lang || langParam, { weekday: 'short' });
                 forecastHtml += `
                 <div class="flex flex-col items-center p-2 rounded-xl bg-gray-50/50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50">
-                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">${dayName}</span>
+                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">${Tools._esc(dayName)}</span>
                     <i data-lucide="${getIcon(daily.weather_code[i])}" class="w-5 h-5 text-aru-500 mb-1"></i>
                     <span class="text-xs font-bold text-gray-800 dark:text-gray-100">${Math.round(daily.temperature_2m_max[i])}°</span>
                 </div>`;
             }
+
+            const safeName = Tools._esc(name || locationName);
+            const safeCountry = Tools._esc(country || '');
+            const safeWindUnit = Tools._esc(wData.current_units?.wind_speed_10m || '');
 
             return `
             <div class="my-4 max-w-sm bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-5 shadow-xl animate-fade-in relative overflow-hidden">
@@ -56,9 +63,9 @@ export const Tools = {
                 <div class="flex justify-between items-center mb-6 relative z-10">
                     <div>
                         <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                            <i data-lucide="map-pin" class="w-4 h-4 text-aru-500"></i> ${name}
+                            <i data-lucide="map-pin" class="w-4 h-4 text-aru-500"></i> ${safeName}
                         </h3>
-                        <p class="text-[10px] text-gray-400 uppercase tracking-widest font-bold mt-0.5">${country}</p>
+                        <p class="text-[10px] text-gray-400 uppercase tracking-widest font-bold mt-0.5">${safeCountry}</p>
                     </div>
                     <div class="text-right">
                         <span class="text-3xl font-black text-aru-500">${Math.round(current.temperature_2m)}°</span>
@@ -70,7 +77,7 @@ export const Tools = {
                 </div>
 
                 <div class="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-4 pt-4 border-t border-gray-50 dark:border-gray-800 relative z-10 px-1">
-                    <span class="flex items-center gap-1.5"><i data-lucide="wind" class="w-3 h-3 text-blue-400"></i> ${current.wind_speed_10m} ${wData.current_units.wind_speed_10m}</span>
+                    <span class="flex items-center gap-1.5"><i data-lucide="wind" class="w-3 h-3 text-blue-400"></i> ${current.wind_speed_10m} ${safeWindUnit}</span>
                     <span class="flex items-center gap-1.5"><i data-lucide="droplets" class="w-3 h-3 text-blue-400"></i> ${current.relative_humidity_2m}%</span>
                 </div>
             </div>`;
@@ -220,7 +227,8 @@ export const Tools = {
                 targetFeeds = feeds;
             }
         } else {
-            const langFeeds = feeds.filter(f => f.tag.toLowerCase() === currentLang);
+            const langCode = String(currentLang).toLowerCase().split('-')[0];
+            const langFeeds = feeds.filter(f => f.tag.toLowerCase().split(/[\s,#]+/).filter(Boolean).includes(langCode));
             if (langFeeds.length > 0) targetFeeds = langFeeds;
         }
 
@@ -444,8 +452,16 @@ export const Tools = {
     },
 
     _stripHtml(html) {
-        return (html || '')
-            .replace(/<[^>]*>/g, ' ')
+        const raw = String(html || '');
+        if (!raw) return '';
+        let text = raw.replace(/<[^>]*>/g, ' ');
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const doc = new DOMParser().parseFromString(text, 'text/html');
+                text = doc.body ? (doc.body.textContent || '') : text;
+            } catch (_) {}
+        }
+        return text
             .replace(/&nbsp;/gi, ' ')
             .replace(/\s+/g, ' ')
             .trim();
