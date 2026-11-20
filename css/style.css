@@ -698,14 +698,33 @@ a:focus-visible,
 }
 
 @media (min-width: 768px) {
+    /* Seamless split view: chat + canvas join into one 4-corner-rounded surface. */
+    body:not(.aru-desktop-mode) #screen-chat:has(#canvas-panel:not(.hidden):not(.canvas-fullscreen)) .chat-workspace {
+        border-radius: var(--aru-radius) 0 0 var(--aru-radius) !important;
+    }
+
     body:not(.aru-desktop-mode) #canvas-resizer:not(.hidden) {
         display: block;
         position: relative;
+        z-index: 2;
         flex: 0 0 9px;
+        margin-inline: -12px;
         align-self: stretch;
+        background: var(--aru-surface);
         cursor: col-resize;
         touch-action: none;
         outline-offset: -2px;
+    }
+
+    body:not(.aru-desktop-mode) #canvas-resizer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 1px;
+        transform: translateX(-50%);
+        background: var(--aru-border-subtle);
     }
 
     body:not(.aru-desktop-mode) #canvas-resizer::after {
@@ -727,11 +746,15 @@ a:focus-visible,
         background: var(--aru-accent);
     }
 
-    body:not(.aru-desktop-mode) #canvas-panel {
+    body:not(.aru-desktop-mode) #canvas-panel:not(.canvas-fullscreen) {
+        position: relative;
+        z-index: 1;
         width: var(--aru-canvas-width, 460px) !important;
         min-width: 280px;
         max-width: 70%;
         flex: 0 0 auto;
+        overflow: hidden;
+        border-radius: 0 var(--aru-radius) var(--aru-radius) 0 !important;
     }
 }
 
@@ -1278,13 +1301,20 @@ body.aru-resizing-canvas iframe {
 #canvas-panel.canvas-fullscreen {
     position: fixed !important;
     z-index: var(--aru-z-canvas-fs, 140) !important;
+    inset: 0 !important;
     top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     left: 0 !important;
     width: 100vw !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
     height: 100vh !important;
     height: 100dvh !important;
     margin: 0 !important;
     border-radius: 0 !important;
+    transform: none !important;
 }
 
 #canvas-panel.canvas-fullscreen + footer {

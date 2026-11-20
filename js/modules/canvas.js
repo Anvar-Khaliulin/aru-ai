@@ -65,9 +65,17 @@ export const CanvasManager = {
     },
 
     close() {
+        const wasFullscreen = this.panel.classList.contains('canvas-fullscreen');
         this.panel.classList.add('hidden');
         this.panel.classList.remove('canvas-fullscreen', 'absolute', 'z-50', 'w-full');
         document.getElementById('aru-desktop')?.classList.remove('wd-has-fullscreen-canvas');
+        if (wasFullscreen) {
+            const icon = document.getElementById('canvas-maximize-icon');
+            if (icon) {
+                icon.setAttribute('data-lucide', 'maximize-2');
+                if (window.lucide) window.lucide.createIcons();
+            }
+        }
         const resizer = document.getElementById('canvas-resizer');
         if (resizer) resizer.classList.add('hidden');
         const st = window.aruState;

@@ -1411,6 +1411,23 @@ body.aru-desktop-mode > #app {
 .wd-chat-body .chat-workspace,
 .wd-chat-body .canvas-workspace {
     border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+.wd-window:not(.maximized) .wd-chat-body .chat-workspace {
+    border-radius: 0 0 12px 12px !important;
+}
+
+.wd-window:not(.maximized) .wd-chat-body:has(.canvas-workspace:not(.hidden):not(.canvas-fullscreen)) .chat-workspace {
+    border-radius: 0 0 0 12px !important;
+}
+
+.wd-window:not(.maximized) .wd-chat-body .canvas-workspace:not(.canvas-fullscreen) {
+    border-radius: 0 0 12px 0 !important;
+}
+
+.wd-window:not(.maximized) .wd-chat-body .canvas-workspace:not(.canvas-fullscreen) #canvas-content {
+    border-bottom-right-radius: 12px;
 }
 
 .wd-chat-body .canvas-workspace {
@@ -1457,6 +1474,7 @@ body.aru-desktop-mode #canvas-panel.canvas-fullscreen {
     height: 100% !important;
     max-width: none !important;
     min-width: 0 !important;
+    border-radius: 0 !important;
     z-index: var(--aru-z-canvas-fs, 140) !important;
 }
 

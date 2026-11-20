@@ -107,7 +107,18 @@ export const ChatController = {
 
     syncCanvasChrome: (open) => {
         const panel = document.getElementById('canvas-panel');
-        if (panel) panel.classList.toggle('hidden', !open);
+        if (panel) {
+            panel.classList.toggle('hidden', !open);
+            if (!open && panel.classList.contains('canvas-fullscreen')) {
+                panel.classList.remove('canvas-fullscreen');
+                document.getElementById('aru-desktop')?.classList.remove('wd-has-fullscreen-canvas');
+                const icon = document.getElementById('canvas-maximize-icon');
+                if (icon) {
+                    icon.setAttribute('data-lucide', 'maximize-2');
+                    if (window.lucide) window.lucide.createIcons();
+                }
+            }
+        }
         const divider = document.getElementById('canvas-resizer');
         if (divider) divider.classList.toggle('hidden', !open);
     },
