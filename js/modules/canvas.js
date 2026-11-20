@@ -11,11 +11,18 @@ export const CanvasManager = {
     containers: {}, // chatId -> { container, iframe }
     panel: document.getElementById('canvas-panel'),
     currentArtifact: null,
+    _storageFrames: new Map(), // iframe -> { scopeKey, type, title, code, onDataChange }
+    _storageFlushTimer: null,
+    _storageDirty: false,
+    _storageBridgeBound: false,
+    _storageRate: new WeakMap(),
 
     init() {
         const renderArea = document.getElementById('canvas-render-area');
         if (renderArea) renderArea.innerHTML = '';
         this.containers = {};
+        this._storageFrames.clear();
+        this._ensureStorageBridge();
 
         try {
             if (typeof MutationObserver !== 'undefined') {
@@ -76,8 +83,449 @@ export const CanvasManager = {
         return tab.chatId ?? null;
     },
 
-    renderArtifact(type, title, code) {
-        this.currentArtifact = { type, title, code };
+    _ensureStorageBridge() {
+        if (this._storageBridgeBound) return;
+        this._storageBridgeBound = true;
+
+        window.addEventListener('message', (event) => {
+            const msg = event.data;
+            if (!msg || msg.type !== 'ARU_STORAGE_REQUEST') return;
+
+            let matchedEntry = null;
+            for (const [frameEl, entry] of this._storageFrames.entries()) {
+                if (!frameEl || !frameEl.isConnected) {
+                    this._storageFrames.delete(frameEl);
+                    continue;
+                }
+                if (frameEl.contentWindow === event.source) {
+                    matchedEntry = entry;
+                    break;
+                }
+            }
+            if (!matchedEntry || !matchedEntry.scopeKey) return;
+
+            const scopeKey = matchedEntry.scopeKey;
+            const action = String(msg.action || '');
+            let result = null;
+            let error = null;
+
+            try {
+                if (action === 'get') {
+                    const all = DB.getArtifactStorage ? DB.getArtifactStorage(scopeKey) : {};
+                    const k = String(msg.key ?? '');
+                    result = Object.prototype.hasOwnProperty.call(all, k) ? all[k] : null;
+                } else if (action === 'keys') {
+                    const all = DB.getArtifactStorage ? DB.getArtifactStorage(scopeKey) : {};
+                    result = Object.keys(all);
+                } else if (action === 'getAll') {
+                    result = DB.getArtifactStorage ? DB.getArtifactStorage(scopeKey) : {};
+                } else if (action === 'set' || action === 'remove' || action === 'clear') {
+                    if (!this._checkStorageRate(event.source)) {
+                        throw new Error('RateLimitExceeded: too many storage writes');
+                    }
+                    if (action === 'set') {
+                        DB.setArtifactStorageItem(scopeKey, msg.key, msg.value, false);
+                    } else if (action === 'remove') {
+                        DB.removeArtifactStorageItem(scopeKey, msg.key, false);
+                    } else {
+                        DB.clearArtifactStorage(scopeKey, false);
+                    }
+                    result = true;
+                    this._scheduleStorageFlush();
+                    this._broadcastStorageSync(scopeKey, event.source);
+                    this.updateResetStorageButton();
+                    if (typeof matchedEntry.onDataChange === 'function') {
+                        try { matchedEntry.onDataChange(scopeKey); } catch (_) {}
+                    }
+                    try {
+                        window.dispatchEvent(new CustomEvent('aru-artifact-storage-changed', { detail: { scopeKey } }));
+                    } catch (_) {}
+                } else {
+                    throw new Error('Unknown storage action');
+                }
+            } catch (err) {
+                error = err && err.message ? err.message : String(err || 'Storage error');
+            }
+
+            if (msg.requestId && event.source && typeof event.source.postMessage === 'function') {
+                try {
+                    event.source.postMessage({
+                        type: 'ARU_STORAGE_RESPONSE',
+                        requestId: msg.requestId,
+                        result,
+                        error
+                    }, '*');
+                } catch (_) {}
+            }
+        });
+
+        window.addEventListener('pagehide', () => this.flushPendingStorage());
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') this.flushPendingStorage();
+        });
+    },
+
+    _checkStorageRate(win) {
+        if (!win) return false;
+        const now = Date.now();
+        let entry = this._storageRate.get(win);
+        if (!entry || now - entry.winStart >= 1000) {
+            entry = { winStart: now, count: 0 };
+            this._storageRate.set(win, entry);
+        }
+        entry.count++;
+        return entry.count <= 120;
+    },
+
+    _scheduleStorageFlush() {
+        this._storageDirty = true;
+        if (this._storageFlushTimer) clearTimeout(this._storageFlushTimer);
+        this._storageFlushTimer = setTimeout(() => this.flushPendingStorage(), 400);
+    },
+
+    flushPendingStorage() {
+        if (this._storageFlushTimer) {
+            clearTimeout(this._storageFlushTimer);
+            this._storageFlushTimer = null;
+        }
+        if (!this._storageDirty) return;
+        this._storageDirty = false;
+        try {
+            if (DB && typeof DB.save === 'function') DB.save();
+        } catch (e) {
+            console.warn('CanvasManager.flushPendingStorage failed', e);
+        }
+    },
+
+    _broadcastStorageSync(scopeKey, excludeSource) {
+        if (!scopeKey || !DB.getArtifactStorage) return;
+        const snapshot = DB.getArtifactStorage(scopeKey);
+        for (const [frameEl, entry] of this._storageFrames.entries()) {
+            if (!frameEl || !frameEl.isConnected) {
+                this._storageFrames.delete(frameEl);
+                continue;
+            }
+            if (entry.scopeKey !== scopeKey) continue;
+            if (frameEl.contentWindow && frameEl.contentWindow !== excludeSource) {
+                try {
+                    frameEl.contentWindow.postMessage({ type: 'ARU_STORAGE_SYNC', data: snapshot }, '*');
+                } catch (_) {}
+            }
+        }
+    },
+
+    registerStorageFrame(iframe, meta = {}) {
+        if (!iframe) return;
+        this._storageFrames.set(iframe, {
+            scopeKey: meta.scopeKey || null,
+            type: meta.type || 'app',
+            title: meta.title || '',
+            code: meta.code || '',
+            onDataChange: meta.onDataChange || null
+        });
+    },
+
+    unregisterStorageFrame(iframe) {
+        if (!iframe) return;
+        if (this._storageFrames.has(iframe)) {
+            this._storageFrames.delete(iframe);
+            this.flushPendingStorage();
+        }
+    },
+
+    _resolveActiveTabScope(type, title, sourceOverride = null) {
+        if (!title || type === 'doc' || !DB.getArtifactScopeKey) return null;
+        const st = window.aruState;
+        const tab = st && st.activeTabIndex >= 0 ? st.tabs[st.activeTabIndex] : null;
+        const art = tab && tab.artifact;
+        const sameArt = !!(art && art.title === title && art.type === type);
+        if (sourceOverride === 'module' || (sameArt && art.source === 'module')) {
+            return DB.getArtifactScopeKey({ source: 'module', type, title });
+        }
+        if (sameArt && art.storageScope) return art.storageScope;
+        if (tab && tab.type === 'plugin' && tab.pluginId === 'skills') {
+            return (sameArt && art.storageScope) ? art.storageScope : null;
+        }
+        if (tab && tab.chatId !== null && tab.chatId !== undefined) {
+            return DB.getArtifactScopeKey({
+                source: 'chat',
+                type,
+                title,
+                chatId: tab.chatId,
+                isPrivate: !!tab.isPrivate
+            });
+        }
+        return null;
+    },
+
+    _buildStorageShim(initialData = {}, persistent = false) {
+        const initialJson = JSON.stringify(initialData || {})
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e')
+            .replace(/&/g, '\\u0026')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
+        const persistentFlag = persistent ? 'true' : 'false';
+        return `<script>(function(){
+            var persistent = ${persistentFlag};
+            var data = Object.create(null);
+            try {
+                var init = ${initialJson};
+                if (init && typeof init === 'object') {
+                    var initKeys = Object.keys(init);
+                    for (var i = 0; i < initKeys.length; i++) {
+                        data[initKeys[i]] = String(init[initKeys[i]]);
+                    }
+                }
+            } catch (_) {}
+
+            function postBridge(msg) {
+                if (!persistent || !window.parent || window.parent === window) return;
+                try { window.parent.postMessage(msg, '*'); } catch (_) {}
+            }
+
+            var apiTarget = Object.create(null);
+            apiTarget.getItem = function(k) {
+                k = String(k);
+                return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null;
+            };
+            apiTarget.setItem = function(k, v) {
+                k = String(k);
+                v = String(v);
+                data[k] = v;
+                postBridge({ type: 'ARU_STORAGE_REQUEST', action: 'set', key: k, value: v });
+            };
+            apiTarget.removeItem = function(k) {
+                k = String(k);
+                delete data[k];
+                postBridge({ type: 'ARU_STORAGE_REQUEST', action: 'remove', key: k });
+            };
+            apiTarget.clear = function() {
+                data = Object.create(null);
+                postBridge({ type: 'ARU_STORAGE_REQUEST', action: 'clear' });
+            };
+            apiTarget.key = function(i) {
+                var keys = Object.keys(data);
+                return (i >= 0 && i < keys.length) ? keys[i] : null;
+            };
+            Object.defineProperty(apiTarget, 'length', {
+                enumerable: false,
+                configurable: true,
+                get: function() { return Object.keys(data).length; }
+            });
+
+            var localStore = apiTarget;
+            if (typeof Proxy === 'function') {
+                var hasOwn = Object.prototype.hasOwnProperty;
+                localStore = new Proxy(apiTarget, {
+                    get: function(target, prop) {
+                        if (typeof prop === 'symbol') return target[prop];
+                        if (hasOwn.call(target, prop)) return target[prop];
+                        return hasOwn.call(data, prop) ? data[prop] : undefined;
+                    },
+                    set: function(target, prop, value) {
+                        if (typeof prop !== 'symbol' && !hasOwn.call(target, prop)) {
+                            apiTarget.setItem(prop, value);
+                            return true;
+                        }
+                        return false;
+                    },
+                    deleteProperty: function(target, prop) {
+                        if (typeof prop !== 'symbol' && !hasOwn.call(target, prop)) {
+                            apiTarget.removeItem(prop);
+                        }
+                        return true;
+                    },
+                    has: function(target, prop) {
+                        return hasOwn.call(target, prop) || hasOwn.call(data, String(prop));
+                    },
+                    ownKeys: function() {
+                        return Object.keys(data);
+                    },
+                    getOwnPropertyDescriptor: function(target, prop) {
+                        if (hasOwn.call(data, String(prop))) {
+                            return { enumerable: true, configurable: true, value: data[String(prop)] };
+                        }
+                        return Object.getOwnPropertyDescriptor(target, prop);
+                    }
+                });
+            }
+
+            function makeMemStore() {
+                var mem = Object.create(null);
+                return {
+                    getItem: function(k) { k = String(k); return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+                    setItem: function(k, v) { mem[String(k)] = String(v); },
+                    removeItem: function(k) { delete mem[String(k)]; },
+                    clear: function() { mem = Object.create(null); },
+                    key: function(i) { var ks = Object.keys(mem); return (i >= 0 && i < ks.length) ? ks[i] : null; },
+                    get length() { return Object.keys(mem).length; }
+                };
+            }
+
+            // Always bind sandbox localStorage to our isolated backing store so opaque
+            // origins work without SecurityError and host storage stays untouched.
+            try {
+                Object.defineProperty(window, 'localStorage', { configurable: true, get: function() { return localStore; } });
+            } catch (e) {}
+
+            var sessionStore = makeMemStore();
+            try { window.sessionStorage.getItem('__aru_probe__'); } catch (e2) {
+                try {
+                    Object.defineProperty(window, 'sessionStorage', { configurable: true, get: function() { return sessionStore; } });
+                } catch (e3) {}
+            }
+
+            var pending = new Map();
+            var reqSeq = 0;
+
+            window.addEventListener('message', function(event) {
+                if (event.source !== window.parent || !event.data) return;
+                var msg = event.data;
+                if (msg.type === 'ARU_STORAGE_SYNC' && msg.data && typeof msg.data === 'object') {
+                    var next = Object.create(null);
+                    var ks = Object.keys(msg.data);
+                    for (var i = 0; i < ks.length; i++) next[ks[i]] = String(msg.data[ks[i]]);
+                    data = next;
+                    return;
+                }
+                if (msg.type === 'ARU_STORAGE_RESPONSE' && msg.requestId && pending.has(msg.requestId)) {
+                    var entry = pending.get(msg.requestId);
+                    pending.delete(msg.requestId);
+                    if (msg.error) entry.reject(new Error(msg.error));
+                    else entry.resolve(msg.result);
+                }
+            });
+
+            function request(action, key, value) {
+                if (!persistent || !window.parent || window.parent === window) {
+                    return Promise.resolve(true);
+                }
+                return new Promise(function(resolve, reject) {
+                    var requestId = 'r_' + (++reqSeq) + '_' + Math.random().toString(36).slice(2, 8);
+                    pending.set(requestId, { resolve: resolve, reject: reject });
+                    try {
+                        window.parent.postMessage({
+                            type: 'ARU_STORAGE_REQUEST',
+                            requestId: requestId,
+                            action: action,
+                            key: key,
+                            value: value
+                        }, '*');
+                    } catch (err) {
+                        pending.delete(requestId);
+                        reject(err);
+                    }
+                });
+            }
+
+            function decodeValue(raw) {
+                if (raw === null || raw === undefined) return null;
+                try { return JSON.parse(raw); } catch (_) { return raw; }
+            }
+
+            window.aruStorage = {
+                get: function(key) {
+                    var k = String(key);
+                    var raw = Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null;
+                    return Promise.resolve(decodeValue(raw));
+                },
+                set: function(key, value) {
+                    var k = String(key);
+                    if (value === undefined) return window.aruStorage.remove(k);
+                    var raw;
+                    try { raw = JSON.stringify(value); } catch (err) { return Promise.reject(err); }
+                    if (raw === undefined) return Promise.reject(new Error('Value is not JSON-serializable'));
+                    var hadPrev = Object.prototype.hasOwnProperty.call(data, k);
+                    var prev = data[k];
+                    data[k] = raw;
+                    return request('set', k, raw).catch(function(err) {
+                        if (hadPrev) data[k] = prev;
+                        else delete data[k];
+                        throw err;
+                    });
+                },
+                remove: function(key) {
+                    var k = String(key);
+                    var hadPrev = Object.prototype.hasOwnProperty.call(data, k);
+                    var prev = data[k];
+                    delete data[k];
+                    return request('remove', k).catch(function(err) {
+                        if (hadPrev) data[k] = prev;
+                        throw err;
+                    });
+                },
+                clear: function() {
+                    var prev = data;
+                    data = Object.create(null);
+                    return request('clear').catch(function(err) {
+                        data = prev;
+                        throw err;
+                    });
+                },
+                keys: function() {
+                    return Promise.resolve(Object.keys(data));
+                },
+                getAll: function() {
+                    var out = {};
+                    var ks = Object.keys(data);
+                    for (var i = 0; i < ks.length; i++) out[ks[i]] = decodeValue(data[ks[i]]);
+                    return Promise.resolve(out);
+                }
+            };
+        })();</script>`;
+    },
+
+    updateResetStorageButton() {
+        const btn = document.getElementById('btn-canvas-reset-storage');
+        if (!btn) return;
+        const scope = this.currentArtifact && this.currentArtifact.storageScope;
+        const hasData = !!(scope && DB && DB.hasArtifactStorage && DB.hasArtifactStorage(scope));
+        btn.classList.toggle('hidden', !hasData);
+    },
+
+    notifyScopeReset(scopeKey) {
+        if (!scopeKey) return;
+        for (const [frameEl, entry] of this._storageFrames.entries()) {
+            if (!frameEl || !frameEl.isConnected) {
+                this._storageFrames.delete(frameEl);
+                continue;
+            }
+            if (entry.scopeKey !== scopeKey) continue;
+            frameEl.dataset.lastCode = '';
+            this.renderInto(frameEl, entry);
+        }
+        this.updateResetStorageButton();
+        try {
+            window.dispatchEvent(new CustomEvent('aru-artifact-storage-changed', { detail: { scopeKey } }));
+        } catch (_) {}
+    },
+
+    async resetCurrentArtifactStorage(evt) {
+        if (evt && evt.stopPropagation) evt.stopPropagation();
+        const scope = this.currentArtifact && this.currentArtifact.storageScope;
+        if (!scope || !DB.clearArtifactStorage) return;
+        const appState = window.aruState || {};
+        const t = appState.translations || {};
+        const msg = t.confirm_reset_artifact_data || 'Reset saved data (records, history, state) for this artifact? The artifact code will remain intact.';
+        if (!(await UI.confirm(msg))) return;
+        this.flushPendingStorage();
+        DB.clearArtifactStorage(scope, true);
+        this.notifyScopeReset(scope);
+        UI.showToast(t.toast_artifact_data_reset || 'Artifact data reset', 'rotate-ccw');
+    },
+
+    renderArtifact(type, title, code, meta = {}) {
+        const storageScope = meta.storageScope !== undefined
+            ? meta.storageScope
+            : this._resolveActiveTabScope(type, title, meta.source || null);
+        this.currentArtifact = {
+            type,
+            title,
+            code,
+            source: meta.source || null,
+            storageScope
+        };
         this.open();
 
         document.getElementById('canvas-empty-state').classList.add('hidden');
@@ -91,6 +539,7 @@ export const CanvasManager = {
         document.getElementById('canvas-title-text').textContent = title;
 
         this.switchTab('preview');
+        this.updateResetStorageButton();
     },
 
     switchTab(tab) {
@@ -135,6 +584,10 @@ export const CanvasManager = {
         const chatId = this.getTabKey(tab);
         if (chatId === null || chatId === undefined) return;
         const { type, title, code } = this.currentArtifact;
+        const storageScope = this.currentArtifact.storageScope !== undefined
+            ? this.currentArtifact.storageScope
+            : this._resolveActiveTabScope(type, title, this.currentArtifact.source || null);
+        this.currentArtifact.storageScope = storageScope;
         const renderArea = document.getElementById('canvas-render-area');
 
         if (!this.containers[chatId]) {
@@ -158,18 +611,31 @@ export const CanvasManager = {
 
         const isDark = document.documentElement.classList.contains('dark');
         const theme = isDark ? 'dark' : 'light';
+        const scopeAttr = String(storageScope || '');
 
-        if (iframe.dataset.lastCode === code && iframe.dataset.lastTheme === theme) {
+        if (iframe.dataset.lastCode === code && iframe.dataset.lastTheme === theme && iframe.dataset.lastScope === scopeAttr) {
+            this.updateResetStorageButton();
             return;
         }
 
         iframe.dataset.lastCode = code;
         iframe.dataset.lastTheme = theme;
-        this.renderInto(iframe, { type, title, code });
+        iframe.dataset.lastScope = scopeAttr;
+        this.renderInto(iframe, { type, title, code, storageScope });
+        this.updateResetStorageButton();
     },
 
-    renderInto(iframe, { type, title, code }) {
+    renderInto(iframe, { type, title, code, storageScope = null, onDataChange = null }) {
         const isDark = document.documentElement.classList.contains('dark');
+        const effectiveScope = (type === 'doc') ? null : (storageScope || null);
+        this._ensureStorageBridge();
+        this.registerStorageFrame(iframe, {
+            scopeKey: effectiveScope,
+            type,
+            title,
+            code,
+            onDataChange
+        });
         let finalCode = code;
         if (type === 'doc') {
             if (typeof marked !== 'undefined') {
@@ -296,28 +762,13 @@ export const CanvasManager = {
         ` : '';
 
         // Sandboxed iframes get an opaque origin, so native localStorage/sessionStorage
-        // throw SecurityError. Generated artifacts often persist small state there;
-        // without a fallback the whole artifact script aborts before it renders.
-        const storageShim = `<script>(function(){
-            function makeStore(){
-                var data = {};
-                return {
-                    getItem: function(k){ k = String(k); return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-                    setItem: function(k, v){ data[String(k)] = String(v); },
-                    removeItem: function(k){ delete data[String(k)]; },
-                    clear: function(){ data = {}; },
-                    key: function(i){ var keys = Object.keys(data); return i >= 0 && i < keys.length ? keys[i] : null; },
-                    get length(){ return Object.keys(data).length; }
-                };
-            }
-            var localStore = makeStore(), sessionStore = makeStore();
-            try { window.localStorage.getItem('__aru_probe__'); } catch (e) {
-                try { Object.defineProperty(window, 'localStorage', { configurable: true, get: function(){ return localStore; } }); } catch (e2) {}
-            }
-            try { window.sessionStorage.getItem('__aru_probe__'); } catch (e) {
-                try { Object.defineProperty(window, 'sessionStorage', { configurable: true, get: function(){ return sessionStore; } }); } catch (e2) {}
-            }
-        })();</script>`;
+        // throw SecurityError. When an artifact has a persistent storageScope we pre-hydrate
+        // its SQLite keys so synchronous localStorage works immediately and persist writes
+        // back via postMessage, alongside the async window.aruStorage helper.
+        const initialData = (effectiveScope && DB && DB.getArtifactStorage)
+            ? DB.getArtifactStorage(effectiveScope)
+            : {};
+        const storageShim = this._buildStorageShim(initialData, !!effectiveScope);
 
         const pdfSnapshotBridge = `<script>(function(){
             window.addEventListener('message', function(e) {
@@ -366,9 +817,9 @@ export const CanvasManager = {
         if (isFullDoc) {
             const headInject = `${storageShim}\n${pdfSnapshotBridge}`;
             if (/<head[^>]*>/i.test(finalCode)) {
-                sandboxHTML = finalCode.replace(/<head([^>]*)>/i, `<head$1>\n${headInject}`);
+                sandboxHTML = finalCode.replace(/<head([^>]*)>/i, (_, attrs) => `<head${attrs}>\n${headInject}`);
             } else if (/<html[^>]*>/i.test(finalCode)) {
-                sandboxHTML = finalCode.replace(/<html([^>]*)>/i, `<html$1><head>${headInject}</head>`);
+                sandboxHTML = finalCode.replace(/<html([^>]*)>/i, (_, attrs) => `<html${attrs}><head>${headInject}</head>`);
             } else {
                 sandboxHTML = `${headInject}\n${finalCode}`;
             }
@@ -426,6 +877,7 @@ export const CanvasManager = {
             const empty = document.getElementById('canvas-empty-state');
             if (empty) empty.classList.add('hidden');
             renderArea.classList.remove('hidden');
+            this.updateResetStorageButton();
         } else {
             this.clearCanvas();
         }
@@ -433,6 +885,7 @@ export const CanvasManager = {
 
     destroyContainer(chatId) {
         if (this.containers[chatId]) {
+            this.unregisterStorageFrame(this.containers[chatId].iframe);
             this.containers[chatId].container.remove();
             delete this.containers[chatId];
         }
@@ -601,6 +1054,7 @@ export const CanvasManager = {
         const editArea = document.getElementById('canvas-edit-area'); if (editArea) editArea.classList.add('hidden');
         const tabs = document.getElementById('canvas-tabs'); if (tabs) tabs.classList.add('hidden');
         const title = document.getElementById('canvas-title-text'); if (title) title.textContent = 'Canvas';
+        this.updateResetStorageButton();
     },
 
     toggleFullscreen(evt) {
@@ -849,6 +1303,8 @@ ${rendered}
         const appState = window.aruState || {};
         const t = appState.translations || {};
 
+        this.flushPendingStorage();
+        const oldScope = this.currentArtifact.storageScope || null;
         let title = this.currentArtifact.title;
         let type = this.currentArtifact.type;
 
@@ -868,6 +1324,45 @@ ${rendered}
 
         try {
             DB.saveModule(type, title, this.currentArtifact.code, tags);
+            const newScope = DB.getArtifactScopeKey
+                ? DB.getArtifactScopeKey({ source: 'module', type, title })
+                : null;
+            if (oldScope && newScope && oldScope !== newScope && DB.hasArtifactStorage && DB.hasArtifactStorage(oldScope)) {
+                DB.copyArtifactStorage(oldScope, newScope, { overwrite: false });
+            }
+            this.currentArtifact.source = 'module';
+            this.currentArtifact.storageScope = newScope;
+
+            const tab = appState.activeTabIndex >= 0 ? appState.tabs[appState.activeTabIndex] : null;
+            const tabKey = this.getTabKey(tab);
+            const activeContainer = tabKey !== null && tabKey !== undefined ? this.containers[tabKey] : null;
+            if (tab && tab.artifact) {
+                tab.artifact.title = title;
+                tab.artifact.source = 'module';
+                tab.artifact.storageScope = newScope;
+            }
+            if (activeContainer && activeContainer.iframe) {
+                activeContainer.iframe.dataset.lastScope = String(newScope || '');
+                const entry = this._storageFrames.get(activeContainer.iframe);
+                if (entry) {
+                    entry.scopeKey = newScope;
+                    entry.title = title;
+                } else {
+                    this.registerStorageFrame(activeContainer.iframe, {
+                        scopeKey: newScope,
+                        type,
+                        title,
+                        code: this.currentArtifact.code
+                    });
+                }
+            }
+            if (newScope) {
+                this._broadcastStorageSync(newScope, null);
+                try {
+                    window.dispatchEvent(new CustomEvent('aru-artifact-storage-changed', { detail: { scopeKey: newScope } }));
+                } catch (_) {}
+            }
+            this.updateResetStorageButton();
             UI.showToast(t.toast_saved || 'Saved successfully', 'check-circle');
         } catch (e) {
             console.error(e);

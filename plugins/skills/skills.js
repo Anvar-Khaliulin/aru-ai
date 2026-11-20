@@ -1749,13 +1749,16 @@ window.SkillsPlugin = {
         const art = window.DB.getSkillArtifact(id);
         if (!art || !window.CanvasManager) return;
         this.state.lastArtifactId = art.id;
+        const storageScope = window.DB.getArtifactScopeKey
+            ? window.DB.getArtifactScopeKey({ source: 'skill', type: art.type, title: art.title, projectId: art.project_id })
+            : null;
         const st = window.aruState;
         const tab = st && st.tabs[st.activeTabIndex];
         if (tab) {
-            tab.artifact = { type: art.type, title: art.title, code: art.code };
+            tab.artifact = { type: art.type, title: art.title, code: art.code, source: 'skill', storageScope };
             tab.isCanvasOpen = true;
         }
-        window.CanvasManager.renderArtifact(art.type, art.title, art.code);
+        window.CanvasManager.renderArtifact(art.type, art.title, art.code, { source: 'skill', storageScope });
     },
 
     onActivate(payload = {}) {

@@ -431,11 +431,11 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                     <!-- Real-time Sync Status & Transfer -->
                     <div class="flex items-center gap-2">
                         <div id="sync-status"
-                            class="hidden flex-1 flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800">
-                            <div id="sync-dot" class="w-2 h-2 rounded-full bg-green-500 transition-colors duration-500">
+                            class="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800">
+                            <div id="sync-dot" class="w-2 h-2 shrink-0 rounded-full bg-gray-400 transition-colors duration-500">
                             </div>
-                            <span id="sync-text" class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
-                                data-i18n="sync_status_synced"></span>
+                            <span id="sync-text" class="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap truncate"
+                                data-i18n="sync_status_cache"></span>
                         </div>
                         <button onclick="app.openTransferModal()"
                             class="p-2 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-lg text-gray-400 hover:text-aru-500 transition shadow-sm"
@@ -576,6 +576,11 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                             <span id="canvas-title-text" class="truncate" data-i18n="canvas_title"></span>
                         </span>
                         <div class="flex gap-1 shrink-0">
+                            <button type="button" id="btn-canvas-reset-storage" onclick="CanvasManager.resetCurrentArtifactStorage(event)"
+                                class="hidden p-1.5 text-gray-400 hover:text-amber-500 rounded-lg transition"
+                                data-i18n-title="artifact_reset_data_tooltip">
+                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            </button>
                             <button type="button" onclick="CanvasManager.clearCanvas(event)"
                                 class="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition"
                                 data-i18n-title="clean_canvas_tooltip">

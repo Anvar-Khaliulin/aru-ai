@@ -1230,7 +1230,7 @@ export const SettingsController = {
         if (!(await UI.confirm(t.storage_disconnect_confirm || 'Отключить облачное хранилище? Локальная база останется на этом устройстве, файл на сервере не удаляется.'))) return;
         try { await window.SyncEngine?.disable?.(); } catch (e) { /* ignore */ }
         await RemoteStorage.disconnect();
-        SettingsController.app.updateSyncStatus('synced');
+        SettingsController.app.updateSyncStatus(DB.fileHandle ? 'synced' : 'cache');
         SettingsController.renderStorageTab();
     },
 

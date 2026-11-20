@@ -57,7 +57,8 @@ export const DB = {
                         console.warn('DB.init: stored file handle permission denied, clearing');
                         await localforage.removeItem(this.handleKey);
                         this.fileHandle = null;
-                        if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('error');
+                        const deniedMsg = window.aruState?.translations?.sync_error_file_denied || 'Database file access permission was denied';
+                        if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('error', deniedMsg);
                     } else if (status === 'prompt') {
                         console.log('DB.init: file handle exists but needs re-authorization');
                         // Exposes unresolved handle dependencies to UI layer for authorization
@@ -358,6 +359,15 @@ export const DB = {
     updateSkillProject(id, data) { return this._skillUpdate('skill_projects', id, data); },
 
     deleteSkillProject(id) {
+        if (this.tableExists('artifact_storage')) {
+            const escLike = (v) => String(v).replace(/[\\%_]/g, '\\$&');
+            const uid = this.getSkillProjectUid(id);
+            this.run(
+                "DELETE FROM artifact_storage WHERE scope_key LIKE ? ESCAPE '\\' OR scope_key LIKE ? ESCAPE '\\'",
+                [`skill:${escLike(uid)}:%`, `skill:id:${escLike(id)}:%`],
+                false
+            );
+        }
         this.run("DELETE FROM skill_project_items WHERE project_id = ?", [id], false);
         this.run("DELETE FROM skill_pipeline_steps WHERE project_id = ?", [id], false);
         this.run("DELETE FROM skill_artifacts WHERE project_id = ?", [id], false);
@@ -711,6 +721,15 @@ export const DB = {
     },
 
     deleteChat(id) {
+        if (this.tableExists('artifact_storage')) {
+            const escLike = (v) => String(v).replace(/[\\%_]/g, '\\$&');
+            const uid = this.getChatUid(id);
+            this.run(
+                "DELETE FROM artifact_storage WHERE scope_key LIKE ? ESCAPE '\\' OR scope_key LIKE ? ESCAPE '\\'",
+                [`chat:${escLike(uid)}:%`, `chat:id:${escLike(id)}:%`],
+                false
+            );
+        }
         this.run("DELETE FROM chat_chapters WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM chat_sections WHERE chat_id = ?", [id], false);
         this.run("DELETE FROM chat_artifacts WHERE chat_id = ?", [id], false);
@@ -753,6 +772,166 @@ export const DB = {
             console.error('DB.getLatestChatArtifact failed', e);
             return null;
         }
+    },
+
+    // --- Per-Artifact Sandbox Storage ---
+
+    ARTIFACT_STORAGE_LIMITS: {
+        maxKeys: 100,
+        maxKeyBytes: 256,
+        maxValueBytes: 262144,
+        maxScopeBytes: 2097152
+    },
+
+    _utf8ByteLength(str) {
+        const s = String(str ?? '');
+        if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s).length;
+        try { return unescape(encodeURIComponent(s)).length; } catch (_) { return s.length * 2; }
+    },
+
+    getChatUid(chatId) {
+        if (chatId === null || chatId === undefined) return '';
+        try {
+            if (this.hasColumn('chats', 'uid')) {
+                const rows = this.query("SELECT uid FROM chats WHERE id = ? LIMIT 1", [chatId]);
+                if (rows.length > 0 && rows[0].uid) return String(rows[0].uid);
+            }
+        } catch (_) {}
+        return `id:${chatId}`;
+    },
+
+    getSkillProjectUid(projectId) {
+        if (projectId === null || projectId === undefined) return '';
+        try {
+            if (this.hasColumn('skill_projects', 'uid')) {
+                const rows = this.query("SELECT uid FROM skill_projects WHERE id = ? LIMIT 1", [projectId]);
+                if (rows.length > 0 && rows[0].uid) return String(rows[0].uid);
+            }
+        } catch (_) {}
+        return `id:${projectId}`;
+    },
+
+    getArtifactScopeKey({ source, type, title, chatId, projectId, isPrivate } = {}) {
+        if (isPrivate || type === 'doc' || !title) return null;
+        const cleanTitle = String(title);
+        if (source === 'module') return `module:${type || 'app'}:${cleanTitle}`;
+        if (source === 'skill' && projectId !== null && projectId !== undefined) {
+            return `skill:${this.getSkillProjectUid(projectId)}:${cleanTitle}`;
+        }
+        if (source === 'chat' && chatId !== null && chatId !== undefined) {
+            return `chat:${this.getChatUid(chatId)}:${cleanTitle}`;
+        }
+        return null;
+    },
+
+    getArtifactStorage(scopeKey) {
+        if (!scopeKey || !this.db || !this.tableExists('artifact_storage')) return {};
+        try {
+            const rows = this.query("SELECT key, value FROM artifact_storage WHERE scope_key = ? ORDER BY id ASC", [scopeKey]);
+            const out = {};
+            for (const r of rows) out[r.key] = r.value === null || r.value === undefined ? '' : String(r.value);
+            return out;
+        } catch (e) {
+            console.warn('DB.getArtifactStorage failed', e);
+            return {};
+        }
+    },
+
+    hasArtifactStorage(scopeKey) {
+        if (!scopeKey || !this.db || !this.tableExists('artifact_storage')) return false;
+        try {
+            return this.query("SELECT 1 FROM artifact_storage WHERE scope_key = ? LIMIT 1", [scopeKey]).length > 0;
+        } catch (_) {
+            return false;
+        }
+    },
+
+    getArtifactStorageScopes() {
+        if (!this.db || !this.tableExists('artifact_storage')) return new Set();
+        try {
+            const rows = this.query("SELECT DISTINCT scope_key FROM artifact_storage");
+            return new Set(rows.map(r => r.scope_key).filter(Boolean));
+        } catch (_) {
+            return new Set();
+        }
+    },
+
+    setArtifactStorageItem(scopeKey, key, value, autoSave = false) {
+        if (!scopeKey || typeof scopeKey !== 'string') throw new Error('Invalid storage scope');
+        if (!this.db || !this.tableExists('artifact_storage')) throw new Error('Artifact storage table missing');
+
+        const lim = this.ARTIFACT_STORAGE_LIMITS;
+        const k = String(key ?? '');
+        const v = String(value ?? '');
+        const keyBytes = this._utf8ByteLength(k);
+        const valBytes = this._utf8ByteLength(v);
+
+        if (keyBytes === 0 || keyBytes > lim.maxKeyBytes) {
+            throw new Error('QuotaExceededError: invalid key length');
+        }
+        if (valBytes > lim.maxValueBytes) {
+            throw new Error('QuotaExceededError: value exceeds 256 KB limit');
+        }
+
+        const rows = this.query("SELECT key, value FROM artifact_storage WHERE scope_key = ?", [scopeKey]);
+        let exists = false;
+        let otherBytes = 0;
+        for (const r of rows) {
+            if (r.key === k) {
+                exists = true;
+                continue;
+            }
+            otherBytes += this._utf8ByteLength(r.key) + this._utf8ByteLength(r.value || '');
+        }
+        if (!exists && rows.length >= lim.maxKeys) {
+            throw new Error('QuotaExceededError: too many keys');
+        }
+        if (otherBytes + keyBytes + valBytes > lim.maxScopeBytes) {
+            throw new Error('QuotaExceededError: storage limit exceeded');
+        }
+
+        this.run(
+            `INSERT INTO artifact_storage (scope_key, key, value, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(scope_key, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+            [scopeKey, k, v],
+            autoSave
+        );
+        return true;
+    },
+
+    removeArtifactStorageItem(scopeKey, key, autoSave = false) {
+        if (!scopeKey || !this.db || !this.tableExists('artifact_storage')) return false;
+        this.run("DELETE FROM artifact_storage WHERE scope_key = ? AND key = ?", [scopeKey, String(key ?? '')], autoSave);
+        return true;
+    },
+
+    clearArtifactStorage(scopeKey, autoSave = true) {
+        if (!scopeKey || !this.db || !this.tableExists('artifact_storage')) return false;
+        this.run("DELETE FROM artifact_storage WHERE scope_key = ?", [scopeKey], autoSave);
+        return true;
+    },
+
+    copyArtifactStorage(fromScopeKey, toScopeKey, { overwrite = false } = {}) {
+        if (!fromScopeKey || !toScopeKey || fromScopeKey === toScopeKey) return false;
+        if (!this.db || !this.tableExists('artifact_storage')) return false;
+        if (!overwrite && this.hasArtifactStorage(toScopeKey)) return false;
+
+        const rows = this.query("SELECT key, value FROM artifact_storage WHERE scope_key = ? ORDER BY id ASC", [fromScopeKey]);
+        if (rows.length === 0) return false;
+
+        if (overwrite) {
+            this.run("DELETE FROM artifact_storage WHERE scope_key = ?", [toScopeKey], false);
+        }
+        for (const r of rows) {
+            this.run(
+                `INSERT INTO artifact_storage (scope_key, key, value, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT(scope_key, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+                [toScopeKey, r.key, r.value ?? ''],
+                false
+            );
+        }
+        this.save();
+        return true;
     },
 
     getMessages(chatId) {
@@ -1044,6 +1223,19 @@ export const DB = {
     },
 
     deleteModule(id) {
+        if (this.tableExists('artifact_storage')) {
+            const rows = this.query("SELECT type, name FROM modules_data WHERE id = ? LIMIT 1", [id]);
+            if (rows.length > 0 && rows[0].type && rows[0].type !== 'plugin' && rows[0].name) {
+                const scopeKey = this.getArtifactScopeKey({
+                    source: 'module',
+                    type: rows[0].type,
+                    title: rows[0].name
+                });
+                if (scopeKey) {
+                    this.run("DELETE FROM artifact_storage WHERE scope_key = ?", [scopeKey], false);
+                }
+            }
+        }
         this.run("DELETE FROM modules_data WHERE id = ?", [id]);
     },
 
@@ -1074,7 +1266,7 @@ export const DB = {
         this._isSaving = true;
         this._savePromise = (async () => {
             try {
-                if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('syncing');
+                if (this.fileHandle && window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('syncing');
 
                 // Local-only freshness marker. Written directly so it neither ticks
                 // the sync clock nor wakes the merge triggers.
@@ -1097,7 +1289,7 @@ export const DB = {
                             try { await writable.abort(); } catch (_) {}
                         }
                         console.error('DB.save: file write failed', fileErr);
-                        window.app?.updateSyncStatus('error');
+                        window.app?.updateSyncStatus('error', fileErr?.message || String(fileErr || ''));
                     }
                 }
 
@@ -1116,12 +1308,16 @@ export const DB = {
                     console.warn('DB.save: remote scheduling failed', remoteErr);
                 }
 
-                if (!fileWriteFailed && (this.fileHandle || !cloudActive) && window.app && window.app.updateSyncStatus) {
-                    setTimeout(() => window.app.updateSyncStatus('synced'), 500);
+                if (!fileWriteFailed && window.app && window.app.updateSyncStatus) {
+                    if (this.fileHandle && !cloudActive) {
+                        setTimeout(() => window.app.updateSyncStatus('synced'), 500);
+                    } else if (!this.fileHandle && !cloudActive) {
+                        window.app.updateSyncStatus('cache');
+                    }
                 }
             } catch (e) {
                 console.error("DB: Auto-save failed", e);
-                if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('error');
+                if (window.app && window.app.updateSyncStatus) window.app.updateSyncStatus('error', e?.message || String(e || ''));
             } finally {
                 this._isSaving = false;
             }
@@ -1430,7 +1626,7 @@ export const DB = {
             }
         } catch (e) {
             console.warn('DB.syncWithRemoteOnStart failed', e);
-            window.app?.updateSyncStatus('cloud-error');
+            window.app?.updateSyncStatus('cloud-error', e?.message || String(e || ''));
         }
     },
 
@@ -1455,7 +1651,7 @@ export const DB = {
             }
         } catch (e) {
             console.warn('DB.handleRemoteNewer failed', e);
-            window.app?.updateSyncStatus('cloud-error');
+            window.app?.updateSyncStatus('cloud-error', e?.message || String(e || ''));
         }
     },
 

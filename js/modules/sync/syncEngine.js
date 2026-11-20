@@ -68,9 +68,9 @@ export const SyncEngine = {
         }, 6000);
     },
 
-    _setStatus(status) {
-        try { window.app?.updateSyncStatus?.(status); } catch (e) { /* ignore */ }
-        try { window.dispatchEvent(new CustomEvent('aru-sync-status', { detail: { status } })); } catch (e) { /* ignore */ }
+    _setStatus(status, detail = '') {
+        try { window.app?.updateSyncStatus?.(status, detail); } catch (e) { /* ignore */ }
+        try { window.dispatchEvent(new CustomEvent('aru-sync-status', { detail: { status, detail } })); } catch (e) { /* ignore */ }
     },
 
     _meta() {
@@ -262,7 +262,7 @@ export const SyncEngine = {
                 await window.DB?.save?.();
             } catch (_) { /* ignore rollback save errors */ }
             await this.forgetTrusted();
-            this._setStatus('cloud-error');
+            this._setStatus('cloud-error', err?.message || String(err || ''));
             throw err;
         }
         this._setStatus('cloud-synced');
@@ -508,7 +508,7 @@ export const SyncEngine = {
             // paint the sidebar red; retry with exponential backoff instead.
             const backoff = Math.min(60000, 4000 * Math.pow(2, this._failures - 1));
             this._nextAllowedAt = Date.now() + backoff;
-            if (manual || this._failures >= 2) this._setStatus('cloud-error');
+            if (manual || this._failures >= 2) this._setStatus('cloud-error', e?.message || String(e || ''));
             else this._setStatus('cloud-synced');
             if (manual) await window.UI?.alert?.('Не удалось синхронизировать: ' + e.message);
             return { error: e.message };

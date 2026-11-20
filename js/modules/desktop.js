@@ -607,17 +607,23 @@ export const DesktopMode = {
 
         const area = this.areaSize();
         const isTransfer = modal.id === 'modal-transfer-overlay' || !!modal.querySelector('#modal-transfer-overlay');
+        const isLibrary = modal.id === 'modal-library-overlay' || !!modal.querySelector('#library-grid');
+        if (isLibrary) {
+            const isList = window.Library?.state?.viewMode === 'list';
+            width = Math.min(isList ? 540 : 720, Math.max(360, area.w - 40));
+        }
         const focused = modal.contains(document.activeElement) ? document.activeElement : null;
         const win = this.createWindow({
             id: `adopt-${++this.adoptSeq}`,
             titleText: titleText || this.t('window'),
             icon,
             width,
-            height: fillsHeight ? Math.round(area.h * 0.88) : 420,
+            height: isLibrary ? Math.min(460, Math.round(area.h * 0.78)) : (fillsHeight ? Math.round(area.h * 0.88) : 420),
             adopted: true,
             onClose: isTransfer ? () => { window.TransferController?.cleanup?.(); } : null
         });
         if (!win) return;
+        if (isLibrary) win.isLibrary = true;
 
         modal.classList.add('wd-modal-root');
         modal.style.setProperty('position', 'static', 'important');
@@ -628,7 +634,7 @@ export const DesktopMode = {
         modal.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
         modal.style.setProperty('width', '100%', 'important');
         modal.style.setProperty('padding', '0', 'important');
-        modal.style.setProperty('height', fillsHeight ? '100%' : 'auto', 'important');
+        modal.style.setProperty('height', (fillsHeight || isLibrary) ? '100%' : 'auto', 'important');
 
         Array.from(modal.children).forEach((child) => {
             if (child !== dialog && child.classList.contains('absolute') && child.classList.contains('inset-0')) child.remove();
@@ -638,17 +644,19 @@ export const DesktopMode = {
             dialog.style.maxHeight = '100%';
             dialog.style.maxWidth = 'none';
             dialog.style.width = '100%';
-            if (fillsHeight) dialog.style.height = '100%';
+            if (fillsHeight || isLibrary) dialog.style.height = '100%';
             const header = dialog.firstElementChild;
             if (header?.querySelector('h1, h2, h3') && header.querySelector('button[onclick*="modal-container"], button[onclick*="closeModal"]')) header.remove();
             if (dialog.querySelector('#tab-general')) this.decorateSettings(dialog);
         }
-        if (!fillsHeight) win.body.style.overflowY = 'auto';
+        if (!fillsHeight && !isLibrary) win.body.style.overflowY = 'auto';
 
         win.body.appendChild(modal);
         win.modalRoot = modal;
 
-        if (!fillsHeight) {
+        if (isLibrary) {
+            requestAnimationFrame(() => this.fitLibraryWindow(win));
+        } else if (!fillsHeight) {
             const needed = Math.max(
                 (dialog.offsetHeight || 0) + 20,
                 (modal.scrollHeight || 0) + 12
@@ -662,6 +670,40 @@ export const DesktopMode = {
         if (focused && focused.isConnected && typeof focused.focus === 'function') {
             focused.focus();
         }
+    },
+
+    fitLibraryWindow(winOverride = null) {
+        if (!this.active) return;
+        let win = winOverride;
+        if (!win) {
+            for (const candidate of this.windows.values()) {
+                if (candidate && candidate.isLibrary) { win = candidate; break; }
+            }
+        }
+        if (!win || win.maximized || win.userResized || !win.modalRoot) return;
+        const grid = win.modalRoot.querySelector('#library-grid');
+        if (!grid) return;
+
+        const area = this.areaSize();
+        const isList = window.Library?.state?.viewMode === 'list';
+        const targetW = Math.min(isList ? 540 : 720, Math.max(360, area.w - 40));
+
+        // Apply width first so CSS grid column count and toolbar wrapping settle before measuring height.
+        win.w = targetW;
+        win.el.style.width = `${Math.round(targetW)}px`;
+
+        const toolbar = win.modalRoot.querySelector('#lib-toolbar');
+        const toolbarH = toolbar ? toolbar.offsetHeight : 0;
+        const prevFlex = grid.style.flex;
+        const prevHeight = grid.style.height;
+        grid.style.flex = '0 0 auto';
+        grid.style.height = 'auto';
+        const gridH = grid.scrollHeight;
+        grid.style.flex = prevFlex;
+        grid.style.height = prevHeight;
+
+        const targetH = clamp(38 + toolbarH + gridH + 4, 240, Math.round(area.h * 0.78));
+        this.resizeWindow(win.id, targetW, targetH);
     },
 
     decorateSettings(dialog) {
@@ -1069,13 +1111,57 @@ export const DesktopMode = {
         const existing = this.windows.get(`artifact-${id}`);
         if (existing) { this.focusWindow(existing.id); return; }
         const icons = { app: 'layout', game: 'gamepad-2', doc: 'file-text', analytics: 'bar-chart-3' };
-        const win = this.createWindow({ id: `artifact-${id}`, titleText: artifact.name, icon: icons[artifact.type], width: 940, height: 700, type: 'artifact' });
+        const storageScope = DB.getArtifactScopeKey
+            ? DB.getArtifactScopeKey({ source: 'module', type: artifact.type, title: artifact.name })
+            : null;
         const frame = document.createElement('iframe');
+        let onStorageChanged = null;
+        const win = this.createWindow({
+            id: `artifact-${id}`,
+            titleText: artifact.name,
+            icon: icons[artifact.type],
+            width: 940,
+            height: 700,
+            type: 'artifact',
+            onClose: () => {
+                CanvasManager.unregisterStorageFrame?.(frame);
+                if (onStorageChanged) window.removeEventListener('aru-artifact-storage-changed', onStorageChanged);
+            }
+        });
+        if (storageScope) {
+            const controls = win.el.querySelector('.wd-window-controls');
+            const minBtn = controls?.querySelector('[data-wd-win="minimize"]');
+            const resetBtn = document.createElement('button');
+            resetBtn.type = 'button';
+            resetBtn.className = `wd-win-btn ${DB.hasArtifactStorage?.(storageScope) ? '' : 'hidden'}`;
+            resetBtn.dataset.wdWin = 'reset-data';
+            resetBtn.title = this.t('reset_artifact_data');
+            resetBtn.innerHTML = '<i data-lucide="rotate-ccw" class="w-4 h-4"></i>';
+            resetBtn.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const appState = window.aruState || {};
+                const tr = appState.translations || {};
+                const msg = tr.confirm_reset_artifact_data || 'Reset saved data (records, history, state) for this artifact? The artifact code will remain intact.';
+                if (!(await UI.confirm(msg))) return;
+                CanvasManager.flushPendingStorage?.();
+                DB.clearArtifactStorage(storageScope, true);
+                CanvasManager.notifyScopeReset?.(storageScope);
+                UI.showToast(tr.toast_artifact_data_reset || 'Artifact data reset', 'rotate-ccw');
+            });
+            if (controls && minBtn) controls.insertBefore(resetBtn, minBtn);
+            else if (controls) controls.prepend(resetBtn);
+            onStorageChanged = (event) => {
+                if (event.detail?.scopeKey !== storageScope) return;
+                resetBtn.classList.toggle('hidden', !DB.hasArtifactStorage?.(storageScope));
+            };
+            window.addEventListener('aru-artifact-storage-changed', onStorageChanged);
+            refreshIcons();
+        }
         frame.className = 'wd-artifact-frame';
         frame.title = artifact.name;
         frame.sandbox = 'allow-scripts allow-forms allow-modals allow-popups';
         win.body.appendChild(frame);
-        CanvasManager.renderInto(frame, { type: artifact.type, title: artifact.name, code: artifact.content });
+        CanvasManager.renderInto(frame, { type: artifact.type, title: artifact.name, code: artifact.content, storageScope });
     },
 
     async requestFullscreen() {
@@ -1499,6 +1585,7 @@ export const DesktopMode = {
 
     startResize(win, event) {
         if (win.maximized) return;
+        win.userResized = true;
         event.preventDefault();
         event.stopPropagation();
         const handle = event.currentTarget;

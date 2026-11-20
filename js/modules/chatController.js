@@ -444,7 +444,12 @@ export const ChatController = {
 
         if (!tab.artifact && !tab.isPrivate && DB.getLatestChatArtifact) {
             const latest = DB.getLatestChatArtifact(tab.chatId);
-            if (latest) tab.artifact = { type: latest.type, title: latest.title, code: latest.code };
+            if (latest) {
+                const storageScope = DB.getArtifactScopeKey
+                    ? DB.getArtifactScopeKey({ source: 'chat', type: latest.type, title: latest.title, chatId: tab.chatId, isPrivate: false })
+                    : null;
+                tab.artifact = { type: latest.type, title: latest.title, code: latest.code, source: 'chat', storageScope };
+            }
         }
 
         const tabKey = CanvasManager.getTabKey(tab);
@@ -454,6 +459,7 @@ export const ChatController = {
                 CanvasManager.renderPreview(); // Rebuilds the per-chat iframe after reload
             }
             CanvasManager.switchChat(tabKey);
+            CanvasManager.updateResetStorageButton?.();
             // Optionally update UI for artifact view (tabs, title)
             const tabsEl = document.getElementById('canvas-tabs');
             const showTabs = ['app', 'game', 'analytics', 'doc'].includes(tab.artifact.type);

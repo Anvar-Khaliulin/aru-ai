@@ -49,6 +49,17 @@ export const DBSchemaMethods = {
         )`, [], false);
         this.run(`CREATE INDEX IF NOT EXISTS idx_chat_artifacts_chat ON chat_artifacts(chat_id)`, [], false);
 
+        // Per-artifact sandbox key-value state (scoped by chat/module/skill)
+        this.run(`CREATE TABLE IF NOT EXISTS artifact_storage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(scope_key, key)
+        )`, [], false);
+        this.run(`CREATE INDEX IF NOT EXISTS idx_artifact_storage_scope ON artifact_storage(scope_key)`, [], false);
+
         // Personality state: persistent mood/sarcasm/humor
         this.run(`CREATE TABLE IF NOT EXISTS personality_state (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -611,6 +622,20 @@ export const DBSchemaMethods = {
                     updated_at TEXT NOT NULL
                 )`, [], false);
                 changed = true;
+            }
+            if (!this.tableExists('artifact_storage')) {
+                this.run(`CREATE TABLE artifact_storage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scope_key TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(scope_key, key)
+                )`, [], false);
+                this.run(`CREATE INDEX IF NOT EXISTS idx_artifact_storage_scope ON artifact_storage(scope_key)`, [], false);
+                changed = true;
+            } else {
+                this.run(`CREATE INDEX IF NOT EXISTS idx_artifact_storage_scope ON artifact_storage(scope_key)`, [], false);
             }
             // Cloud merge identity: uid/rev columns and write-capture triggers.
             // Purely additive, so databases from older app versions keep working.

@@ -106,12 +106,15 @@ export const Triggers = {
 
             if (match) {
                 console.log("Module Recall: Found match", match.name);
+                const storageScope = (DB && DB.getArtifactScopeKey)
+                    ? DB.getArtifactScopeKey({ source: 'module', type: match.type, title: match.name })
+                    : null;
                 setTimeout(() => {
                     if (!state.tabs.includes(tab)) return;
-                    tab.artifact = { type: match.type, title: match.name, code: match.content };
+                    tab.artifact = { type: match.type, title: match.name, code: match.content, source: 'module', storageScope };
                     tab.isCanvasOpen = true;
                     if (state.tabs[state.activeTabIndex] === tab) {
-                        CanvasManager.renderArtifact(match.type, match.name, match.content);
+                        CanvasManager.renderArtifact(match.type, match.name, match.content, { source: 'module', storageScope });
                     }
                 }, 500);
                 return `SUCCESS: Artifact already found and opened on Canvas (Type: ${match.type}, Title: "${match.name}"). DO NOT generate a new version of this artifact. Just confirm to the user that it is open.`;
@@ -572,12 +575,16 @@ export const Triggers = {
             const last = artifactsFound[artifactsFound.length - 1];
             const tab = chatId === null ? state.tabs[state.activeTabIndex]
                 : state.tabs.find((item) => item.chatId === chatId);
+            const effectiveChatId = (chatId !== null && chatId !== undefined) ? chatId : (tab ? tab.chatId : null);
+            const storageScope = (DB && DB.getArtifactScopeKey)
+                ? DB.getArtifactScopeKey({ source: 'chat', type: last.type, title: last.title, chatId: effectiveChatId, isPrivate })
+                : null;
             setTimeout(() => {
                 if (!state.tabs.includes(tab)) return;
-                tab.artifact = { type: last.type, title: last.title, code: last.code };
+                tab.artifact = { type: last.type, title: last.title, code: last.code, source: 'chat', storageScope };
                 tab.isCanvasOpen = true;
                 if (state.tabs[state.activeTabIndex] === tab) {
-                    CanvasManager.renderArtifact(last.type, last.title, last.code);
+                    CanvasManager.renderArtifact(last.type, last.title, last.code, { source: 'chat', storageScope });
                 }
             }, 500);
         }

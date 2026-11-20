@@ -56,7 +56,8 @@ export const SYNC_TABLES = [
     { name: 'fit_cycle_logs', identity: ['log_date'] },
     { name: 'fit_intimacy_logs', identity: 'uid' },
     { name: 'fit_chat_messages', identity: 'uid' },
-    { name: 'desktop_notes', identity: 'uid' }
+    { name: 'desktop_notes', identity: 'uid' },
+    { name: 'artifact_storage', identity: ['scope_key', 'key'] }
 ];
 
 export const TABLE_BY_NAME = Object.fromEntries(SYNC_TABLES.map(t => [t.name, t]));

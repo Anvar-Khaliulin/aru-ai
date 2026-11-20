@@ -20,7 +20,7 @@ export const Library = {
         this.state.viewMode = this.state.viewMode === 'grid' ? 'list' : 'grid';
         const btn = document.getElementById('lib-view-toggle');
         if (btn) {
-            btn.innerHTML = `<i data-lucide="${this.state.viewMode === 'list' ? 'layout-grid' : 'list'}" class="w-5 h-5"></i>`;
+            btn.innerHTML = `<i data-lucide="${this.state.viewMode === 'list' ? 'layout-grid' : 'list'}" class="w-4 h-4"></i>`;
             lucide.createIcons();
         }
         this.loadModules();
@@ -35,12 +35,12 @@ export const Library = {
         const appState = window.aruState || {};
         const t = appState.translations || {};
         const ft = this.state.filterType || 'all';
-        const activeTabCls = 'px-3 py-2 text-sm font-medium rounded-md bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white transition';
-        const idleTabCls = 'px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 transition';
+        const activeTabCls = 'px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white transition';
+        const idleTabCls = 'px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap text-gray-500 hover:text-gray-700 dark:text-gray-400 transition';
         const viewIcon = this.state.viewMode === 'list' ? 'layout-grid' : 'list';
         const html = `
         <div id="modal-library-overlay" class="fixed top-[60px] md:top-[72px] inset-x-0 bottom-0 z-[100] flex items-center justify-center bg-white/5 dark:bg-black/5 backdrop-blur-md fade-in p-2 md:p-4" onclick="if (event.target === this) document.getElementById('modal-container').innerHTML=''">
-            <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl h-[85dvh] flex flex-col shadow-2xl relative overflow-hidden" role="dialog" aria-modal="true">
+            <div class="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-3xl h-[80dvh] flex flex-col shadow-2xl relative overflow-hidden" role="dialog" aria-modal="true">
                 <!-- Header -->
                 <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                     <h3 class="text-lg font-bold dark:text-white flex items-center gap-2">
@@ -52,28 +52,28 @@ export const Library = {
                 </div>
 
                 <!-- Toolbar -->
-                <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row gap-4 items-center bg-white dark:bg-gray-900">
-                    <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                        <button type="button" onclick="window.Library.setFilter('all')" id="lib-filter-all" class="${ft === 'all' ? activeTabCls : idleTabCls}">${t.lib_filter_all || 'All'}</button>
-                        <button type="button" onclick="window.Library.setFilter('apps')" id="lib-filter-apps" class="${ft === 'apps' ? activeTabCls : idleTabCls}">${t.lib_filter_apps || 'Aru Apps'}</button>
-                        <button type="button" onclick="window.Library.setFilter('docs')" id="lib-filter-docs" class="${ft === 'docs' ? activeTabCls : idleTabCls}">${t.lib_filter_docs || 'Aru Docs'}</button>
-                    </div>
-                    <div class="flex items-center gap-2 w-full md:w-auto">
-                        <button type="button" onclick="window.Library.toggleViewMode()" id="lib-view-toggle" class="w-10 h-10 flex shrink-0 items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-xl transition-all shadow-sm active:scale-95" title="${t.lib_toggle_view || 'Toggle View'}">
-                            <i data-lucide="${viewIcon}" class="w-5 h-5"></i>
-                        </button>
-                        <button type="button" onclick="window.Library.openAddModal()" class="w-10 h-10 flex items-center justify-center bg-aru-500 hover:bg-aru-600 text-white rounded-xl shadow-md transition-all active:scale-95" title="${t.lib_add_artifact || 'Add Artifact'}">
-                            <i data-lucide="plus" class="w-5 h-5"></i>
-                        </button>
-                        <div class="relative flex-1 md:w-64">
-                            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-                            <input type="text" value="${UI.escapeHTML(this.state.searchQuery || '')}" oninput="window.Library.search(this.value)" placeholder="${t.lib_search_placeholder || 'Search...'}" class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-aru-500 outline-none dark:text-white">
+                <div id="lib-toolbar" class="p-3 md:p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2.5 md:gap-3 bg-white dark:bg-gray-900">
+                    <div class="flex items-center justify-start gap-2 w-full md:w-auto">
+                        <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 shrink-0">
+                            <button type="button" onclick="window.Library.setFilter('all')" id="lib-filter-all" class="${ft === 'all' ? activeTabCls : idleTabCls}">${t.lib_filter_all || 'All'}</button>
+                            <button type="button" onclick="window.Library.setFilter('apps')" id="lib-filter-apps" class="${ft === 'apps' ? activeTabCls : idleTabCls}">${t.lib_filter_apps || 'Apps'}</button>
+                            <button type="button" onclick="window.Library.setFilter('docs')" id="lib-filter-docs" class="${ft === 'docs' ? activeTabCls : idleTabCls}">${t.lib_filter_docs || 'Docs'}</button>
                         </div>
+                        <button type="button" onclick="window.Library.toggleViewMode()" id="lib-view-toggle" class="w-9 h-9 flex shrink-0 items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-xl transition-all shadow-sm active:scale-95" title="${t.lib_toggle_view || 'Toggle View'}">
+                            <i data-lucide="${viewIcon}" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" onclick="window.Library.openAddModal()" class="w-9 h-9 flex shrink-0 items-center justify-center bg-aru-500 hover:bg-aru-600 text-white rounded-xl shadow-md transition-all active:scale-95" title="${t.lib_add_artifact || 'Add Artifact'}">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="relative w-full md:flex-1 md:min-w-[160px] md:max-w-xs md:ml-auto">
+                        <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                        <input type="text" value="${UI.escapeHTML(this.state.searchQuery || '')}" oninput="window.Library.search(this.value)" placeholder="${t.lib_search_placeholder || 'Search...'}" class="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs md:text-sm outline-none dark:text-white">
                     </div>
                 </div>
 
                 <!-- Grid -->
-                <div id="library-grid" class="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
+                <div id="library-grid" class="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 content-start">
                     <!-- Items go here -->
                     <div class="col-span-full flex justify-center py-10"><div class="animate-spin w-8 h-8 border-4 border-aru-500 border-t-transparent rounded-full"></div></div>
                 </div>
@@ -223,13 +223,14 @@ export const Library = {
         if (modules.length === 0) {
             grid.innerHTML = `<div class="col-span-full text-center text-gray-400 py-10 flex flex-col items-center gap-2"><i data-lucide="ghost" class="w-8 h-8 opacity-50"></i><p>${t.lib_empty || 'Empty...'}</p></div>`;
             lucide.createIcons();
+            window.DesktopMode?.fitLibraryWindow?.();
             return;
         }
 
         if (this.state.viewMode === 'list') {
-            grid.className = "flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 flex flex-col gap-2 content-start";
+            grid.className = "flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 flex flex-col gap-2 content-start";
         } else {
-            grid.className = "flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start";
+            grid.className = "flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 content-start";
         }
 
         const config = {
@@ -238,11 +239,21 @@ export const Library = {
             analytics: { icon: 'bar-chart-3', color: 'bg-blue-100 text-blue-600', label: t.lib_label_analytics || 'Analytics' },
             doc: { icon: 'file-text', color: 'bg-emerald-100 text-emerald-600', label: t.lib_label_doc || 'Doc' }
         };
+        const scopesWithData = DB.getArtifactStorageScopes ? DB.getArtifactStorageScopes() : new Set();
 
         grid.innerHTML = modules.map(m => {
             const item = config[m.type] || config.doc;
             const rawTags = m.tags || (m.type === 'app' ? 'Web Application' : (m.type === 'game' ? 'Game' : 'Script/Doc'));
-            const standalone = window.DesktopMode?.active ? `<button onclick="event.stopPropagation(); DesktopMode.openArtifact(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white rounded-lg transition" title="${UI.escapeHTML(window.DesktopMode.t('artifact_window'))}"><i data-lucide="external-link" class="w-4 h-4"></i></button>` : '';
+            const standaloneList = window.DesktopMode?.active ? `<button type="button" onclick="event.stopPropagation(); DesktopMode.openArtifact(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white rounded-lg transition" title="${UI.escapeHTML(window.DesktopMode.t('artifact_window'))}"><i data-lucide="external-link" class="w-4 h-4"></i></button>` : '';
+            const standaloneGrid = window.DesktopMode?.active ? `<button type="button" onclick="event.stopPropagation(); DesktopMode.openArtifact(${m.id})" class="w-8 h-8 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white border border-gray-100 dark:border-gray-600 rounded-lg transition shadow-sm" title="${UI.escapeHTML(window.DesktopMode.t('artifact_window'))}"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></button>` : '';
+            const scope = DB.getArtifactScopeKey ? DB.getArtifactScopeKey({ source: 'module', type: m.type, title: m.name }) : null;
+            const hasData = !!(scope && scopesWithData.has(scope));
+            const resetBtnList = hasData
+                ? `<button type="button" onclick="event.stopPropagation(); window.Library.resetItemData(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-amber-500 text-gray-400 hover:text-white rounded-lg transition shadow-sm" title="${UI.escapeHTML(t.artifact_reset_data_tooltip || 'Reset saved data')}"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>`
+                : '';
+            const resetBtnGrid = hasData
+                ? `<button type="button" onclick="event.stopPropagation(); window.Library.resetItemData(${m.id})" class="w-8 h-8 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-amber-500 border border-gray-100 dark:border-gray-600 rounded-lg transition shadow-sm" title="${UI.escapeHTML(t.artifact_reset_data_tooltip || 'Reset saved data')}"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i></button>`
+                : '';
 
             if (this.state.viewMode === 'list') {
                 const shortName = m.name.length > 30 ? m.name.substring(0, 30) + '...' : m.name;
@@ -262,7 +273,8 @@ export const Library = {
                         <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg">${item.label}</span>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
-                        ${standalone}
+                        ${standaloneList}
+                        ${resetBtnList}
                         <button onclick="event.stopPropagation(); window.Library.launch(${m.id})" class="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-aru-500 text-gray-500 hover:text-white rounded-lg transition shadow-sm" title="${t.btn_open || 'Open'}">
                             <i data-lucide="play" class="w-4 h-4"></i>
                         </button>
@@ -273,29 +285,31 @@ export const Library = {
                 </div>`;
             } else {
                 return `
-                <div class="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-aru-500 dark:hover:border-aru-500 transition-all duration-300 group flex flex-col gap-4 min-h-[12rem] relative shadow-sm hover:shadow-xl hover:-translate-y-1">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="w-11 h-11 rounded-xl ${item.color} flex items-center justify-center transition-transform group-hover:scale-110 shadow-inner">
-                            <i data-lucide="${item.icon}" class="w-6 h-6"></i>
+                <div class="bg-white dark:bg-gray-800 rounded-xl p-3.5 border border-gray-100 dark:border-gray-800 hover:border-aru-500 dark:hover:border-aru-500 transition-all duration-200 group flex flex-col gap-2.5 relative shadow-sm hover:shadow-md">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="w-9 h-9 rounded-lg ${item.color} flex items-center justify-center shrink-0">
+                            <i data-lucide="${item.icon}" class="w-5 h-5"></i>
                         </div>
-                        <span class="shrink-0 text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg">${item.label}</span>
+                        <span class="shrink-0 text-[9px] font-black uppercase tracking-widest text-gray-400 border border-gray-100 dark:border-gray-700 px-2 py-0.5 rounded-md">${item.label}</span>
                     </div>
-                    <div class="flex-1 min-h-0 flex flex-col">
-                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight line-clamp-2 break-words" title="${UI.escapeHTML(m.name)}">${UI.escapeHTML(m.name)}</h4>
-                        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed font-medium italic truncate" title="${UI.escapeHTML(rawTags)}">${UI.escapeHTML(rawTags)}</p>
+                    <div class="min-w-0 flex flex-col gap-1">
+                        <h4 class="font-bold text-gray-800 dark:text-gray-100 text-[13px] leading-snug line-clamp-2 break-words" title="${UI.escapeHTML(m.name)}">${UI.escapeHTML(m.name)}</h4>
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500 leading-normal truncate" title="${UI.escapeHTML(rawTags)}">${UI.escapeHTML(rawTags)}</p>
                     </div>
 
-                    <div class="mt-auto flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-3 opacity-100 md:opacity-0 transition-all duration-300 translate-y-0 md:translate-y-2 group-hover:opacity-100 group-hover:translate-y-0">
-                        <button onclick="window.Library.launch(${m.id})" class="flex-1 min-w-0 h-10 px-3 bg-aru-500 hover:bg-aru-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition shadow-lg shadow-aru-500/20">${t.btn_open || 'Open'}</button>
-                        ${standalone}
-                        <button onclick="event.stopPropagation(); window.Library.deleteItem(${m.id})" class="w-10 h-10 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-red-500 border border-gray-100 dark:border-gray-600 rounded-xl transition shadow-sm" title="${t.btn_delete || 'Delete'}">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <div class="mt-auto flex items-center gap-1.5 border-t border-gray-100 dark:border-gray-700 pt-2.5">
+                        <button onclick="window.Library.launch(${m.id})" class="flex-1 min-w-0 h-8 px-2.5 bg-aru-500 hover:bg-aru-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg transition shadow-sm">${t.btn_open || 'Open'}</button>
+                        ${standaloneGrid}
+                        ${resetBtnGrid}
+                        <button onclick="event.stopPropagation(); window.Library.deleteItem(${m.id})" class="w-8 h-8 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-red-500 border border-gray-100 dark:border-gray-600 rounded-lg transition shadow-sm" title="${t.btn_delete || 'Delete'}">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
                 </div>`;
             }
         }).join('');
         lucide.createIcons();
+        window.DesktopMode?.fitLibraryWindow?.();
     },
 
     async launch(id) {
@@ -311,13 +325,37 @@ export const Library = {
         const m = [...apps, ...games, ...docs, ...analytics].find(x => x.id == id);
 
         if (m) {
+            const storageScope = DB.getArtifactScopeKey
+                ? DB.getArtifactScopeKey({ source: 'module', type: m.type, title: m.name })
+                : null;
             const activeTab = state.tabs[state.activeTabIndex];
             if (activeTab) {
-                activeTab.artifact = { type: m.type, title: m.name, code: m.content };
+                activeTab.artifact = { type: m.type, title: m.name, code: m.content, source: 'module', storageScope };
                 activeTab.isCanvasOpen = true;
             }
-            CanvasManager.renderArtifact(m.type, m.name, m.content);
+            CanvasManager.renderArtifact(m.type, m.name, m.content, { source: 'module', storageScope });
         }
+    },
+
+    async resetItemData(id) {
+        const appState = window.aruState || {};
+        const t = appState.translations || {};
+        const rows = DB.query("SELECT * FROM modules_data WHERE id = ? LIMIT 1", [id]);
+        const m = rows && rows[0];
+        if (!m) return;
+        const scope = DB.getArtifactScopeKey
+            ? DB.getArtifactScopeKey({ source: 'module', type: m.type, title: m.name })
+            : null;
+        if (!scope) return;
+
+        const msg = t.confirm_reset_artifact_data || 'Reset saved data (records, history, state) for this artifact? The artifact code will remain intact.';
+        if (!(await UI.confirm(msg))) return;
+
+        CanvasManager.flushPendingStorage?.();
+        DB.clearArtifactStorage(scope, true);
+        CanvasManager.notifyScopeReset?.(scope);
+        this.loadModules();
+        UI.showToast(t.toast_artifact_data_reset || 'Artifact data reset', 'rotate-ccw');
     },
 
     async deleteItem(id) {

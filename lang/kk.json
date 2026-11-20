@@ -98,9 +98,15 @@
     "toggle_canvas": "Холст",
     "footer_copyright": "Aru Ai v{{APP_VERSION}} • Қауіпсіз және Жеке",
     "sync_status_synced": "Синхрондалды",
-    "sync_status_syncing": "Сақталуда...",
+    "sync_status_syncing": "Синхрондау",
     "sync_status_error": "Қате",
     "sync_status_paused": "Рұқсат күтілуде",
+    "sync_status_cache": "Синхрондау",
+    "sync_error_modal_title": "Синхрондау қатесі",
+    "sync_error_unknown": "Белгісіз синхрондау қатесі",
+    "sync_error_file_denied": "Дерекқор файлына қол жеткізу рұқсаты қабылданбады",
+    "sync_error_tooltip": "Қате мәтінін көру үшін басыңыз",
+    "sync_cache_tooltip": "Дерекқор тек браузер кэшінде сақталады",
     "sync_needs_auth_tooltip": "Файлмен синхрондауды қалпына келтіру үшін басыңыз",
     "btn_remote_db": "Google Drive / WebDAV",
     "sync_status_cloud_synced": "Бұлт синхрондалды",
@@ -473,5 +479,8 @@
     "sync_wait_generation": "Ару қазір жауап беруде - синхрондау жауап дайын болғанда басталады",
     "pwa_update_available": "Жаңа нұсқа қолжетімді, жаңарту керек пе?",
     "pwa_update_now": "Жаңарту",
-    "pwa_update_later": "Кейінірек"
+    "pwa_update_later": "Кейінірек",
+    "artifact_reset_data_tooltip": "Сақталған деректерді тазалау",
+    "confirm_reset_artifact_data": "Осы артефактің сақталған деректерін (рекордтар, тарих, күйі) өшіру керек пе? Артефактің коды сақталады.",
+    "toast_artifact_data_reset": "Артефакт деректері тазаланды"
 }

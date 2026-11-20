@@ -930,7 +930,7 @@ export const RemoteStorage = {
             this._pushTimer = null;
             this.pushNow(bytes).catch(e => {
                 console.warn('RemoteStorage: push failed', e);
-                this._notifyStatus('cloud-error');
+                this._notifyStatus('cloud-error', e?.message || String(e || ''));
             });
         }, 3000);
     },
@@ -1091,8 +1091,8 @@ export const RemoteStorage = {
         });
     },
 
-    _notifyStatus(status) {
-        if (this.onStatusChange) this.onStatusChange(status);
+    _notifyStatus(status, detail = '') {
+        if (this.onStatusChange) this.onStatusChange(status, detail);
     }
 };
 

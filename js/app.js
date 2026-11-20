@@ -221,6 +221,7 @@ const app = {
         localStorage.setItem('aru_lang', lang);
         return loadTranslations(lang).then(() => {
             app.updateLangUI();
+            if (app._syncState) app.updateSyncStatus(app._syncState.status, app._syncState.error);
             window.dispatchEvent(new CustomEvent('aru-lang-changed', { detail: { lang } }));
         });
     },
@@ -352,7 +353,7 @@ const app = {
 
         // Wire remote storage callbacks; sync activates only after session authorization
         RemoteStorage.onRemoteNewer = (info) => DB.handleRemoteNewer(info);
-        RemoteStorage.onStatusChange = (st) => app.updateSyncStatus(st);
+        RemoteStorage.onStatusChange = (st, detail) => app.updateSyncStatus(st, detail);
         if (status === 'loaded' && localStorage.getItem('aru_authorized') === 'true') {
             app.refreshRemoteSync();
         }
@@ -435,22 +436,15 @@ const app = {
 
         const syncStatus = document.getElementById('sync-status');
         if (syncStatus) {
+            syncStatus.classList.remove('hidden');
             if (DB.fileHandle) {
-                syncStatus.classList.remove('hidden');
-                // Ensure initial state is correct (synced vs needs-auth)
                 DB.checkFilePermission(false).then(ok => {
                     app.updateSyncStatus(ok ? 'synced' : 'needs-auth');
                 });
-
-                // Add click listener for re-authorization
-                syncStatus.style.cursor = 'pointer';
-                syncStatus.title = state.translations?.sync_needs_auth_tooltip || 'Click to re-authorize file sync';
-                syncStatus.onclick = async () => {
-                    const ok = await DB.checkFilePermission(true);
-                    if (ok) app.updateSyncStatus('synced');
-                };
+            } else if (window.RemoteStorage && RemoteStorage.isUnlocked()) {
+                app.updateSyncStatus('cloud-synced');
             } else {
-                syncStatus.classList.add('hidden');
+                app.updateSyncStatus('cache');
             }
         }
 
@@ -691,6 +685,7 @@ ACTIVE PROFILE: ADULT (ВЗРОСЛЫЙ РЕЖИМ) — standard safety: refuse 
    [[ARU_ARTIFACT type="app|game|doc|analytics" title="TITLE"]]
    full code (<div id="app"> + <script> for app/game/analytics; <canvas> for analytics; no \`\`\` fences; omit if [RECALL: SUCCESS: ...])
    [[/ARU_ARTIFACT]]
+   - Persistent state in apps/games: standard \`localStorage\` (sync) or \`await window.aruStorage.get/set/remove/clear/keys\` (async JSON) saves high scores, progress, and history directly in the user's database across sessions.
 4. **Quick replies** (optional; omit on greetings/refusals/errors): [[ARU_SUGGESTIONS]]{"suggestions": ["...", "..."]}[[/ARU_SUGGESTIONS]] (1-3 items in reply language).` : `CAPABILITIES & TOOLS:
 1.  **Tools**: [[TOOL:news tag="..."]] or [[TOOL:weather city="..."]] or [[TOOL:tasks project="..."]].
     - News: if an [RSS FEEDS] section exists below, the tag value must be an exact keyword from its tags. If nothing matches, use tag="".
@@ -703,6 +698,7 @@ ACTIVE PROFILE: ADULT (ВЗРОСЛЫЙ РЕЖИМ) — standard safety: refuse 
     [[/ARU_ARTIFACT]]
     - Types: app (HTML/JS/Tailwind widget), game (canvas or DOM), doc (Markdown text), analytics (Chart.js dashboard, MUST include <canvas>).
     - ALWAYS full working code with at least a <div id="app"> and <script> (for app/game/analytics).
+    - **Persistent state (apps/games)**: standard \`localStorage\` works synchronously and persists between sessions; or use async \`await window.aruStorage.get(key)\`, \`await window.aruStorage.set(key, value)\`, \`await window.aruStorage.remove(key)\`, \`await window.aruStorage.keys()\`, \`await window.aruStorage.clear()\` (auto-JSON, scoped to this artifact in the user's local database). Use this for high scores, saved games, calculation history, or user preferences.
     - NEVER put markdown code fences (\`\`\`) inside the artifact tag; fences are only for small snippets that stay in the chat.
     - When editing an existing artifact, output the FULL updated code.
     - If the user message contains [RECALL: SUCCESS: ...], the item is already open on the Canvas — do NOT re-send it, just acknowledge in words.
@@ -1130,8 +1126,11 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
             if (row) art = { type: row.type, title: row.title, code: row.code };
         }
         if (art) {
-            CanvasManager.renderArtifact(art.type, art.title, art.code);
-            if (tab) tab.artifact = { type: art.type, title: art.title, code: art.code };
+            const storageScope = DB.getArtifactScopeKey
+                ? DB.getArtifactScopeKey({ source: 'chat', type: art.type, title: art.title, chatId, isPrivate: !!(tab && tab.isPrivate) })
+                : null;
+            if (tab) tab.artifact = { type: art.type, title: art.title, code: art.code, source: 'chat', storageScope };
+            CanvasManager.renderArtifact(art.type, art.title, art.code, { source: 'chat', storageScope });
         } else {
             const t = (st && st.translations) || {};
             UI.showToast(t.artifact_not_found || "Couldn't open the artifact — code not found", 'file-warning');
@@ -1287,7 +1286,7 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
     // Activates remote sync when the encrypted profile is unlocked, or shows the locked state
     refreshRemoteSync: async () => {
         RemoteStorage.onRemoteNewer = (info) => DB.handleRemoteNewer(info);
-        RemoteStorage.onStatusChange = (st) => app.updateSyncStatus(st);
+        RemoteStorage.onStatusChange = (st, detail) => app.updateSyncStatus(st, detail);
 
         // Sync v2 workspaces merge snapshots and run silently; the legacy
         // overwrite-push path must never run on top of them.
@@ -1329,55 +1328,82 @@ If the user states a personal fact, start your message with the [[MEMORY: ...]] 
         }
     },
 
-    updateSyncStatus: (status) => { // 'synced', 'syncing', 'error', 'needs-auth', 'cloud-*'
+    _syncState: { status: 'cache', error: '' },
+
+    updateSyncStatus: (status, errorDetail = '') => { // 'cache', 'synced', 'syncing', 'error', 'needs-auth', 'cloud-*'
         const dot = document.getElementById('sync-dot');
         const text = document.getElementById('sync-text');
         const t = state.translations || {};
+        const syncStatus = document.getElementById('sync-status');
+
+        if (syncStatus) syncStatus.classList.remove('hidden');
+
+        let normalized = status || 'cache';
+        if (normalized === 'synced' && !DB.fileHandle) {
+            normalized = (window.RemoteStorage && RemoteStorage.isUnlocked()) ? 'cloud-synced' : 'cache';
+        }
+
+        const prevError = app._syncState ? app._syncState.error : '';
+        const nextError = (normalized === 'error' || normalized === 'cloud-error')
+            ? (errorDetail || prevError || t.sync_error_unknown || 'Unknown sync error')
+            : '';
+        app._syncState = { status: normalized, error: nextError };
 
         if (!dot || !text) return;
 
-        // Ensure visible if we have a handle or an unlocked cloud profile
-        const syncStatus = document.getElementById('sync-status');
         if (syncStatus) {
-            if (DB.fileHandle || (window.RemoteStorage && RemoteStorage.isUnlocked())) {
-                syncStatus.classList.remove('hidden');
-            } else {
-                syncStatus.classList.add('hidden');
-            }
+            syncStatus.style.cursor = 'default';
+            syncStatus.onclick = null;
+            syncStatus.title = '';
         }
 
-        if (status === 'synced') {
-            dot.className = 'w-2 h-2 rounded-full bg-green-500 transition-colors duration-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]';
-            text.textContent = t.sync_status_synced || 'Synced';
-            text.className = 'text-[10px] font-bold text-gray-400 uppercase tracking-widest fade-in';
-        } else if (status === 'syncing') {
-            dot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse transition-colors duration-500';
-            text.textContent = t.sync_status_syncing || 'Saving...';
-            text.className = 'text-[10px] font-bold text-yellow-500 uppercase tracking-widest fade-in';
-        } else if (status === 'error') {
-            dot.className = 'w-2 h-2 rounded-full bg-red-500 transition-colors duration-500';
+        const baseText = 'text-[10px] font-bold uppercase tracking-widest whitespace-nowrap truncate fade-in';
+
+        if (normalized === 'error' || normalized === 'cloud-error') {
+            dot.className = 'w-2 h-2 shrink-0 rounded-full bg-red-500 transition-colors duration-500';
             text.textContent = t.sync_status_error || 'Error';
-            text.className = 'text-[10px] font-bold text-red-400 uppercase tracking-widest fade-in';
-        } else if (status === 'needs-auth') {
-            dot.className = 'w-2 h-2 rounded-full bg-gray-400 transition-colors duration-500';
-            text.textContent = t.sync_status_paused || 'Waiting for access';
-            text.className = 'text-[10px] font-bold text-gray-400 uppercase tracking-widest fade-in';
-        } else if (status === 'cloud-synced') {
-            dot.className = 'w-2 h-2 rounded-full bg-sky-500 transition-colors duration-500 shadow-[0_0_8px_rgba(14,165,233,0.6)]';
-            text.textContent = t.sync_status_cloud_synced || 'Cloud synced';
-            text.className = 'text-[10px] font-bold text-sky-500 uppercase tracking-widest fade-in';
-        } else if (status === 'cloud-syncing') {
-            dot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse transition-colors duration-500';
-            text.textContent = t.sync_status_cloud_syncing || 'Cloud sync...';
-            text.className = 'text-[10px] font-bold text-yellow-500 uppercase tracking-widest fade-in';
-        } else if (status === 'cloud-error') {
-            dot.className = 'w-2 h-2 rounded-full bg-red-500 transition-colors duration-500';
-            text.textContent = t.sync_status_cloud_error || 'Cloud error';
-            text.className = 'text-[10px] font-bold text-red-400 uppercase tracking-widest fade-in';
-        } else if (status === 'cloud-paused') {
-            dot.className = 'w-2 h-2 rounded-full bg-gray-400 transition-colors duration-500';
-            text.textContent = t.sync_status_cloud_paused || 'Cloud locked';
-            text.className = 'text-[10px] font-bold text-gray-400 uppercase tracking-widest fade-in';
+            text.className = `${baseText} text-red-500 dark:text-red-400`;
+            if (syncStatus) {
+                syncStatus.style.cursor = 'pointer';
+                syncStatus.title = t.sync_error_tooltip || 'Click to view error details';
+                syncStatus.onclick = () => {
+                    const title = t.sync_error_modal_title || 'Sync error';
+                    const body = nextError || t.sync_error_unknown || 'Unknown sync error';
+                    UI.alert(`${title}\n\n${body}`);
+                };
+            }
+        } else if (normalized === 'syncing' || normalized === 'cloud-syncing') {
+            dot.className = 'w-2 h-2 shrink-0 rounded-full bg-yellow-400 animate-pulse transition-colors duration-500';
+            text.textContent = t.sync_status_syncing || 'Syncing';
+            text.className = `${baseText} text-yellow-500`;
+        } else if (normalized === 'synced') {
+            dot.className = 'w-2 h-2 shrink-0 rounded-full bg-green-500 transition-colors duration-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]';
+            text.textContent = t.sync_status_synced || 'Synced';
+            text.className = `${baseText} text-green-600 dark:text-green-400`;
+            if (syncStatus) syncStatus.title = t.sync_status_badge || '';
+        } else if (normalized === 'cloud-synced') {
+            dot.className = 'w-2 h-2 shrink-0 rounded-full bg-sky-500 transition-colors duration-500 shadow-[0_0_8px_rgba(14,165,233,0.6)]';
+            text.textContent = t.sync_status_synced || 'Synced';
+            text.className = `${baseText} text-sky-500`;
+            if (syncStatus) syncStatus.title = t.sync_status_cloud_synced || '';
+        } else {
+            dot.className = 'w-2 h-2 shrink-0 rounded-full bg-gray-400 transition-colors duration-500';
+            text.textContent = t.sync_status_cache || 'Sync';
+            text.className = `${baseText} text-gray-400`;
+            if (syncStatus) {
+                if (normalized === 'needs-auth') {
+                    syncStatus.style.cursor = 'pointer';
+                    syncStatus.title = t.sync_needs_auth_tooltip || 'Click to restore file synchronization';
+                    syncStatus.onclick = async () => {
+                        const ok = await DB.checkFilePermission(true);
+                        if (ok) app.updateSyncStatus('synced');
+                    };
+                } else {
+                    syncStatus.title = normalized === 'cloud-paused'
+                        ? (t.sync_status_cloud_paused || '')
+                        : (t.sync_cache_tooltip || '');
+                }
+            }
         }
     }
 };

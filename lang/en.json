@@ -98,9 +98,15 @@
     "toggle_canvas": "Toggle Canvas",
     "footer_copyright": "Aru Ai v{{APP_VERSION}} • Secure & Private",
     "sync_status_synced": "Synced",
-    "sync_status_syncing": "Saving...",
-    "sync_status_error": "Sync Error",
+    "sync_status_syncing": "Syncing",
+    "sync_status_error": "Error",
     "sync_status_paused": "Access Required",
+    "sync_status_cache": "Sync",
+    "sync_error_modal_title": "Sync error",
+    "sync_error_unknown": "Unknown sync error",
+    "sync_error_file_denied": "Database file access permission was denied",
+    "sync_error_tooltip": "Click to view error details",
+    "sync_cache_tooltip": "Database is stored in browser cache only",
     "sync_needs_auth_tooltip": "Click to restore file synchronization",
     "btn_remote_db": "Google Drive / WebDAV",
     "sync_status_cloud_synced": "Cloud synced",
@@ -473,5 +479,8 @@
     "sync_wait_generation": "Aru is replying - sync will start when the answer is ready",
     "pwa_update_available": "A new version is available. Update now?",
     "pwa_update_now": "Update",
-    "pwa_update_later": "Later"
+    "pwa_update_later": "Later",
+    "artifact_reset_data_tooltip": "Reset saved data",
+    "confirm_reset_artifact_data": "Reset saved data (records, history, state) for this artifact? The artifact code will remain intact.",
+    "toast_artifact_data_reset": "Artifact data reset"
 }
