@@ -847,6 +847,15 @@ body.aru-resizing-canvas iframe {
     z-index: var(--aru-z-toast, 200) !important;
 }
 
+#pwa-update-banner {
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 2rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+    max-width: 28rem;
+    margin-inline: auto;
+}
+
 .scan-line {
     background: var(--aru-accent);
     height: 2px;

@@ -804,21 +804,21 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                 banner.id = 'pwa-update-banner';
                 banner.setAttribute('role', 'status');
                 banner.setAttribute('aria-live', 'polite');
-                banner.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[130] w-[calc(100%-2rem)] max-w-md bg-white dark:bg-gray-900 border border-aru-200 dark:border-gray-700 rounded-2xl shadow-2xl px-4 py-3 flex items-center justify-between gap-3 animate-fade-in';
+                banner.className = 'fixed bottom-4 inset-x-0 mx-auto z-[130] w-[calc(100%-2rem)] max-w-md bg-white dark:bg-gray-900 border border-aru-200 dark:border-gray-700 rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-3 gap-y-2 animate-fade-in';
 
                 const textEl = document.createElement('span');
                 textEl.id = 'pwa-update-text';
                 textEl.setAttribute('data-i18n', 'pwa_update_available');
-                textEl.className = 'text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-100';
+                textEl.className = 'text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-100 flex-1 min-w-[140px]';
 
                 const actions = document.createElement('div');
-                actions.className = 'flex items-center gap-2 shrink-0';
+                actions.className = 'flex items-center gap-2 shrink-0 ml-auto';
 
                 const laterBtn = document.createElement('button');
                 laterBtn.id = 'pwa-update-later-btn';
                 laterBtn.type = 'button';
                 laterBtn.setAttribute('data-i18n', 'pwa_update_later');
-                laterBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors';
+                laterBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors';
                 laterBtn.addEventListener('click', () => {
                     dismissedWorker = pendingWorker;
                     banner.remove();
@@ -828,7 +828,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                 nowBtn.id = 'pwa-update-now-btn';
                 nowBtn.type = 'button';
                 nowBtn.setAttribute('data-i18n', 'pwa_update_now');
-                nowBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-aru-500 hover:bg-aru-600 text-white shadow-sm transition-colors';
+                nowBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-aru-500 hover:bg-aru-600 text-white shadow-sm transition-colors';
                 nowBtn.addEventListener('click', () => {
                     swUserApprovedReload = true;
                     banner.remove();
