@@ -350,6 +350,12 @@ export const DesktopMode = {
             this.setLangTexts();
             this.applyTexts();
         });
+        window.addEventListener('aru-user-mode-changed', () => {
+            if (!this.active) return;
+            this.syncTabWindows();
+            const menu = this.shell?.querySelector('#wd-start-menu');
+            if (menu && !menu.classList.contains('hidden')) this.renderStartMenu();
+        });
         window.addEventListener('aru-session-started', () => {
             if (localStorage.getItem(MODE_KEY) === '1' && !this.active) {
                 this.enter({ fullscreen: false });
@@ -713,14 +719,14 @@ export const DesktopMode = {
         nav.classList.add('wd-settings-nav');
         content.classList.add('wd-settings-content');
         dialog.lastElementChild.classList.add('wd-settings-footer');
-        const icons = { state: 'activity', general: 'sliders-horizontal', memory: 'brain', rss: 'rss', network: 'network', storage: 'hard-drive', security: 'shield-check' };
+        const icons = { state: 'activity', dashboard: 'layout-dashboard', general: 'sliders-horizontal', memory: 'brain', rss: 'rss', network: 'network', storage: 'hard-drive', security: 'shield-check' };
         nav.querySelectorAll('[data-tab]').forEach((button) => {
             const caption = document.createElement('span');
             caption.textContent = button.textContent;
             caption.dataset.i18n = `settings_tab_${button.dataset.tab}`;
             button.replaceChildren(caption);
             const icon = document.createElement('i');
-            icon.dataset.lucide = icons[button.dataset.tab];
+            icon.dataset.lucide = icons[button.dataset.tab] || 'sliders-horizontal';
             icon.className = 'w-4 h-4';
             button.prepend(icon);
         });
@@ -747,6 +753,7 @@ export const DesktopMode = {
             <div class="wd-wallpaper" id="wd-wallpaper">${WALLPAPER_LAYERS}</div>
             <div class="wd-desktop-area" id="wd-desktop-area">
                 <div class="wd-icons" id="wd-icons"></div>
+                <div class="wd-widgets hidden" id="wd-widgets"></div>
                 <div class="wd-windows" id="wd-windows"></div>
             </div>
             <div class="wd-taskbar">
@@ -793,6 +800,10 @@ export const DesktopMode = {
 
         const area = el.querySelector('#wd-desktop-area');
         area.addEventListener('contextmenu', (e) => this.onContextMenu(e));
+        area.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.wd-window, #wd-start-menu, #wd-lang-menu, #wd-calendar-popover, .wd-context-menu')) return;
+            this.blurWindows();
+        });
 
         el.querySelector('#wd-start-menu').addEventListener('click', (e) => {
             const button = e.target.closest('[data-wd-action]');
@@ -866,6 +877,13 @@ export const DesktopMode = {
 
         if (options.fullscreen !== false) this.requestFullscreen();
 
+        if (window.Dashboard?.isOpen?.()) {
+            window.Dashboard.close({
+                restoreTab: state.tabs.length > 0,
+                silent: state.tabs.length === 0
+            });
+        }
+
         this.buildShell();
         this.prepareWorkspace();
 
@@ -887,9 +905,11 @@ export const DesktopMode = {
             const activeTab = state.tabs[state.activeTabIndex];
             if (activeTab) this.mountTab(activeTab);
         }
+        window.Dashboard?.syncDesktopWidgets?.(this.shell.querySelector('#wd-widgets'));
         this.adoptAll();
         this.applyTexts();
         this.updateFullscreenBtn();
+        this.syncWidgetFocusState();
     },
 
     async exit() {
@@ -897,6 +917,7 @@ export const DesktopMode = {
         if (this.notes && !(await this.notes.canClose())) return;
         if (!this.active) return;
         this.closeMenus();
+        window.Dashboard?.unmountDesktopWidgets?.();
         this.paintWallpaper(this.wallpaperLayer(), this.wallpaper);
         this.persApplied = true;
         this.restoreWorkspace();
@@ -910,6 +931,10 @@ export const DesktopMode = {
         this.shell.classList.add('hidden');
         document.body.classList.remove('aru-desktop-mode');
         localStorage.setItem(MODE_KEY, '0');
+
+        if (state.tabs.length === 0) {
+            window.Dashboard?.syncEmptyState?.();
+        }
 
         if (document.fullscreenElement) {
             document.exitFullscreen().catch(() => {});
@@ -1663,6 +1688,24 @@ export const DesktopMode = {
             item.el.classList.toggle('focused', winId === id);
         });
         this.updateTaskbarActive();
+        this.syncWidgetFocusState();
+    },
+
+    blurWindows() {
+        this.activeWinId = null;
+        this.windows.forEach((item) => {
+            item.el.classList.remove('focused');
+        });
+        this.updateTaskbarActive();
+        this.syncWidgetFocusState();
+    },
+
+    syncWidgetFocusState() {
+        const rail = this.shell?.querySelector('#wd-widgets');
+        if (!rail) return;
+        const activeWin = this.activeWinId ? this.windows.get(this.activeWinId) : null;
+        const hasFocusedWin = !!(activeWin && !activeWin.minimized);
+        rail.classList.toggle('wd-widgets-dimmed', hasFocusedWin);
     },
 
     minimizeWindow(id) {
@@ -1672,6 +1715,7 @@ export const DesktopMode = {
         win.el.classList.add('minimized');
         if (this.activeWinId === id) this.activeWinId = null;
         this.updateTaskbarActive();
+        this.syncWidgetFocusState();
     },
 
     restoreWindow(id) {
@@ -1733,6 +1777,7 @@ export const DesktopMode = {
         this.windows.delete(id);
         if (this.activeWinId === id) this.activeWinId = null;
         this.updateTaskbarActive();
+        this.syncWidgetFocusState();
         if (win.adopted && !options.keepContainer && !this._adopting) {
             this.closeAdoptedWindows();
             this.clearContainer();

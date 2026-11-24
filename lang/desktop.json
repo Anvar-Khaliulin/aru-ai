@@ -85,7 +85,7 @@
     "pattern_size": "Размер",
     "image": "Изображение",
     "image_url": "URL изображения",
-    "image_hint": "URL или data:image/... — картинка ляжет поверх градиента",
+    "image_hint": "URL или data:image/... - картинка ляжет поверх градиента",
     "image_opacity": "Прозрачность изображения",
     "image_blur": "Размытие",
     "overlay": "Затемнение",
@@ -103,7 +103,7 @@
     "cancel": "Отмена",
     "wallpaper_saved": "Обои сохранены",
     "invalid_json": "Неверный JSON",
-    "desktop_hint": "Правый клик по рабочему столу — разрешение и персонализация",
+    "desktop_hint": "Правый клик по рабочему столу - разрешение и персонализация",
     "power": "Завершить"
   },
   "en": {
@@ -192,7 +192,7 @@
     "pattern_size": "Size",
     "image": "Image",
     "image_url": "Image URL",
-    "image_hint": "Any URL or data:image/... — the image is placed over the gradient",
+    "image_hint": "Any URL or data:image/... - the image is placed over the gradient",
     "image_opacity": "Image opacity",
     "image_blur": "Blur",
     "overlay": "Tint",
@@ -299,7 +299,7 @@
     "pattern_size": "Өлшем",
     "image": "Сурет",
     "image_url": "Сурет URL",
-    "image_hint": "Кез келген URL немесе data:image/... — сурет градиент үстіне қойылады",
+    "image_hint": "Кез келген URL немесе data:image/... - сурет градиент үстіне қойылады",
     "image_opacity": "Сурет мөлдірлігі",
     "image_blur": "Бұлыңғырлық",
     "overlay": "Қараңғылау",
@@ -317,7 +317,7 @@
     "cancel": "Болдырмау",
     "wallpaper_saved": "Тұсқағаз сақталды",
     "invalid_json": "JSON қате",
-    "desktop_hint": "Жұмыс үстелін оң батырмамен басыңыз — ажыратымдылық пен дербестендіру",
+    "desktop_hint": "Жұмыс үстелін оң батырмамен басыңыз - ажыратымдылық пен дербестендіру",
     "power": "Шығу"
   }
 }

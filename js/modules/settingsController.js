@@ -66,6 +66,10 @@ export const SettingsController = {
         if (tokenLimitInput && tokenLimitInput.dataset.userEdited !== 'true') {
             tokenLimitInput.value = type === 'custom' ? 8192 : 32768;
         }
+        const maxOutInput = document.getElementById('inp-max-output');
+        if (maxOutInput && maxOutInput.dataset.userEdited !== 'true' && (!maxOutInput.value || Number(maxOutInput.value) <= 8192)) {
+            maxOutInput.value = type === 'custom' ? 4096 : 8192;
+        }
     },
 
     updateSearchProviderParams() {
@@ -136,6 +140,14 @@ export const SettingsController = {
             return el.value;
         };
 
+        const prevCity = String(state.userSettings.dashboard_weather_city || 'Almaty').trim();
+        const prevRss = String(state.userSettings.rss_urls || '').trim();
+        const isChecked = (id, fallback = false) => {
+            const el = document.getElementById(id);
+            if (!el) return fallback ? 'true' : 'false';
+            return el.checked ? 'true' : 'false';
+        };
+
         const settings = {
             llm_type: llmType,
             gemini_key: getVal('inp-gemini-key', state.userSettings.gemini_key || ''),
@@ -150,7 +162,7 @@ export const SettingsController = {
             user_name: getVal('inp-user-name', state.userSettings.user_name || 'User'),
             user_mode: getVal('inp-user-mode', state.userSettings.user_mode || 'adult'),
             token_limit: getVal('inp-token-limit', state.userSettings.token_limit || 8192),
-            max_output_tokens: getVal('inp-max-output', state.userSettings.max_output_tokens || 2048),
+            max_output_tokens: getVal('inp-max-output', state.userSettings.max_output_tokens || 8192),
             show_stickers: getVal('inp-show-stickers', state.userSettings.show_stickers ?? 'true'),
             ai_temp: getVal('inp-ai-temp', state.userSettings.ai_temp ?? 0.9),
             rss_urls: getVal('inp-rss-urls', state.userSettings.rss_urls || ''),
@@ -164,6 +176,18 @@ export const SettingsController = {
             remote_sync_mode: getVal('inp-remote-sync-mode', state.userSettings.remote_sync_mode || 'auto'),
             remote_conflict: getVal('inp-remote-conflict', state.userSettings.remote_conflict || 'ask'),
             remote_poll: getVal('inp-remote-poll', state.userSettings.remote_poll || '0'),
+
+            dashboard_show_empty: isChecked('inp-dash-show-empty', state.userSettings.dashboard_show_empty === 'true'),
+            dashboard_show_startup: isChecked('inp-dash-show-startup', state.userSettings.dashboard_show_startup === 'true'),
+            dashboard_header_btn: isChecked('inp-dash-header-btn', state.userSettings.dashboard_header_btn === 'true'),
+            dashboard_desktop_widgets: isChecked('inp-dash-desktop-widgets', state.userSettings.dashboard_desktop_widgets === 'true'),
+            dashboard_w_weather: isChecked('inp-dash-w-weather', (state.userSettings.dashboard_w_weather ?? 'true') !== 'false'),
+            dashboard_weather_city: (getVal('inp-dash-weather-city', state.userSettings.dashboard_weather_city || 'Almaty') || 'Almaty').trim() || 'Almaty',
+            dashboard_w_calendar: isChecked('inp-dash-w-calendar', (state.userSettings.dashboard_w_calendar ?? 'true') !== 'false'),
+            dashboard_w_tasks: isChecked('inp-dash-w-tasks', (state.userSettings.dashboard_w_tasks ?? 'true') !== 'false'),
+            dashboard_w_news: isChecked('inp-dash-w-news', (state.userSettings.dashboard_w_news ?? 'true') !== 'false'),
+            dashboard_w_fit: isChecked('inp-dash-w-fit', (state.userSettings.dashboard_w_fit ?? 'true') !== 'false'),
+            dashboard_fit_private: isChecked('inp-dash-fit-private', state.userSettings.dashboard_fit_private === 'true'),
         };
 
         // Transfer WebRTC
@@ -223,6 +247,13 @@ export const SettingsController = {
             }
         } catch (e) { }
 
+        try {
+            window.Dashboard?.applySettings?.({
+                invalidateWeather: prevCity.toLowerCase() !== settings.dashboard_weather_city.toLowerCase(),
+                invalidateNews: prevRss !== String(settings.rss_urls || '').trim()
+            });
+        } catch (e) { }
+
         document.getElementById('modal-container').innerHTML = '';
     },
 
@@ -239,11 +270,11 @@ export const SettingsController = {
         if (hint) hint.classList.toggle('hidden', strategy !== 'auto');
     },
 
-    openSettings: () => {
-        SettingsController.app.promptPassword(() => SettingsController.app._openSettings());
+    openSettings: (initialTab = 'state') => {
+        SettingsController.app.promptPassword(() => SettingsController.app._openSettings(initialTab));
     },
 
-    _openSettings: () => {
+    _openSettings: (initialTab = 'state') => {
         const s = state.userSettings;
         const t = state.translations || {};
         const modalContainer = document.getElementById('modal-container');
@@ -251,6 +282,18 @@ export const SettingsController = {
 
         const isSel = (curr, val) => (curr === val ? 'selected' : '');
         const isOpt = (curr, val) => (curr === val ? 'selected' : '');
+        const toggleRow = (id, title, desc, checked, extra = '') => `
+            <div class="p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4">
+                <div class="space-y-0.5 min-w-0">
+                    <label for="${id}" class="text-xs font-bold text-gray-700 dark:text-gray-200 block cursor-pointer">${title}</label>
+                    <p class="text-[11px] text-gray-400 leading-snug">${desc}</p>
+                    ${extra}
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aru-500"></div>
+                </label>
+            </div>`;
 
         const html = `
         <div id="settings-dialog" class="fixed inset-0 z-[100] fade-in">
@@ -270,6 +313,9 @@ export const SettingsController = {
                 <nav class="settings-tabs" role="tablist" aria-label="${esc(t.settings_title || 'Настройки')}">
                     <button type="button" role="tab" aria-selected="true" onclick="app.switchTab('state')" data-tab="state" class="tab-btn settings-tab is-active">
                         <i data-lucide="activity"></i><span data-i18n="settings_tab_state">${t.settings_tab_state || 'Состояние'}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('dashboard')" data-tab="dashboard" class="tab-btn settings-tab">
+                        <i data-lucide="layout-dashboard"></i><span data-i18n="settings_tab_dashboard">${t.settings_tab_dashboard || 'Дашборд'}</span>
                     </button>
                     <button type="button" role="tab" aria-selected="false" onclick="app.switchTab('general')" data-tab="general" class="tab-btn settings-tab">
                         <i data-lucide="sliders-horizontal"></i><span data-i18n="settings_tab_general">${t.settings_tab_general || 'Общее'}</span>
@@ -304,6 +350,50 @@ export const SettingsController = {
                     <!-- State Dashboard Tab -->
                     <div id="tab-state" class="tab-content space-y-6 animate-fade-in">
                         <!-- Filled dynamically by SettingsController.renderStateTab() -->
+                    </div>
+
+                    <!-- Dashboard Tab -->
+                    <div id="tab-dashboard" class="tab-content hidden space-y-6 animate-fade-in">
+                        <div class="p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-3">
+                            <div class="flex items-center gap-2 text-xs font-bold text-aru-500 uppercase tracking-widest mb-1">
+                                <i data-lucide="monitor-smartphone" class="w-4 h-4"></i>
+                                <span>${t.dashboard_settings_display || 'Отображение дашборда'}</span>
+                            </div>
+                            ${toggleRow('inp-dash-show-empty', t.dashboard_set_empty_title || 'Показывать при закрытии всех чатов', t.dashboard_set_empty_desc || 'Вместо пустого экрана показывать дашборд с выбранными виджетами.', s.dashboard_show_empty === 'true')}
+                            ${toggleRow('inp-dash-show-startup', t.dashboard_set_startup_title || 'Показывать при старте приложения', t.dashboard_set_startup_desc || 'Открывать дашборд при запуске вместо автоматического открытия последнего чата.', s.dashboard_show_startup === 'true')}
+                            ${toggleRow('inp-dash-header-btn', t.dashboard_set_header_title || 'Кнопка дашборда в шапке', t.dashboard_set_header_desc || 'Добавить кнопку быстрого перехода к дашборду перед иконкой Библиотеки.', s.dashboard_header_btn === 'true')}
+                            ${toggleRow('inp-dash-desktop-widgets', t.dashboard_set_desktop_title || 'Показывать в режиме рабочего стола', t.dashboard_set_desktop_desc || 'Разместить полупрозрачные macOS-виджеты в правой части рабочего стола.', s.dashboard_desktop_widgets === 'true')}
+                        </div>
+
+                        <div class="p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-3">
+                            <div class="flex items-center gap-2 text-xs font-bold text-aru-500 uppercase tracking-widest mb-1">
+                                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                                <span>${t.dashboard_settings_widgets || 'Виджеты и параметры'}</span>
+                            </div>
+
+                            <div class="p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 space-y-3">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="space-y-0.5 min-w-0">
+                                        <label for="inp-dash-w-weather" class="text-xs font-bold text-gray-700 dark:text-gray-200 block cursor-pointer">${t.dashboard_w_weather || 'Погода'}</label>
+                                        <p class="text-[11px] text-gray-400 leading-snug">${t.dashboard_w_weather_desc || 'Виджет погоды с почасовым и дневным прогнозом в стиле macOS.'}</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                                        <input type="checkbox" id="inp-dash-w-weather" ${(s.dashboard_w_weather ?? 'true') !== 'false' ? 'checked' : ''} class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aru-500"></div>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label for="inp-dash-weather-city" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.dashboard_weather_city_label || 'Город для прогноза'}</label>
+                                    <input type="text" id="inp-dash-weather-city" value="${esc(s.dashboard_weather_city || 'Almaty')}" placeholder="Almaty" class="w-full p-2.5 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-xs outline-none">
+                                </div>
+                            </div>
+
+                            ${toggleRow('inp-dash-w-calendar', t.dashboard_w_calendar || 'Календарь с делами', t.dashboard_w_calendar_desc || 'Месячная сетка с отметками дедлайнов и тренировок по выбранному дню.', (s.dashboard_w_calendar ?? 'true') !== 'false')}
+                            ${toggleRow('inp-dash-w-tasks', t.dashboard_w_tasks || 'Задачи (фокус дня)', t.dashboard_w_tasks_desc || 'Компактный список самых срочных и просроченных задач из Канбана (до 6 штук).', (s.dashboard_w_tasks ?? 'true') !== 'false')}
+                            ${toggleRow('inp-dash-w-news', t.dashboard_w_news || 'Новости (RSS)', t.dashboard_w_news_desc || 'Лента заголовков из ваших RSS-источников с кнопкой обсуждения с Ару.', (s.dashboard_w_news ?? 'true') !== 'false', `<button type="button" onclick="app.switchTab('rss')" class="mt-1.5 text-[11px] font-semibold text-aru-500 hover:underline">${t.dashboard_news_setup || 'Настроить RSS →'}</button>`)}
+                            ${(s.user_mode || 'adult') !== 'child' ? toggleRow('inp-dash-w-fit', t.dashboard_w_fit || 'Здоровье (Fit & Care)', t.dashboard_w_fit_desc || 'Сводка за сегодня: вода, калории, сон, шаги и план тренировок. Автоматически скрывается в детском режиме.', (s.dashboard_w_fit ?? 'true') !== 'false') : ''}
+                            ${(s.user_mode || 'adult') !== 'child' ? toggleRow('inp-dash-fit-private', t.dashboard_fit_private_title || 'Скрывать вес на дашборде', t.dashboard_fit_private_desc || 'Полезно при показе экрана коллегам или на проекторе — вес и личные заметки не отображаются.', s.dashboard_fit_private === 'true') : ''}
+                        </div>
                     </div>
 
                     <!-- General Tab -->
@@ -436,7 +526,7 @@ export const SettingsController = {
                                     </div>
                                     <div>
                                         <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_ai_tokens || 'Ответ'}</label>
-                                        <input type="number" id="inp-max-output" value="${esc(s.max_output_tokens || 2048)}" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
+                                        <input type="number" id="inp-max-output" value="${esc(s.max_output_tokens || 8192)}" oninput="this.dataset.userEdited='true'" class="w-full p-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-xs outline-none focus:border-aru-500">
                                         <p class="text-[9px] text-gray-400 mt-1.5 leading-snug">${t.hint_max_output || 'Максимальная длина одного ответа Ару. Передаётся в API модели как жёсткий лимит.'}</p>
                                     </div>
                                 </div>
@@ -634,41 +724,7 @@ export const SettingsController = {
                         </div>
 
                         <!-- Master Password Card -->
-                        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 space-y-5">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-aru-100 dark:bg-aru-900/40 text-aru-600 dark:text-aru-400 flex items-center justify-center">
-                                    <i data-lucide="key-round" class="w-6 h-6"></i>
-                                </div>
-                                <div>
-                                    <h4 class="text-base font-bold text-gray-800 dark:text-white">${t.settings_security_password_title || 'Пароль базы'}</h4>
-                                    <p class="text-xs text-gray-400">${t.settings_security_password_desc || 'Мастер-пароль используется для входа в базу, доступа к настройкам и шифрования облачного профиля.'}</p>
-                                </div>
-                            </div>
-
-                            <div class="p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 space-y-3">
-                                <div>
-                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_current || 'Текущий пароль'}</label>
-                                    <input type="password" id="inp-pwd-current" autocomplete="current-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_new || 'Новый пароль'}</label>
-                                        <input type="password" id="inp-pwd-new" autocomplete="new-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_repeat || 'Повторите новый пароль'}</label>
-                                        <input type="password" id="inp-pwd-confirm" autocomplete="new-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
-                                    </div>
-                                </div>
-                                <div class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-300 text-[11px] flex gap-2.5">
-                                    <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
-                                    <span>${t.settings_security_password_hint || 'Пароль нельзя восстановить. После смены потребуется заново подтвердить биометрию, а облачный профиль будет перешифрован новым паролем.'}</span>
-                                </div>
-                                <button onclick="SettingsController.changeDbPassword()" class="w-full py-3 rounded-xl bg-aru-500 hover:bg-aru-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 active:scale-95">
-                                    <i data-lucide="key" class="w-4 h-4"></i> ${t.settings_security_password_change || 'Изменить пароль'}
-                                </button>
-                            </div>
-                        </div>
+                        ${SettingsController._passwordCardHtml(s, t)}
                     </div>
                 </div>
 
@@ -689,6 +745,9 @@ export const SettingsController = {
         lucide.createIcons();
         SettingsController.initTabsScroller();
         SettingsController.renderStateTab();
+        if (initialTab && initialTab !== 'state') {
+            SettingsController.switchTab(initialTab);
+        }
     },
 
     // Phone-only horizontal tab strip: arrows appear only when the sections overflow.
@@ -779,8 +838,12 @@ export const SettingsController = {
         const modelName = (llmType === 'gemini' ? s.gemini_model : llmType === 'openrouter' ? s.openrouter_model : s.custom_model) || '';
         const isConfigured = llmType === 'custom' ? !!s.custom_url : !!(llmType === 'gemini' ? s.gemini_key : s.openrouter_key);
         const modelLabel = !isConfigured
-            ? `<span class="text-gray-400">${t.state_model_not_set || 'Не настроена'}</span>`
+            ? `<button type="button" onclick="SettingsController.switchTab('general')" class="text-amber-600 dark:text-amber-400 hover:underline font-bold">${t.state_model_not_set || 'Не настроена'}</button>`
             : (modelName ? `${providerName} · ${esc(modelName)}` : providerName);
+
+        const pwdLabel = s.db_password
+            ? `<span class="text-emerald-600 dark:text-emerald-400">${t.state_password_set || 'Установлен'}</span>`
+            : `<button type="button" onclick="SettingsController.switchTab('security')" class="text-amber-600 dark:text-amber-400 hover:underline font-bold">${t.state_password_not_set || 'Не задан'}</button>`;
 
         const searchProvider = s.search_provider || 'none';
         const searchOn = searchProvider !== 'none';
@@ -832,6 +895,7 @@ export const SettingsController = {
                     ${t.state_system_title || 'Система'}
                 </h4>
                 ${infoRow('cpu', t.state_label_model || 'Модель', modelLabel)}
+                ${infoRow('lock', t.state_label_password || 'Защита паролем', pwdLabel)}
                 ${infoRow('search', t.state_label_search || 'Поиск в интернете', searchLabel)}
                 ${infoRow('fingerprint', t.state_label_biometrics || 'Биометрия', onOff(bioOn, t.state_on || 'Вкл', t.state_off || 'Выкл'))}
                 <div class="py-2.5">
@@ -1045,8 +1109,23 @@ export const SettingsController = {
                 </button>
             </div>`;
 
-        el.innerHTML = downloadBlock + body;
+        const passwordRequiredBanner = (!configured && !s.db_password) ? `
+            <div class="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200 space-y-2.5">
+                <div class="flex items-start gap-2.5 text-xs">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"></i>
+                    <span class="leading-relaxed">${t.storage_require_password_banner || 'Для подключения Google Drive или WebDAV нужен мастер-пароль (им шифруются учётные данные облака). Скачивать локальный файл базы можно и без пароля.'}</span>
+                </div>
+                <button type="button" onclick="SettingsController.switchTab('security')" class="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition inline-flex items-center gap-1.5">
+                    <i data-lucide="key-round" class="w-3.5 h-3.5"></i>
+                    <span>${t.storage_go_to_security || 'Перейти к установке пароля'}</span>
+                </button>
+            </div>` : '';
+
+        el.innerHTML = downloadBlock + passwordRequiredBanner + body;
         if (window.lucide) lucide.createIcons();
+        if ((!configured && p === 'gdrive') || (configured && RS.profile?.type === 'gdrive')) {
+            RemoteAdapters.gdrive._ensureGisLoaded().catch(() => {});
+        }
     },
 
     downloadDatabase: async () => {
@@ -1069,7 +1148,18 @@ export const SettingsController = {
         SettingsController.renderStorageTab();
     },
 
+    _requireMasterPasswordForCloud: () => {
+        if (!state.userSettings?.db_password) {
+            const t = state.translations || {};
+            UI.showToast(t.alert_set_password_first_cloud || 'Сначала задайте мастер-пароль в разделе Безопасность, чтобы подключить облако.', 'alert-circle');
+            SettingsController.switchTab('security');
+            return false;
+        }
+        return true;
+    },
+
     storageAuthorizeGdrive: async () => {
+        if (!SettingsController._requireMasterPasswordForCloud()) return;
         const t = state.translations || {};
         const clientId = document.getElementById('st-gdrive-client')?.value.trim();
         if (!clientId) return UI.showToast(t.remote_alert_client_id || 'Введите Client ID вашего Google Cloud проекта', 'alert-circle');
@@ -1100,6 +1190,7 @@ export const SettingsController = {
     },
 
     storageConnectWebdav: () => {
+        if (!SettingsController._requireMasterPasswordForCloud()) return;
         const t = state.translations || {};
         const url = document.getElementById('st-webdav-url')?.value.trim();
         const username = document.getElementById('st-webdav-user')?.value.trim();
@@ -1120,6 +1211,7 @@ export const SettingsController = {
     },
 
     storageUnlock: () => {
+        if (!SettingsController._requireMasterPasswordForCloud()) return;
         const t = state.translations || {};
         SettingsController.app.promptPassword(async (pwd) => {
             try {
@@ -1134,6 +1226,7 @@ export const SettingsController = {
     },
 
     storageEnableV2: () => {
+        if (!SettingsController._requireMasterPasswordForCloud()) return;
         const t = state.translations || {};
         SettingsController.app.promptPassword(async (pwd) => {
             try {
@@ -1234,10 +1327,69 @@ export const SettingsController = {
         SettingsController.renderStorageTab();
     },
 
+    _passwordCardHtml: (s, t) => {
+        const hasPassword = !!(s && s.db_password);
+        const title = hasPassword
+            ? (t.settings_security_password_title || 'Пароль базы')
+            : (t.settings_security_password_set_title || 'Задать мастер-пароль');
+        const desc = hasPassword
+            ? (t.settings_security_password_desc || 'Мастер-пароль используется для входа в базу, доступа к настройкам и шифрования облачного профиля.')
+            : (t.settings_security_password_set_desc || 'Сейчас база открывается без пароля. Задайте мастер-пароль, чтобы защитить доступ, включить биометрию и подключить облачное хранилище.');
+        const hint = hasPassword
+            ? (t.settings_security_password_hint || 'Пароль нельзя восстановить. После смены потребуется заново подтвердить биометрию, а облачный профиль будет перешифрован новым паролем.')
+            : (t.settings_security_password_set_hint || 'Пароль нельзя восстановить - запомните его или сохраните в менеджере паролей. После установки он будет запрашиваться при входе и в настройках.');
+        const btnLabel = hasPassword
+            ? (t.settings_security_password_change || 'Изменить пароль')
+            : (t.settings_security_password_set_btn || 'Установить пароль');
+        const currentField = hasPassword ? `
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_current || 'Текущий пароль'}</label>
+                                    <input type="password" id="inp-pwd-current" autocomplete="current-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                </div>` : '';
+        return `
+                        <div id="settings-password-card" class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 space-y-5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-aru-100 dark:bg-aru-900/40 text-aru-600 dark:text-aru-400 flex items-center justify-center">
+                                    <i data-lucide="key-round" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-base font-bold text-gray-800 dark:text-white">${title}</h4>
+                                    <p class="text-xs text-gray-400">${desc}</p>
+                                </div>
+                            </div>
+
+                            <div class="p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 space-y-3">${currentField}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_new || 'Новый пароль'}</label>
+                                        <input type="password" id="inp-pwd-new" autocomplete="new-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">${t.settings_security_password_repeat || 'Повторите новый пароль'}</label>
+                                        <input type="password" id="inp-pwd-confirm" autocomplete="new-password" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border-2 border-gray-100 dark:border-gray-800 rounded-lg text-xs outline-none focus:border-aru-500 dark:text-gray-200">
+                                    </div>
+                                </div>
+                                <div class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-300 text-[11px] flex gap-2.5">
+                                    <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+                                    <span>${hint}</span>
+                                </div>
+                                <button onclick="SettingsController.changeDbPassword()" class="w-full py-3 rounded-xl bg-aru-500 hover:bg-aru-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 active:scale-95">
+                                    <i data-lucide="key" class="w-4 h-4"></i> ${btnLabel}
+                                </button>
+                            </div>
+                        </div>`;
+    },
+
     toggleBiometrics: async (enable) => {
         const t = state.translations || {};
         const dbKey = DB.dbPath || 'default';
         if (enable) {
+            if (!state.userSettings?.db_password) {
+                const toggle = document.getElementById('inp-biometrics-toggle');
+                if (toggle) toggle.checked = false;
+                UI.showToast(t.alert_set_password_first_bio || 'Сначала задайте мастер-пароль в разделе Безопасность.', 'alert-circle');
+                return;
+            }
             SettingsController.app.promptPassword(async (pwd) => {
                 try {
                     await Auth.registerBiometrics(pwd, dbKey, state.userSettings?.user_name || 'Aru User');
@@ -1269,15 +1421,16 @@ export const SettingsController = {
     changeDbPassword: async () => {
         const t = state.translations || {};
         const dbKey = DB.dbPath || 'default';
+        const hasPassword = !!state.userSettings?.db_password;
         const currentEl = document.getElementById('inp-pwd-current');
         const newEl = document.getElementById('inp-pwd-new');
         const confirmEl = document.getElementById('inp-pwd-confirm');
-        if (!currentEl || !newEl || !confirmEl) return;
+        if (!newEl || !confirmEl || (hasPassword && !currentEl)) return;
 
-        const current = currentEl.value;
+        const current = currentEl ? currentEl.value : '';
         const next = newEl.value;
 
-        if (!current || !next || !confirmEl.value) {
+        if ((hasPassword && !current) || !next || !confirmEl.value) {
             UI.showToast(t.alert_password_fields_required || 'Заполните все поля пароля.', 'alert-circle');
             return;
         }
@@ -1289,17 +1442,19 @@ export const SettingsController = {
             UI.showToast(t.alert_password_short || 'Пароль слишком короткий - минимум 6 символов.', 'alert-circle');
             return;
         }
-        if (next === current) {
+        if (hasPassword && next === current) {
             UI.showToast(t.alert_password_same || 'Новый пароль совпадает с текущим.', 'alert-circle');
             return;
         }
 
-        const valid = await Auth.verifyPassword(current, state.userSettings.db_password);
-        if (!valid) {
-            await UI.alert(t.alert_wrong_password || 'Неверный пароль');
-            currentEl.value = '';
-            currentEl.focus();
-            return;
+        if (hasPassword) {
+            const valid = await Auth.verifyPassword(current, state.userSettings.db_password);
+            if (!valid) {
+                await UI.alert(t.alert_wrong_password || 'Неверный пароль');
+                currentEl.value = '';
+                currentEl.focus();
+                return;
+            }
         }
 
         // A locked cloud profile is sealed with the old password and becomes undecryptable after the change
@@ -1348,10 +1503,19 @@ export const SettingsController = {
                 }
             }
 
-            UI.showToast(t.toast_password_changed || 'Пароль базы успешно изменён.', 'check-circle');
-            currentEl.value = '';
+            UI.showToast(hasPassword ? (t.toast_password_changed || 'Пароль базы успешно изменён.') : (t.toast_password_set || 'Мастер-пароль успешно установлен.'), 'check-circle');
+            if (currentEl) currentEl.value = '';
             newEl.value = '';
             confirmEl.value = '';
+            if (!hasPassword) {
+                const cardEl = document.getElementById('settings-password-card');
+                if (cardEl) {
+                    cardEl.outerHTML = SettingsController._passwordCardHtml(state.userSettings, t);
+                    if (window.lucide) lucide.createIcons();
+                }
+                SettingsController.renderStorageTab();
+                SettingsController.renderStateTab();
+            }
         } catch (e) {
             console.error('changeDbPassword failed', e);
             await UI.alert((t.alert_password_change_failed || 'Не удалось изменить пароль: ') + e.message);

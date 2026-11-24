@@ -15,7 +15,7 @@ export class LLMClient {
         this.baseUrl = '';
         this.modelName = 'gemini-2.5-flash';
         this.systemInstruction = '';
-        this.maxOutputTokens = 2048;
+        this.maxOutputTokens = 8192;
         this.temperature = 0.9;
         this.ageMode = 'adult'; // 'child', 'teen', 'adult' — set from updateSystemPrompt
     }
@@ -25,7 +25,7 @@ export class LLMClient {
         this.apiKey = config.apiKey || '';
         this.baseUrl = config.baseUrl || '';
         this.modelName = config.modelName || (this.llmType === 'gemini' ? 'gemini-2.5-flash' : '');
-        this.maxOutputTokens = parseInt(config.maxOutputTokens) || 2048;
+        this.maxOutputTokens = parseInt(config.maxOutputTokens) || 8192;
         const parsedTemp = parseFloat(config.aiTemp);
         this.temperature = Number.isFinite(parsedTemp) ? parsedTemp : 0.9;
     }
@@ -34,7 +34,7 @@ export class LLMClient {
         const parsedTemp = parseFloat(t);
         this.temperature = Number.isFinite(parsedTemp) ? parsedTemp : 0.9;
     }
-    setMaxTokens(n) { this.maxOutputTokens = parseInt(n) || 2048; }
+    setMaxTokens(n) { this.maxOutputTokens = parseInt(n) || 8192; }
     setApiKey(key) { this.apiKey = key; }
     setBaseUrl(url) { this.baseUrl = url; }
     setModelName(name) { this.modelName = name; }
@@ -59,7 +59,11 @@ export class LLMClient {
     }
 
     async sendGemini(history, currentMessage, options = {}) {
-        if (!this.apiKey) throw new Error('Gemini API Key missing');
+        if (!this.apiKey) {
+            const err = new Error('Gemini API Key missing');
+            err.code = 'MISSING_API_KEY';
+            throw err;
+        }
 
         const sysInstr = options.systemInstruction !== undefined ? options.systemInstruction : this.systemInstruction;
         const ageMode = options.ageMode || this.ageMode;
@@ -145,8 +149,17 @@ export class LLMClient {
     }
 
     async sendOpenAI(history, currentMessage, options = {}) {
+        if (this.llmType === 'openrouter' && !this.apiKey) {
+            const err = new Error('OpenRouter API Key missing');
+            err.code = 'MISSING_API_KEY';
+            throw err;
+        }
         const url = this.baseUrl || (this.llmType === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : '');
-        if (!url) throw new Error('LLM Base URL missing');
+        if (!url) {
+            const err = new Error('LLM Base URL missing');
+            err.code = 'MISSING_API_KEY';
+            throw err;
+        }
         if (!this.modelName) throw new Error('LLM Model Name missing (check settings)');
 
         const sysInstr = options.systemInstruction !== undefined ? options.systemInstruction : this.systemInstruction;

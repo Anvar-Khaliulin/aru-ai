@@ -3,7 +3,7 @@
 Progressive Web App Service Worker for offline caching and resource management.
 ---chat.aru-lab.space---PWA---
 */
-const APP_VERSION = '1.2.6';
+const APP_VERSION = '1.3.2';
 const CACHE_PREFIX = 'aru-ai';
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`;
 const CDN_CACHE_PREFIX = `${CACHE_PREFIX}-cdn`;
@@ -45,9 +45,11 @@ const ASSETS_TO_CACHE = [
   './index.html',
   './manifest.json',
   './rules.html',
+  './LICENSE',
   './css/style.css',
   './css/desktop.css',
   './css/desktop-notes.css',
+  './css/dashboard.css',
   './data/info_en.html',
   './data/info_kz.html',
   './data/info_ru.html',
@@ -57,6 +59,7 @@ const ASSETS_TO_CACHE = [
   './js/modules/canvas.js',
   './js/modules/chapters.js',
   './js/modules/chatController.js',
+  './js/modules/dashboard.js',
   './js/modules/db.js',
   './js/modules/dbFit.js',
   './js/modules/dbSchema.js',
@@ -97,6 +100,7 @@ const ASSETS_TO_CACHE = [
   './plugins/task/task.js',
   './plugins/fit-care/fit-care.css',
   './plugins/fit-care/fit-care.html',
+  './plugins/fit-care/fit-care-engine.js',
   './plugins/fit-care/fit-care.js',
   './plugins/fit-care/fit-care-calendar.js',
   './plugins/fit-care/fit-care-dashboard.js',
@@ -107,6 +111,8 @@ const ASSETS_TO_CACHE = [
   './plugins/skills/skills.css',
   './plugins/skills/skills.html',
   './plugins/skills/skills.js',
+  './plugins/skills/skills-presets.js',
+  './plugins/skills/skills-engine.js',
   './media/emotions/angry.png',
   './media/emotions/cool.png',
   './media/emotions/crazy.png',
@@ -173,7 +179,7 @@ async function precacheAssets() {
 function isSameOriginAppRequest(requestUrl) {
   if (requestUrl.origin !== self.location.origin) return false;
   if (requestUrl.pathname === '/sw.js') return false;
-  if (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html' || requestUrl.pathname === '/manifest.json' || requestUrl.pathname === '/rules.html') {
+  if (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html' || requestUrl.pathname === '/manifest.json' || requestUrl.pathname === '/rules.html' || requestUrl.pathname === '/LICENSE') {
     return true;
   }
   return APP_PATH_PREFIXES.some(prefix => requestUrl.pathname.startsWith(prefix));

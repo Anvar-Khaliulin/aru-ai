@@ -15,7 +15,8 @@ Object.assign(window.FitCarePlugin, {
         calendarMode: 'month',
         cursor: new Date(),
         selectedDate: null,
-        dayTab: 'aru',
+        dayTab: 'day',
+        chatWide: false,
         dashRange: 30,
         lang: 'en',
         i18n: {},
@@ -47,6 +48,7 @@ Object.assign(window.FitCarePlugin, {
     MAX_CHAT_HISTORY: 16,
 
     async onActivate() {
+        if (this.isChild()) return;
         const root = document.getElementById('fit-care-plugin-root');
         if (this._initialized && root && this._root === root && window.DB && window.DB.db) {
             this.state.lang = this.currentLang();
@@ -68,6 +70,7 @@ Object.assign(window.FitCarePlugin, {
     },
 
     async init() {
+        if (this.isChild()) return;
         const root = document.getElementById('fit-care-plugin-root');
         if (!root) return;
         if (!(window.DB && window.DB.db)) {
@@ -154,7 +157,25 @@ Object.assign(window.FitCarePlugin, {
                 if (el.id === 'fit-day-note') {
                     const key = (el.dataset && el.dataset.date) || this.state.selectedDate || this.todayKey();
                     this.state.noteDrafts[key] = el.value;
+                    return;
                 }
+                const mealForm = el.closest && el.closest('#fit-form-meal');
+                if (mealForm) {
+                    this.updateMealMacroPreview(mealForm);
+                    return;
+                }
+                const workoutForm = el.closest && el.closest('#fit-form-workout');
+                if (workoutForm) {
+                    if (el.name === 'volume_kg') {
+                        el.dataset.manual = el.value !== '' ? '1' : '0';
+                    }
+                    this.updateWorkoutLivePreview(workoutForm);
+                }
+            });
+            root.addEventListener('change', (event) => {
+                const el = event.target;
+                const workoutForm = el && el.closest && el.closest('#fit-form-workout');
+                if (workoutForm) this.updateWorkoutLivePreview(workoutForm);
             });
         }
         if (!this._langListenerBound) {
@@ -184,6 +205,11 @@ Object.assign(window.FitCarePlugin, {
             });
             window.addEventListener('aru-user-mode-changed', () => {
                 if (!this.isAdult()) this.state.showPrivate = false;
+                if (this.isChild()) {
+                    this.closeModal();
+                    if (this._root) this._root.innerHTML = '';
+                    return;
+                }
                 if (this._root && window.DB && window.DB.db) {
                     this.loadAll();
                     this.render();
@@ -323,6 +349,10 @@ Object.assign(window.FitCarePlugin, {
         return mode === 'adult';
     },
 
+    isChild() {
+        return this.getUserMode() === 'child';
+    },
+
     // Cycle and intimacy stay invisible everywhere until the user turns them on
     // in Settings: the plugin is available to teens and to men, who do not need
     // a cycle, and not every user wants an intimacy journal at all.
@@ -419,18 +449,97 @@ Object.assign(window.FitCarePlugin, {
     },
 
     parseExercises(value) {
+        if (window.FitCareEngine && typeof window.FitCareEngine.parseExercisesStructured === 'function') {
+            return window.FitCareEngine.parseExercisesStructured(value);
+        }
         const parsed = this.parseJson(value, []);
         return Array.isArray(parsed) ? parsed : [];
     },
 
     exerciseLabel(exercise) {
         if (!exercise) return '';
+        if (window.FitCareEngine && typeof window.FitCareEngine.formatExercise === 'function') {
+            return window.FitCareEngine.formatExercise(exercise, this.t('kg'));
+        }
         if (typeof exercise === 'string') return exercise;
         const parts = [];
         if (exercise.name) parts.push(exercise.name);
         if (exercise.sets || exercise.reps) parts.push(`${exercise.sets || '?'}×${exercise.reps || '?'}`);
         if (exercise.weight !== undefined && exercise.weight !== null && exercise.weight !== '') parts.push(`${exercise.weight} ${this.t('kg')}`);
         return parts.join(' · ') || exercise.name || '';
+    },
+
+    getUserMode() {
+        return (window.aruState && window.aruState.userSettings && window.aruState.userSettings.user_mode) || 'adult';
+    },
+
+    getDayNutrition(date) {
+        const key = date || this.todayKey();
+        if (window.DB && typeof window.DB.getFitDayNutrition === 'function') {
+            return window.DB.getFitDayNutrition(key, this.getDaily(key), this.getMeals(key));
+        }
+        const meals = this.getMeals(key);
+        const daily = this.getDaily(key) || {};
+        const sumField = (f) => {
+            const vals = meals.map(m => m[f]).filter(v => v !== null && v !== undefined && v !== '');
+            if (vals.length) return vals.reduce((s, v) => s + (Number(v) || 0), 0);
+            return daily[f] !== null && daily[f] !== undefined ? Number(daily[f]) : null;
+        };
+        return {
+            date: key,
+            calories: sumField('calories'),
+            protein: sumField('protein'),
+            carbs: sumField('carbs'),
+            fat: sumField('fat'),
+            mealCount: meals.length,
+            hasEstimated: meals.some(m => Number(m.estimated) === 1),
+            source: 'fallback'
+        };
+    },
+
+    getLatestWeightKg() {
+        if (window.DB && typeof window.DB.getFitLatestWeight === 'function') {
+            const row = window.DB.getFitLatestWeight();
+            if (row && row.weight !== null && row.weight !== undefined) return Number(row.weight);
+        }
+        const sorted = Array.from(this.state.dailyMap.values())
+            .filter(l => l && l.weight !== null && l.weight !== undefined)
+            .sort((a, b) => String(b.log_date).localeCompare(String(a.log_date)));
+        return sorted.length ? Number(sorted[0].weight) : null;
+    },
+
+    getLatestBodyFatPct() {
+        const logs = (window.DB && window.DB.db && typeof window.DB.getFitDailyLogs === 'function')
+            ? (window.DB.getFitDailyLogs(this.addDays(this.todayKey(), -120), this.todayKey()) || [])
+            : Array.from(this.state.dailyMap.values());
+        const found = logs
+            .filter(l => l && l.body_fat !== null && l.body_fat !== undefined)
+            .sort((a, b) => String(b.log_date).localeCompare(String(a.log_date)))[0];
+        return found ? Number(found.body_fat) : null;
+    },
+
+    getTargets(date) {
+        if (!window.FitCareEngine || typeof window.FitCareEngine.computeTargets !== 'function') return null;
+        const key = date || this.todayKey();
+        const workoutMinutes = this.getWorkouts(key)
+            .filter(w => w && w.status === 'done')
+            .reduce((s, w) => s + (Number(w.duration_min) || 0), 0);
+        return window.FitCareEngine.computeTargets(this.state.profile || {}, {
+            latestWeight: this.getLatestWeightKg(),
+            latestBodyFat: this.getLatestBodyFatPct(),
+            ageMode: this.getUserMode(),
+            todayKey: this.todayKey(),
+            workoutMinutes
+        });
+    },
+
+    quickAddWater(date, deltaMl = 250) {
+        const key = date || this.state.selectedDate || this.todayKey();
+        const existing = this.getDaily(key) || {};
+        const nextWater = Math.max(0, Math.round((Number(existing.water_ml) || 0) + Number(deltaMl || 250)));
+        window.DB.patchFitDailyLog(key, { water_ml: nextWater });
+        this.refresh();
+        this.toast(`${this.t('water_short')}: ${nextWater} ${this.t('unit_ml')}`, 'success');
     },
 
     groupByDate(rows) {
@@ -756,6 +865,7 @@ Object.assign(window.FitCarePlugin, {
     },
 
     render() {
+        if (this.isChild()) return;
         const container = document.getElementById('fit-view');
         if (!container) return;
         this.syncNav();
@@ -790,7 +900,7 @@ Object.assign(window.FitCarePlugin, {
 
     // ---------- actions ----------
     handleAction(action, el) {
-        if (!action) return;
+        if (this.isChild() || !action) return;
         const date = el.dataset.date || this.state.selectedDate || this.todayKey();
         switch (action) {
             case 'view':
@@ -904,6 +1014,68 @@ Object.assign(window.FitCarePlugin, {
                     this.render();
                 }, this.t('chat_clear'));
                 return;
+            case 'quick-water':
+                this.quickAddWater(date, Number(el.dataset.ml) || 250);
+                return;
+            case 'meal-apply-kcal': {
+                const form = document.getElementById('fit-form-meal');
+                const input = form && form.elements.namedItem('calories');
+                if (input && el.dataset.kcal !== undefined) {
+                    input.value = String(el.dataset.kcal);
+                    this.updateMealMacroPreview(form);
+                }
+                return;
+            }
+            case 'workout-add-ex': {
+                const rows = document.getElementById('fit-workout-ex-rows');
+                if (rows) {
+                    rows.insertAdjacentHTML('beforeend', this.workoutExerciseRow({}));
+                    if (window.lucide) window.lucide.createIcons();
+                    const last = rows.lastElementChild;
+                    const inp = last && last.querySelector('input');
+                    if (inp) inp.focus();
+                    this.updateWorkoutLivePreview(document.getElementById('fit-form-workout'));
+                }
+                return;
+            }
+            case 'workout-remove-ex': {
+                const row = el.closest('.fit-exercise-row');
+                const form = document.getElementById('fit-form-workout');
+                if (row) row.remove();
+                if (form) this.updateWorkoutLivePreview(form);
+                return;
+            }
+            case 'chat-toggle-wide':
+                this.state.chatWide = !this.state.chatWide;
+                this.updateDayPanel();
+                return;
+            case 'chat-chip': {
+                const prompt = el.dataset.prompt || '';
+                if (prompt) void this.sendChat(prompt);
+                return;
+            }
+            case 'chat-copy': {
+                const msgId = Number(el.dataset.id);
+                const msg = this.getChatMessages(date).find((m) => Number(m.id) === msgId);
+                const textToCopy = msg ? String(msg.content || '') : '';
+                if (textToCopy && navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(textToCopy)
+                        .then(() => this.toast(this.t('chat_copied'), 'success'))
+                        .catch(() => {});
+                }
+                return;
+            }
+            case 'chat-open-day':
+                this.state.dayTab = 'day';
+                this.updateDayPanel();
+                return;
+            case 'health-cycle-edit': {
+                const id = Number(el.dataset.id);
+                const cycle = (this.state.cycles || []).find((c) => Number(c.id) === id)
+                    || (window.DB && window.DB.getFitCycle ? window.DB.getFitCycle(id) : null);
+                if (cycle) this.openEditCycleModal(cycle);
+                return;
+            }
         }
 
         if (this.handleCalendarAction && this.handleCalendarAction(action, el)) return;
@@ -1115,6 +1287,7 @@ Object.assign(window.FitCarePlugin, {
     },
 
     handleForm(name, form) {
+        if (this.isChild()) return;
         switch (name) {
             case 'meal': this.saveMeal(form); return;
             case 'workout': this.saveWorkout(form); return;
@@ -1122,6 +1295,7 @@ Object.assign(window.FitCarePlugin, {
             case 'med': this.saveMed(form); return;
             case 'health': this.saveHealth(form); return;
             case 'cycle': this.saveCycleLog(form); return;
+            case 'cycle-edit': this.saveCycleEdit(form); return;
             case 'intimacy': this.saveIntimacy(form); return;
         }
         if (this.handlePlanForm && this.handlePlanForm(name, form)) return;
@@ -1156,6 +1330,7 @@ Object.assign(window.FitCarePlugin, {
                 <label class="fit-field"><span>${this.esc(this.t('fat'))}, ${this.esc(this.t('g'))}</span>
                     <input class="fit-input" name="fat" type="number" min="0" step="0.1" value="${this.esc(existing && existing.fat !== null ? existing.fat : '')}">
                 </label>
+                <div id="fit-meal-macro-hint" class="fit-macro-hint fit-span-2 fit-hidden"></div>
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('note'))} <small>${this.esc(this.t('optional'))}</small></span>
                     <textarea class="fit-textarea" name="note" rows="2">${this.esc(existing ? existing.note : '')}</textarea>
                 </label>
@@ -1181,22 +1356,56 @@ Object.assign(window.FitCarePlugin, {
                 <button type="button" class="fit-btn fit-btn-primary" data-fit-action="submit-form" data-form="fit-form-meal">${this.esc(this.t('save_meal'))}</button>
             `
         });
+        this.updateMealMacroPreview(document.getElementById('fit-form-meal'));
+    },
+
+    updateMealMacroPreview(form) {
+        const box = document.getElementById('fit-meal-macro-hint');
+        if (!form || !box || !window.FitCareEngine) return;
+        const cal = this.fieldNumber(form, 'calories');
+        const protein = this.fieldNumber(form, 'protein');
+        const carbs = this.fieldNumber(form, 'carbs');
+        const fat = this.fieldNumber(form, 'fat');
+        const check = window.FitCareEngine.validateMealMacros({ calories: cal, protein, carbs, fat });
+        if (!check.hasMacros) {
+            box.classList.add('fit-hidden');
+            box.innerHTML = '';
+            return;
+        }
+        box.classList.remove('fit-hidden', 'is-warn');
+        if (check.mismatch) box.classList.add('is-warn');
+        const label = check.mismatch
+            ? this.t('meal_macro_diff', { kcal: check.fromMacros, pct: check.deviationPct })
+            : this.t('meal_macro_check', { kcal: check.fromMacros });
+        const canApply = cal === null || check.mismatch;
+        box.innerHTML = `
+            <span>${this.esc(label)}</span>
+            ${canApply ? `<button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="meal-apply-kcal" data-kcal="${check.fromMacros}">${this.esc(this.t('meal_apply_kcal'))}</button>` : ''}
+        `;
     },
 
     saveMeal(form) {
         const date = form.dataset.date;
         const id = Number(form.dataset.id) || null;
         const tags = this.splitList(this.fieldValue(form, 'tags'));
+        let calories = this.fieldNumber(form, 'calories');
+        const protein = this.fieldNumber(form, 'protein');
+        const carbs = this.fieldNumber(form, 'carbs');
+        const fat = this.fieldNumber(form, 'fat');
+        if (calories === null && window.FitCareEngine) {
+            const v = window.FitCareEngine.validateMealMacros({ calories, protein, carbs, fat });
+            if (v.hasMacros && v.fromMacros > 0) calories = v.fromMacros;
+        }
         const meal = {
             id,
             log_date: date,
             meal_time: this.fieldValue(form, 'meal_time'),
             title: this.fieldValue(form, 'title'),
             tags,
-            calories: this.fieldNumber(form, 'calories'),
-            protein: this.fieldNumber(form, 'protein'),
-            carbs: this.fieldNumber(form, 'carbs'),
-            fat: this.fieldNumber(form, 'fat'),
+            calories,
+            protein,
+            carbs,
+            fat,
             estimated: this.fieldValue(form, 'estimated') === '1' ? 1 : 0,
             note: this.fieldValue(form, 'note')
         };
@@ -1210,15 +1419,85 @@ Object.assign(window.FitCarePlugin, {
         else this.toast(this.t('toast_saved'), 'success');
     },
 
+    workoutExerciseRow(exercise) {
+        const item = exercise || {};
+        return `
+            <div class="fit-exercise-row">
+                <input name="wx_name" maxlength="120" value="${this.esc(item.name || '')}" placeholder="${this.esc(this.t('plan_exercises'))}">
+                <input name="wx_sets" type="number" min="0" step="1" value="${this.esc(item.sets ?? '')}" placeholder="${this.esc(this.t('plan_sets'))}">
+                <input name="wx_reps" type="text" maxlength="24" value="${this.esc(item.reps ?? '')}" placeholder="${this.esc(this.t('plan_reps'))}">
+                <input name="wx_weight" class="fit-ex-weight" type="number" min="0" step="0.5" value="${this.esc(item.weight ?? '')}" placeholder="${this.esc(this.t('plan_weight'))}">
+                <button type="button" class="fit-btn-icon" data-fit-action="workout-remove-ex" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="x"></i></button>
+            </div>
+        `;
+    },
+
+    collectWorkoutExercises(form) {
+        if (!form) return [];
+        const rows = form.querySelectorAll('#fit-workout-ex-rows .fit-exercise-row');
+        const exercises = [];
+        rows.forEach((row) => {
+            const nameInput = row.querySelector('[name="wx_name"]');
+            const name = nameInput ? String(nameInput.value || '').trim() : '';
+            if (!name) return;
+            const num = (sel) => {
+                const inp = row.querySelector(sel);
+                return inp && inp.value !== '' ? Number(String(inp.value).replace(',', '.')) : null;
+            };
+            const repsInput = row.querySelector('[name="wx_reps"]');
+            const repsRaw = repsInput ? String(repsInput.value || '').trim() : '';
+            const reps = !repsRaw ? null : (/^\d+$/.test(repsRaw) ? Number(repsRaw) : repsRaw);
+            exercises.push({
+                name,
+                sets: num('[name="wx_sets"]'),
+                reps,
+                weight: num('[name="wx_weight"]')
+            });
+        });
+        return exercises;
+    },
+
+    updateWorkoutLivePreview(form) {
+        const box = document.getElementById('fit-workout-live-preview');
+        if (!form || !box || !window.FitCareEngine) return;
+        const exercises = this.collectWorkoutExercises(form);
+        const autoVol = window.FitCareEngine.calcWorkoutVolume(exercises);
+        const volInput = form.elements.namedItem('volume_kg');
+        if (volInput && volInput.dataset.manual !== '1') {
+            volInput.value = autoVol !== null ? String(autoVol) : '';
+        }
+        const duration = this.fieldNumber(form, 'duration_min');
+        const rpe = this.fieldNumber(form, 'rpe');
+        const title = this.fieldValue(form, 'title');
+        const note = this.fieldValue(form, 'note');
+        const burn = window.FitCareEngine.estimateWorkoutBurn({
+            title,
+            note,
+            exercises,
+            duration_min: duration,
+            rpe
+        }, this.getLatestWeightKg() || 70);
+        const bits = [];
+        if (autoVol) bits.push(this.t('auto_volume', { n: this.fmt(autoVol, 0) }));
+        if (burn) bits.push(this.t('workout_burn_est', { n: this.fmt(burn, 0) }));
+        if (!bits.length) {
+            box.classList.add('fit-hidden');
+            box.textContent = '';
+        } else {
+            box.classList.remove('fit-hidden');
+            box.textContent = bits.join(' · ');
+        }
+    },
+
     openWorkoutModal(date, options) {
         const opts = options || {};
         const existing = opts.workout || null;
         const planDay = opts.planDay || null;
         const planSession = this.getPlanSessionForDate(date);
-        let exercises = existing ? this.parseExercises(existing.exercises) : (planDay ? this.parseExercises(planDay.exercises) : []);
-        const exerciseText = exercises.map((exercise) => this.exerciseLabel(exercise)).join('\n');
+        const exercises = existing ? this.parseExercises(existing.exercises) : (planDay ? this.parseExercises(planDay.exercises) : []);
         const title = existing ? existing.title : (planDay ? (planDay.title || planDay.focus) : '');
         const status = existing ? existing.status : (opts.status || 'done');
+        const hasManualVol = !!(existing && existing.volume_kg !== null && existing.volume_kg !== undefined);
         const body = `
             <form id="fit-form-workout" data-fit-form="workout" data-date="${date}" data-id="${existing ? existing.id : ''}" data-plan-day="${existing && existing.plan_day_id ? existing.plan_day_id : (planDay ? planDay.id : '')}" class="fit-form-grid">
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('workout_title'))}</span>
@@ -1234,7 +1513,7 @@ Object.assign(window.FitCarePlugin, {
                     <input class="fit-input" name="duration_min" type="number" min="0" step="1" value="${this.esc(existing && existing.duration_min !== null ? existing.duration_min : '')}">
                 </label>
                 <label class="fit-field"><span>${this.esc(this.t('volume_kg'))}</span>
-                    <input class="fit-input" name="volume_kg" type="number" min="0" step="1" value="${this.esc(existing && existing.volume_kg !== null ? existing.volume_kg : '')}">
+                    <input class="fit-input" name="volume_kg" type="number" min="0" step="1" data-manual="${hasManualVol ? '1' : '0'}" value="${this.esc(hasManualVol ? existing.volume_kg : '')}">
                 </label>
                 <label class="fit-field"><span>${this.esc(this.t('rpe'))}</span>
                     <input class="fit-input" name="rpe" type="number" min="1" max="10" step="1" value="${this.esc(existing && existing.rpe !== null ? existing.rpe : '')}">
@@ -1244,9 +1523,24 @@ Object.assign(window.FitCarePlugin, {
                         ${['done', 'planned', 'skipped'].map((value) => `<option value="${value}" ${status === value ? 'selected' : ''}>${this.esc(this.t(`workout_${value}`))}</option>`).join('')}
                     </select>
                 </label>
-                <label class="fit-field fit-span-2"><span>${this.esc(this.t('workout_exercises'))} <small>${this.esc(this.t('optional'))}</small></span>
-                    <textarea class="fit-textarea" name="exercises" rows="4" placeholder="${this.esc(this.t('workout_exercises_hint'))}">${this.esc(exerciseText)}</textarea>
-                </label>
+                <div class="fit-span-2">
+                    <div class="fit-exercise-list">
+                        <div class="fit-exercise-row fit-exercise-head">
+                            <span>${this.esc(this.t('plan_exercises'))}</span>
+                            <span>${this.esc(this.t('plan_sets'))}</span>
+                            <span>${this.esc(this.t('plan_reps'))}</span>
+                            <span class="fit-ex-weight">${this.esc(this.t('plan_weight'))}</span>
+                            <span></span>
+                        </div>
+                        <div id="fit-workout-ex-rows" class="fit-exercise-list">
+                            ${(exercises.length ? exercises : [{}]).map((ex) => this.workoutExerciseRow(ex)).join('')}
+                        </div>
+                    </div>
+                    <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="workout-add-ex" style="margin-top:8px">
+                        <i data-lucide="plus"></i>${this.esc(this.t('plan_add_exercise'))}
+                    </button>
+                </div>
+                <div id="fit-workout-live-preview" class="fit-macro-hint fit-span-2 fit-hidden"></div>
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('note'))} <small>${this.esc(this.t('optional'))}</small></span>
                     <textarea class="fit-textarea" name="note" rows="2">${this.esc(existing ? existing.note : '')}</textarea>
                 </label>
@@ -1255,19 +1549,20 @@ Object.assign(window.FitCarePlugin, {
         this.openModal({
             title: existing ? this.t('modal_workout') : (planDay ? this.t('start_session') : this.t('quick_workout')),
             subtitle: planSession ? `${planSession.plan.title} · ${this.t('plan_week')} ${planSession.week}` : this.formatDate(date, { day: 'numeric', month: 'long' }),
+            wide: true,
             body,
             footer: `
                 <button type="button" class="fit-btn fit-btn-ghost" data-fit-action="close-modal">${this.esc(this.t('cancel'))}</button>
                 <button type="button" class="fit-btn fit-btn-primary" data-fit-action="submit-form" data-form="fit-form-workout">${this.esc(this.t('save_workout'))}</button>
             `
         });
+        this.updateWorkoutLivePreview(document.getElementById('fit-form-workout'));
     },
 
     saveWorkout(form) {
-        const exercises = this.fieldValue(form, 'exercises')
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean);
+        const exercises = this.collectWorkoutExercises(form);
+        const autoVolume = window.FitCareEngine ? window.FitCareEngine.calcWorkoutVolume(exercises) : null;
+        const explicitVolume = this.fieldNumber(form, 'volume_kg');
         const planDayId = Number(form.dataset.planDay) || null;
         const workout = {
             id: Number(form.dataset.id) || null,
@@ -1277,7 +1572,7 @@ Object.assign(window.FitCarePlugin, {
             title: this.fieldValue(form, 'title'),
             exercises,
             duration_min: this.fieldNumber(form, 'duration_min'),
-            volume_kg: this.fieldNumber(form, 'volume_kg'),
+            volume_kg: explicitVolume !== null ? explicitVolume : autoVolume,
             rpe: this.fieldNumber(form, 'rpe'),
             status: this.fieldValue(form, 'status') || 'done',
             note: this.fieldValue(form, 'note')
@@ -1336,6 +1631,12 @@ Object.assign(window.FitCarePlugin, {
                 <label class="fit-field"><span>${this.esc(this.t('metric_protein'))}, ${this.esc(this.t('g'))}</span>
                     <input class="fit-input" name="protein" type="number" min="0" step="0.1" value="${this.esc(log.protein !== null && log.protein !== undefined ? log.protein : '')}">
                 </label>
+                <label class="fit-field"><span>${this.esc(this.t('metric_carbs'))}, ${this.esc(this.t('g'))}</span>
+                    <input class="fit-input" name="carbs" type="number" min="0" step="0.1" value="${this.esc(log.carbs !== null && log.carbs !== undefined ? log.carbs : '')}">
+                </label>
+                <label class="fit-field"><span>${this.esc(this.t('metric_fat'))}, ${this.esc(this.t('g'))}</span>
+                    <input class="fit-input" name="fat" type="number" min="0" step="0.1" value="${this.esc(log.fat !== null && log.fat !== undefined ? log.fat : '')}">
+                </label>
                 <label class="fit-field fit-span-2"><span>${this.esc(this.t('symptoms'))} <small>${this.esc(this.t('optional'))}</small></span>
                     <input class="fit-input" name="symptoms" maxlength="400" placeholder="${this.esc(this.t('symptoms_hint'))}" value="${this.esc(this.parseJson(log.symptoms, []).join(', '))}">
                 </label>
@@ -1358,7 +1659,7 @@ Object.assign(window.FitCarePlugin, {
     saveMetrics(form) {
         const date = form.dataset.date;
         const patch = { log_date: date };
-        const fields = ['weight', 'body_fat', 'muscle_mass', 'water_pct', 'bone_mass', 'visceral_fat', 'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein'];
+        const fields = ['weight', 'body_fat', 'muscle_mass', 'water_pct', 'bone_mass', 'visceral_fat', 'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein', 'carbs', 'fat'];
         for (const field of fields) {
             patch[field] = this.fieldNumber(form, field);
         }
@@ -1422,18 +1723,28 @@ Object.assign(window.FitCarePlugin, {
         const protocolId = Number(this.fieldValue(form, 'protocol_id'));
         const protocol = (this.state.protocols || []).find((item) => Number(item.id) === protocolId);
         if (!protocol) return;
+        const status = this.fieldValue(form, 'status') || 'taken';
         window.DB.saveFitHealthLog({
             log_date: date,
             log_time: this.fieldValue(form, 'log_time'),
             protocol_id: protocol.id,
             type: 'medication',
             name: protocol.name,
-            dosage: protocol.dosage,
-            status: this.fieldValue(form, 'status') || 'taken',
+            status,
             note: this.fieldValue(form, 'note')
         });
         this.closeModal();
         this.refresh();
+        if (status === 'taken' && window.DB && typeof window.DB.getFitMealConflicts === 'function') {
+            for (const meal of this.getMeals(date)) {
+                let conflicts = [];
+                try { conflicts = window.DB.getFitMealConflicts(meal) || []; } catch (_) { conflicts = []; }
+                if (conflicts.length) {
+                    this.toast(this.t('conflict_med_toast'), 'error');
+                    return;
+                }
+            }
+        }
         this.toast(this.t('toast_saved'), 'success');
     },
 
@@ -1749,6 +2060,7 @@ Object.assign(window.FitCarePlugin, {
     },
 
     saveIntimacy(form) {
+        if (!this.intimacyEnabled()) return;
         const date = form.dataset.date;
         const id = Number(form.dataset.id) || null;
         window.DB.saveFitIntimacyLog({
@@ -1771,10 +2083,53 @@ Object.assign(window.FitCarePlugin, {
         return null;
     },
 
+    openEditCycleModal(cycle) {
+        if (!cycle) return;
+        const today = this.todayKey();
+        const body = `
+            <form id="fit-form-cycle-edit" data-fit-form="cycle-edit" data-id="${cycle.id}" class="fit-form-grid">
+                <label class="fit-field"><span>${this.esc(this.t('cycle_start'))}</span>
+                    <input class="fit-input" name="start_date" type="date" max="${today}" required value="${this.esc(cycle.start_date || '')}">
+                </label>
+                <label class="fit-field"><span>${this.esc(this.t('cycle_end_date'))} <small>${this.esc(this.t('optional'))}</small></span>
+                    <input class="fit-input" name="end_date" type="date" max="${today}" value="${this.esc(cycle.end_date || '')}">
+                </label>
+                <label class="fit-field fit-span-2"><span>${this.esc(this.t('note'))} <small>${this.esc(this.t('optional'))}</small></span>
+                    <textarea class="fit-textarea" name="notes" rows="2">${this.esc(cycle.notes || '')}</textarea>
+                </label>
+            </form>
+        `;
+        this.openModal({
+            title: this.t('cycle_edit_title'),
+            subtitle: this.formatShortDate(cycle.start_date),
+            body,
+            footer: `
+                <button type="button" class="fit-btn fit-btn-ghost" data-fit-action="close-modal">${this.esc(this.t('cancel'))}</button>
+                <button type="button" class="fit-btn fit-btn-primary" data-fit-action="submit-form" data-form="fit-form-cycle-edit">${this.esc(this.t('save'))}</button>
+            `
+        });
+    },
+
+    saveCycleEdit(form) {
+        const id = Number(form.dataset.id);
+        const start_date = this.fieldValue(form, 'start_date');
+        const end_date = this.fieldValue(form, 'end_date');
+        const notes = this.fieldValue(form, 'notes');
+        if (!id || !start_date) return;
+        const res = window.DB.updateFitCycle(id, { start_date, end_date, notes });
+        if (!res) {
+            this.toast(this.t('cycle_future_date'), 'error');
+            return;
+        }
+        this.closeModal();
+        this.refresh();
+        this.toast(this.t('toast_saved'), 'success');
+    },
+
     saveDayNote(date, value) {
         window.DB.patchFitDailyLog(date, { note: String(value || '') });
         if (this.state.noteDrafts) delete this.state.noteDrafts[date];
-        this.state.dailyMap.set(date, Object.assign({}, this.getDaily(date) || {}, { log_date: date, note: value }));
+        this.refresh();
         this.toast(this.t('toast_saved'), 'success');
     },
 
@@ -1786,75 +2141,108 @@ Object.assign(window.FitCarePlugin, {
 
     buildChatContext(date, hasSystemSnapshot = false) {
         const lines = [];
-        lines.push('You are Aru inside the Fit & Care plugin, discussing one specific day. Answer in the user\'s language, briefly and supportively.');
-        lines.push(`The day being discussed is ${date}. In every FIT command you emit, always pass date="${date}" unless the user explicitly names another day.`);
-        lines.push(`This chat is a full interface to the journal: use the [[FIT: ...]] commands from your system instruction to read and write${this.cycleEnabled() ? ' (cycle included)' : ''}. Record casual mentions the same way as in the main chat — food, training, body measurements, sleep, water, steps, mood, symptoms, medication. When the user names food without numbers, estimate calories/protein/carbs/fat yourself and set estimated="1".`);
-        lines.push('Use only the journal facts below. Never diagnose, prescribe, suggest doses, or present cycle predictions as contraception. For worrying symptoms, calmly suggest a qualified clinician. Do not output TOOL tags in this chat.');
-        if (!hasSystemSnapshot) {
+        const nutrition = this.getDayNutrition(date);
+        const targets = this.getTargets(date);
+        const teenMode = this.getUserMode() === 'teen' || !!(targets && targets.teenSafe);
+        lines.push(`[SELECTED DAY CONTEXT: ${date}]`);
+        lines.push(`Rules: Answer concisely and supportively in the user's language (gender: feminine in Russian/gendered languages). Use [[FIT: ... date="${date}" ...]] to record casual mentions; estimate missing macros (estimated="1") and re-check calories ≈ 4P+4C+9F. Never diagnose, prescribe, suggest doses, or show raw [[FIT:...]] / tags in prose.`);
+        if (teenMode) {
+            lines.push('Teen safety (mandatory): NEVER suggest calorie deficits, weight-loss dieting, fasting, or restrictive targets; focus only on balanced nutrition, energy, growth, sleep, and enjoyable activity, and suggest consulting a parent/doctor for weight concerns. Intimacy tracking is disabled in teen mode.');
+        }
+        if (!hasSystemSnapshot && window.DB && typeof window.DB.getFitAruSnapshot === 'function') {
             const snapshot = window.DB.getFitAruSnapshot(true);
             if (snapshot) lines.push('', snapshot);
         }
-        const log = this.getDaily(date) || {};
+        const nutParts = [];
+        if (nutrition.calories !== null) nutParts.push(`${nutrition.calories} kcal`);
+        if (nutrition.protein !== null) nutParts.push(`P ${nutrition.protein} g`);
+        if (nutrition.carbs !== null) nutParts.push(`C ${nutrition.carbs} g`);
+        if (nutrition.fat !== null) nutParts.push(`F ${nutrition.fat} g`);
+        const daily = this.getDaily(date) || {};
+        if (daily.water_ml !== null && daily.water_ml !== undefined) nutParts.push(`water ${daily.water_ml} ml`);
+        if (targets) {
+            const tBits = [];
+            if (targets.calorieMin && targets.calorieMax) tBits.push(`${targets.calorieMin}–${targets.calorieMax} kcal`);
+            else if (targets.calorieTarget) tBits.push(`${targets.calorieTarget} kcal`);
+            if (targets.protein) tBits.push(`P ${targets.protein} g`);
+            if (targets.carbs) tBits.push(`C ${targets.carbs} g`);
+            if (targets.fat) tBits.push(`F ${targets.fat} g`);
+            if (targets.waterMl) tBits.push(`water ${targets.waterMl} ml`);
+            if (tBits.length) lines.push(`Daily targets (${targets.teenSafe ? 'teen maintenance' : (targets.formula || 'profile')}): ${tBits.join(', ')}.`);
+        }
+        if (nutParts.length) lines.push(`Day ${date} nutrition totals: ${nutParts.join(', ')}.`);
+
         const dayBits = [];
         const labels = {
             weight: 'weight kg', body_fat: 'body fat %', muscle_mass: 'muscle kg', water_pct: 'water %',
             bone_mass: 'bone kg', visceral_fat: 'visceral fat', steps: 'steps', sleep_hours: 'sleep h',
-            energy: 'energy 1-5', mood: 'mood 1-5', stress: 'stress 1-5', water_ml: 'water ml',
-            calories: 'calories', protein: 'protein g', carbs: 'carbs g', fat: 'fat g'
+            energy: 'energy 1-5', mood: 'mood 1-5', stress: 'stress 1-5'
         };
         for (const [field, label] of Object.entries(labels)) {
-            if (log[field] !== null && log[field] !== undefined) dayBits.push(`${label}: ${log[field]}`);
+            if (daily[field] !== null && daily[field] !== undefined) dayBits.push(`${label}: ${daily[field]}`);
         }
         if (dayBits.length) lines.push(`Day ${date} metrics: ${dayBits.join(', ')}.`);
-        if (log.note) lines.push(`User's note for ${date}: ${log.note}`);
+        if (daily.note) lines.push(`User note (${date}): ${daily.note}`);
+
         const planSession = this.getPlanSessionForDate(date);
         if (planSession && !planSession.isRest) {
-            lines.push(`Planned session (week ${planSession.week}): ${planSession.day.title || planSession.day.focus || 'session'}; exercises: ${this.parseExercises(planSession.day.exercises).map((exercise) => this.exerciseLabel(exercise)).join('; ') || 'not specified'}.`);
+            lines.push(`Planned session (week ${planSession.week}/${planSession.plan.weeks}): ${planSession.day.title || planSession.day.focus || 'session'}; exercises: ${this.parseExercises(planSession.day.exercises).map((ex) => this.exerciseLabel(ex)).join('; ') || 'not specified'}.`);
         } else if (planSession && planSession.isRest) {
             lines.push(`Planned: rest day on ${date}.`);
         } else if (this.state.activePlan) {
             lines.push(`No plan session scheduled on ${date}.`);
         }
+
         const workouts = this.getWorkouts(date);
         if (workouts.length) {
-            lines.push(`Workouts on ${date}: ${workouts.map((workout) => `${workout.title} (${workout.status}${workout.duration_min ? `, ${workout.duration_min} min` : ''}${workout.rpe ? `, RPE ${workout.rpe}` : ''})`).join('; ')}.`);
+            const wKg = this.getLatestWeightKg() || 70;
+            lines.push(`Workouts (${date}): ${workouts.map((w) => {
+                const burn = window.FitCareEngine ? window.FitCareEngine.estimateWorkoutBurn(w, wKg) : null;
+                const exText = this.parseExercises(w.exercises).map(e => this.exerciseLabel(e)).join(', ');
+                return `${w.title} [${w.status}${w.duration_min ? `, ${w.duration_min} min` : ''}${w.volume_kg ? `, vol ${w.volume_kg} kg` : ''}${w.rpe ? `, RPE ${w.rpe}` : ''}${burn ? `, ~${burn} kcal` : ''}]${exText ? ` (${exText})` : ''}`;
+            }).join('; ')}.`);
         }
+
         const meals = this.getMeals(date);
         if (meals.length) {
-            lines.push(`Meals on ${date}: ${meals.map((meal) => {
+            lines.push(`Meals (${date}): ${meals.map((meal) => {
                 const macros = [meal.calories ? `${meal.calories} kcal` : '', meal.protein ? `P ${meal.protein} g` : '', meal.carbs ? `C ${meal.carbs} g` : '', meal.fat ? `F ${meal.fat} g` : ''].filter(Boolean).join(', ');
                 const tags = this.parseJson(meal.tags, []);
                 return `${meal.meal_time ? meal.meal_time + ' ' : ''}${meal.title}${macros ? ` (${macros})` : ''}${tags.length ? ` [${tags.join(', ')}]` : ''}`;
             }).join('; ')}.`);
         }
+
         const health = this.getHealthLogs(date);
         if (health.length) {
-            lines.push(`Health events on ${date}: ${health.map((event) => `${event.log_time ? event.log_time + ' ' : ''}${event.name || event.type}${event.value !== null && event.value !== undefined ? ` ${event.value}${event.value2 ? '/' + event.value2 : ''}` : ''}${event.unit ? ' ' + event.unit : ''} [${event.status}]`).join('; ')}.`);
+            lines.push(`Health events (${date}): ${health.map((event) => `${event.log_time ? event.log_time + ' ' : ''}${event.name || event.type}${event.value !== null && event.value !== undefined ? ` ${event.value}${event.value2 ? '/' + event.value2 : ''}` : ''}${event.unit ? ' ' + event.unit : ''} [${event.status}]`).join('; ')}.`);
         }
+
         const doses = this.getDosesForDate(date).filter((dose) => dose.time);
         if (doses.length) {
-            lines.push(`Medication schedule on ${date}: ${doses.map((dose) => `${dose.protocol.name}${dose.time ? ' ' + dose.time : ''} — ${dose.status || 'not logged'}`).join('; ')}.`);
+            lines.push(`Medication schedule (${date}): ${doses.map((dose) => `${dose.protocol.name}${dose.time ? ' ' + dose.time : ''} — ${dose.status || 'not logged'}`).join('; ')}.`);
         }
+
         const cycle = this.getCycleInfo(date);
         if (cycle.tracking && cycle.hasData) {
-            const kind = cycle.confidence === 'recorded' ? 'recorded' : 'estimated';
-            let line = `Cycle context: ${kind} cycle day ${cycle.day}, phase ${cycle.phase}, started ${cycle.cycleStart}. Next period forecast: ${cycle.nextPeriod}. Forecasts are estimates and not contraception.`;
-            if (cycle.stale) {
-                line += ` Warning: the last logged start was ${cycle.daysSinceLastStart} days ago and at least two expected starts were never logged, so this forecast is stale. Do not treat the phase as reliable; if the user confirms a period, ask for the exact first day and record CYCLE_START.`;
-            } else if (cycle.confidence === 'estimated') {
-                line += ' This phase is forecast because the current period start is not logged.';
+            if (cycle.paused) {
+                lines.push(`Cycle context: paused (last logged start ${cycle.lastStart}, ${cycle.daysSinceLastStartToday ?? cycle.daysSinceLastStart} days ago). Do NOT guess a phase; if user mentions bleeding, ask for exact date for CYCLE_START.`);
+            } else if (cycle.confidence === 'late') {
+                lines.push(`Cycle context: ${cycle.day != null ? `day ${cycle.day} ` : ''}since ${cycle.lastStart} (+${cycle.lateDays}d past ${cycle.avg}d avg). Predictions are NOT contraception.`);
+            } else {
+                const kind = cycle.confidence === 'recorded' ? 'recorded' : 'estimated';
+                lines.push(`Cycle context: ${kind} day ${cycle.day}, phase ${cycle.phase}, started ${cycle.cycleStart}${cycle.nextPeriod ? `, next period ~${cycle.nextPeriod}` : ''}. Forecasts are NOT contraception.`);
             }
-            lines.push(line);
         } else if (cycle.tracking && !cycle.hasData) {
-            lines.push('Cycle tracking is on but no first day has been recorded, so there is no cycle context. If the user says her period started, record CYCLE_START with that date.');
+            lines.push('Cycle tracking is on with no start logged yet. Ask for real start date before emitting CYCLE_START.');
         }
         return lines.join('\n');
     },
 
-    async sendChat() {
-        if (this.state.chatBusy) return;
+    async sendChat(overrideText = '') {
+        if (this.isChild() || this.state.chatBusy) return;
         const input = document.getElementById('fit-chat-input');
-        const text = String((input ? input.value : '') || '').trim();
+        const fromInput = !overrideText;
+        const text = String(overrideText || (input ? input.value : '') || '').trim();
         if (!text) return;
         const date = this.state.selectedDate || this.todayKey();
         const llm = window.app && window.app.llm;
@@ -1864,13 +2252,12 @@ Object.assign(window.FitCarePlugin, {
         }
         const previous = this.getChatMessages(date);
         window.DB.saveFitChatMessage(date, 'user', text);
-        this.state.chatDraft = '';
+        if (fromInput) this.state.chatDraft = '';
         this.state.chatBusy = true;
         this.state.chatError = '';
         if (this.state.view === 'calendar') this.updateDayPanel();
+        let didWrite = false;
         try {
-            // The system prompt carries the journal snapshot and the FIT command
-            // contract, so it has to be current before this chat sends anything.
             const sys = window.app && typeof window.app.updateSystemPrompt === 'function'
                 ? window.app.updateSystemPrompt({ type: 'plugin', pluginId: 'fit-care', isPrivate: false })
                 : null;
@@ -1888,9 +2275,17 @@ Object.assign(window.FitCarePlugin, {
             );
             if (raw === null || raw === undefined) throw new Error('Empty response');
             raw = String(raw);
+            let actions = [];
             const triggers = window.Triggers;
             if (triggers && typeof triggers.processResponseForFitCare === 'function') {
-                raw = triggers.processResponseForFitCare(raw, false, date);
+                const res = triggers.processResponseForFitCare(raw, false, date, { returnDetails: true });
+                if (res && typeof res === 'object') {
+                    raw = String(res.text || '');
+                    actions = Array.isArray(res.actions) ? res.actions : [];
+                    didWrite = !!res.wrote;
+                } else {
+                    raw = String(res || '');
+                }
             } else {
                 raw = raw.replace(/\[\[\s*FIT[\s\S]*?\]\]/gi, '');
             }
@@ -1899,16 +2294,20 @@ Object.assign(window.FitCarePlugin, {
                 .replace(/\[\[\s*MEMORY[\s\S]*?\]\]/gi, '')
                 .replace(/\[\[\s*ARU_SUGGESTIONS[\s\S]*?\/\s*ARU_SUGGESTIONS\s*\]\]/gi, '')
                 .trim();
-            window.DB.saveFitChatMessage(date, 'assistant', raw);
+            const meta = actions.length ? JSON.stringify({ actions }) : '';
+            window.DB.saveFitChatMessage(date, 'assistant', raw, meta);
         } catch (error) {
             console.error('FitCare chat failed', error);
             this.state.chatError = this.t('chat_failed');
         } finally {
             this.state.chatBusy = false;
-            if (this.state.view === 'calendar') {
+            if (didWrite) {
+                this.loadAll();
+                this.render();
+            } else if (this.state.view === 'calendar') {
                 this.updateDayPanel();
-                setTimeout(() => this.scrollChatToBottom(), 50);
             }
+            setTimeout(() => this.scrollChatToBottom(), 50);
         }
     },
 

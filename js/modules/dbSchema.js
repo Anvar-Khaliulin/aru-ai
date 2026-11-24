@@ -253,19 +253,24 @@ export const DBSchemaMethods = {
                     api_key TEXT DEFAULT '',
                     base_url TEXT DEFAULT '',
                     model_name TEXT DEFAULT '',
-                    temperature REAL DEFAULT 0.9,
-                    input_limit INTEGER DEFAULT 4096,
-                    max_output INTEGER DEFAULT 2048,
+                    temperature REAL DEFAULT 0.5,
+                    input_limit INTEGER DEFAULT 32768,
+                    max_output INTEGER DEFAULT 8192,
+                    role TEXT DEFAULT 'worker',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, [], false);
+                changed = true;
+            }
+            if (this.tableExists('skills') && !this.hasColumn('skills', 'role')) {
+                this.run("ALTER TABLE skills ADD COLUMN role TEXT DEFAULT 'worker'", [], false);
                 changed = true;
             }
             if (!this.tableExists('skill_projects')) {
                 this.run(`CREATE TABLE skill_projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT,
-                    context_limit INTEGER DEFAULT 16384,
+                    context_limit INTEGER DEFAULT 65536,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, [], false);
@@ -291,10 +296,30 @@ export const DBSchemaMethods = {
                     sort_order INTEGER DEFAULT 0,
                     enabled INTEGER DEFAULT 1,
                     is_final INTEGER DEFAULT 0,
+                    role TEXT DEFAULT '',
+                    parallel_with_prev INTEGER DEFAULT 0,
+                    pause_after INTEGER DEFAULT 0,
+                    max_revisions INTEGER DEFAULT 0,
+                    input_mode TEXT DEFAULT 'auto',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, [], false);
                 this.run(`CREATE INDEX IF NOT EXISTS idx_skill_steps_project ON skill_pipeline_steps(project_id)`, [], false);
                 changed = true;
+            }
+            const pipelineStepV2Cols = [
+                ['role', "TEXT DEFAULT ''"],
+                ['parallel_with_prev', 'INTEGER DEFAULT 0'],
+                ['pause_after', 'INTEGER DEFAULT 0'],
+                ['max_revisions', 'INTEGER DEFAULT 0'],
+                ['input_mode', "TEXT DEFAULT 'auto'"]
+            ];
+            if (this.tableExists('skill_pipeline_steps')) {
+                for (const [col, def] of pipelineStepV2Cols) {
+                    if (!this.hasColumn('skill_pipeline_steps', col)) {
+                        this.run(`ALTER TABLE skill_pipeline_steps ADD COLUMN ${col} ${def}`, [], false);
+                        changed = true;
+                    }
+                }
             }
             if (!this.tableExists('skill_runs')) {
                 this.run(`CREATE TABLE skill_runs (
@@ -323,16 +348,35 @@ export const DBSchemaMethods = {
                     status TEXT DEFAULT 'pending',
                     error TEXT,
                     tokens_est INTEGER DEFAULT 0,
+                    truncated INTEGER DEFAULT 0,
+                    stage_index INTEGER DEFAULT 0,
+                    role TEXT DEFAULT 'worker',
+                    iteration INTEGER DEFAULT 1,
+                    duration_ms INTEGER DEFAULT 0,
+                    verdict TEXT DEFAULT '',
+                    edited_by_user INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, [], false);
                 this.run(`CREATE INDEX IF NOT EXISTS idx_skill_run_steps_run ON skill_run_steps(run_id)`, [], false);
                 changed = true;
             }
-            // Relay steps record whether the model hit its output cap, so the next step
-            // can be told to finish the work instead of restarting it
-            if (this.tableExists('skill_run_steps') && !this.hasColumn('skill_run_steps', 'truncated')) {
-                this.run("ALTER TABLE skill_run_steps ADD COLUMN truncated INTEGER DEFAULT 0", [], false);
-                changed = true;
+            // Relay steps record whether the model hit its output cap and Studio v2 telemetry/HITL state
+            const runStepV2Cols = [
+                ['truncated', 'INTEGER DEFAULT 0'],
+                ['stage_index', 'INTEGER DEFAULT 0'],
+                ['role', "TEXT DEFAULT 'worker'"],
+                ['iteration', 'INTEGER DEFAULT 1'],
+                ['duration_ms', 'INTEGER DEFAULT 0'],
+                ['verdict', "TEXT DEFAULT ''"],
+                ['edited_by_user', 'INTEGER DEFAULT 0']
+            ];
+            if (this.tableExists('skill_run_steps')) {
+                for (const [col, def] of runStepV2Cols) {
+                    if (!this.hasColumn('skill_run_steps', col)) {
+                        this.run(`ALTER TABLE skill_run_steps ADD COLUMN ${col} ${def}`, [], false);
+                        changed = true;
+                    }
+                }
             }
             if (!this.tableExists('skill_artifacts')) {
                 this.run(`CREATE TABLE skill_artifacts (
@@ -342,12 +386,26 @@ export const DBSchemaMethods = {
                     title TEXT,
                     type TEXT DEFAULT 'doc',
                     code TEXT,
+                    version INTEGER DEFAULT 1,
+                    step_title TEXT DEFAULT '',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(project_id, title)
                 )`, [], false);
                 this.run(`CREATE INDEX IF NOT EXISTS idx_skill_artifacts_project ON skill_artifacts(project_id)`, [], false);
                 changed = true;
+            }
+            const artifactV2Cols = [
+                ['version', 'INTEGER DEFAULT 1'],
+                ['step_title', "TEXT DEFAULT ''"]
+            ];
+            if (this.tableExists('skill_artifacts')) {
+                for (const [col, def] of artifactV2Cols) {
+                    if (!this.hasColumn('skill_artifacts', col)) {
+                        this.run(`ALTER TABLE skill_artifacts ADD COLUMN ${col} ${def}`, [], false);
+                        changed = true;
+                    }
+                }
             }
             // The chat thread of a project: user requests, relay runs and answers.
             // `meta` carries the JSON side-data (run id, artifact ids, file names).
@@ -415,7 +473,11 @@ export const DBSchemaMethods = {
                 ['period_length', 'INTEGER DEFAULT 5'],
                 ['luteal_length', 'INTEGER DEFAULT 14'],
                 ['disclaimer_accepted', 'INTEGER DEFAULT 0'],
-                ['intimacy_tracking', 'INTEGER DEFAULT 0']
+                ['intimacy_tracking', 'INTEGER DEFAULT 0'],
+                ['protein_target', 'INTEGER'],
+                ['carbs_target', 'INTEGER'],
+                ['fat_target', 'INTEGER'],
+                ['water_target_ml', 'INTEGER']
             ];
             for (const [col, def] of profileColumns) {
                 if (!this.hasColumn('fit_profiles', col)) {
@@ -575,6 +637,9 @@ export const DBSchemaMethods = {
                     WHERE date(next.start_date) = date(fit_cycles.end_date, '+1 day')
                 )`, [], false);
                 if (this.db.getRowsModified && this.db.getRowsModified() > 0) changed = true;
+                // Clean up multi-month gap lengths stored as huge single-cycle lengths.
+                this.run(`UPDATE fit_cycles SET cycle_length = NULL WHERE cycle_length IS NOT NULL AND (cycle_length < 15 OR cycle_length > 60)`, [], false);
+                if (this.db.getRowsModified && this.db.getRowsModified() > 0) changed = true;
             }
             if (!this.tableExists('fit_cycle_logs')) {
                 this.run(`CREATE TABLE fit_cycle_logs (
@@ -608,9 +673,14 @@ export const DBSchemaMethods = {
                     log_date TEXT NOT NULL,
                     role TEXT DEFAULT 'user',
                     content TEXT DEFAULT '',
+                    meta TEXT DEFAULT '',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, [], false);
                 this.run(`CREATE INDEX IF NOT EXISTS idx_fit_chat_date ON fit_chat_messages(log_date)`, [], false);
+                changed = true;
+            }
+            if (this.tableExists('fit_chat_messages') && !this.hasColumn('fit_chat_messages', 'meta')) {
+                this.run("ALTER TABLE fit_chat_messages ADD COLUMN meta TEXT DEFAULT ''", [], false);
                 changed = true;
             }
             if (!this.tableExists('desktop_notes')) {

@@ -363,9 +363,9 @@ export const Heuristics = {
         const verbosity = p.mood < 30 ? 'brief' : (p.mood > 75 ? 'detailed' : 'normal');
 
         // Assembles the structured system payload
-        const flags = `FLAGS: ALLOW_SARCASM=${allowSarcasm}; USE_EMOJI=${useEmoji}; VERBOSITY=${verbosity}; MOOD=${p.mood}; SARCASM=${p.sarcasm}; AVOID_PLAYFUL_ON_HEAVY_TOPICS=true`;
+        const flags = `FLAGS: ALLOW_SARCASM=${allowSarcasm}; USE_EMOJI=${useEmoji}; CHAT_VERBOSITY=${verbosity}; MOOD=${p.mood}; SARCASM=${p.sarcasm}; AVOID_PLAYFUL_ON_HEAVY_TOPICS=true`;
         const human = `Current State: Mood ${p.mood}/100 (${moodDesc}); Sarcasm ${p.sarcasm}/100 (${toneDesc}).`;
-        const guidance = 'Tone Guidance: - If mood is low be concise and neutral. - If sarcasm is high, you may use mild ironic humor. - If mood is high, be warm and friendly, but only on light topics. - When discussing war, death, illness, violence, disasters, loss, or grief, stay respectful and restrained. Never use celebratory emojis, jokes, or playful approval on heavy topics. - Use emojis only if USE_EMOJI is true and the context is genuinely appropriate.';
+        const guidance = 'Tone Guidance: - CHAT_VERBOSITY applies ONLY to casual chat tone, NEVER to detailed explanations the user asks for or to [[ARU_ARTIFACT]] Canvas deliverables (which must always be thorough and complete). - If mood is low, keep your chat tone restrained and neutral. - If sarcasm is high, you may use mild ironic humor on light topics. - If mood is high, be warm and friendly on light topics. - When discussing war, death, illness, violence, disasters, loss, or grief, stay respectful and restrained with no celebratory emojis or jokes. - Use emojis only if USE_EMOJI is true and appropriate.';
 
         return `${flags}\n${human}\n${guidance}`;
     }

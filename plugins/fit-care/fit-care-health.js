@@ -27,12 +27,8 @@ Object.assign(window.FitCarePlugin, {
 
         container.innerHTML = `
             <div class="fit-page">
-                <div class="fit-page-head">
-                    <div>
-                        <p class="fit-kicker">Aru Fit &amp; Care</p>
-                        <h2>${this.esc(this.t('health_title'))}</h2>
-                        <p>${this.esc(this.t('health_sub'))}</p>
-                    </div>
+                <div class="fit-page-head is-compact">
+                    <h2>${this.esc(this.t('health_title'))}</h2>
                     <div class="fit-row">
                         <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="add-med" data-date="${today}">
                             <i data-lucide="pill"></i>${this.esc(this.t('quick_med'))}
@@ -207,6 +203,72 @@ Object.assign(window.FitCarePlugin, {
         const lengths = stats.lengths || [];
         const irregular = !!stats.irregular;
         const regularityLabel = lengths.length < 2 ? 'cycle_not_enough' : (irregular ? 'cycle_irregular' : 'cycle_regular');
+        const history = this.pageSlice('cyclesPage', cycles, 5).map((item, idx) => {
+            const isCurrentLatest = idx === 0 && (Number(this.state.cyclesPage) || 0) === 0;
+            const validLen = Number(item.cycle_length);
+            const cycleLabel = (Number.isFinite(validLen) && validLen >= 15 && validLen <= 60)
+                ? this.esc(String(validLen))
+                : isCurrentLatest
+                    ? '—'
+                    : `<em class="fit-cycle-gap">${this.esc(this.t('cycle_gap'))}</em>`;
+            return `
+                <div class="fit-cycle-history-row">
+                    <b>${this.esc(this.formatShortDate(item.start_date))}</b>
+                    <span title="${this.esc(this.t('cycle_avg'))} / ${this.esc(this.t('period_length'))}">
+                        ${cycleLabel} / ${this.esc(item.period_length || '—')}
+                    </span>
+                    <button type="button" class="fit-btn-icon" data-fit-action="health-cycle-edit" data-id="${item.id}" aria-label="${this.esc(this.t('edit'))}" style="width:22px;height:22px"><i data-lucide="pencil"></i></button>
+                    <button type="button" class="fit-btn-icon" data-fit-action="health-cycle-delete" data-id="${item.id}" aria-label="${this.esc(this.t('delete'))}" style="width:22px;height:22px"><i data-lucide="x"></i></button>
+                </div>
+            `;
+        }).join('');
+        const historyBlock = cycles.length
+            ? `<div class="fit-section-title" style="margin-top:14px"><i data-lucide="history"></i><span>${this.esc(this.t('cycle_history'))}</span><small class="fit-muted" style="margin-left:auto;font-weight:500">${this.esc(this.t('cycle_days_header'))}</small></div><div class="fit-cycle-history">${history}</div>${this.renderPager('cyclesPage', cycles.length, 5)}`
+            : '';
+
+        if (cycle.paused || cycle.confidence === 'paused') {
+            return `
+                <section class="fit-card">
+                    <div class="fit-card-head">
+                        <div><h3>${this.esc(this.t('cycle_title'))}</h3><p>${this.esc(this.t('cycle_avg'))}: ${cycle.avg}</p></div>
+                        <span class="fit-badge"><i data-lucide="pause-circle"></i>${this.esc(this.t('cycle_phase_paused'))}</span>
+                    </div>
+                    <div class="fit-alert fit-alert-info" style="margin:0 0 12px">
+                        <i data-lucide="pause-circle"></i>
+                        <span>${this.esc(this.t('cycle_paused_desc', { date: this.formatShortDate(cycle.lastStart), days: cycle.daysSinceLastStartToday ?? cycle.daysSinceLastStart }))}</span>
+                    </div>
+                    <div class="fit-data-actions">
+                        <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}"><i data-lucide="play"></i>${this.esc(this.t('cycle_resume'))}</button>
+                        <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_log_title'))}</button>
+                    </div>
+                    ${historyBlock}
+                    <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.45">${this.esc(this.t('cycle_prediction_note'))}</p>
+                </section>
+            `;
+        }
+
+        if (cycle.confidence === 'late') {
+            return `
+                <section class="fit-card">
+                    <div class="fit-card-head">
+                        <div><h3>${this.esc(this.t('cycle_title'))}</h3><p>${this.esc(this.t('cycle_avg'))}: ${cycle.avg} · ${this.esc(this.t(regularityLabel))}${lengths.length ? ` (${lengths.length})` : ''}</p></div>
+                        <span class="fit-badge fit-badge-amber"><i data-lucide="clock"></i>${this.esc(this.t('cycle_late', { day: cycle.day, late: cycle.lateDays }))}</span>
+                    </div>
+                    <div class="fit-alert fit-alert-warn" style="margin:0 0 12px">
+                        <i data-lucide="calendar-clock"></i>
+                        <span>${this.esc(this.t('cycle_late_desc', { late: cycle.lateDays, avg: cycle.avg, date: this.formatShortDate(cycle.lastStart) }))}</span>
+                    </div>
+                    <div class="fit-data-actions">
+                        <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}"><i data-lucide="play"></i>${this.esc(this.t('cycle_resume'))}</button>
+                        <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="cycle-end" data-date="${this.todayKey()}"><i data-lucide="square"></i>${this.esc(this.t('cycle_end'))}</button>
+                        <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_log_title'))}</button>
+                    </div>
+                    ${historyBlock}
+                    <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.45">${this.esc(this.t('cycle_prediction_note'))}</p>
+                </section>
+            `;
+        }
+
         const periodLength = cycle.periodLength;
         const ovulationDay = cycle.ovulationDay;
         const hasFertile = cycle.fertileStart >= 1 && cycle.fertileStart <= cycle.fertileEnd && cycle.fertileStart <= cycle.avg;
@@ -215,8 +277,8 @@ Object.assign(window.FitCarePlugin, {
             menstrual: `1–${periodLength}`,
             follicular: (hasFertile ? cycle.fertileStart : cycle.avg) > periodLength + 1 ? `${periodLength + 1}–${follicularEnd}` : '—',
             fertile: hasFertile ? `${cycle.fertileStart}–${cycle.fertileEnd}` : '—',
-            ovulation: `${ovulationDay}`,
-            luteal: `${Math.min(cycle.fertileEnd + 1, cycle.avg)}–${cycle.avg}`
+            ovulation: ovulationDay ? `${ovulationDay}` : '—',
+            luteal: (hasFertile && cycle.fertileEnd < cycle.avg) ? `${cycle.fertileEnd + 1}–${cycle.avg}` : (!hasFertile && periodLength < cycle.avg ? `${periodLength + 1}–${cycle.avg}` : '—')
         };
         const phases = ['menstrual', 'follicular', 'fertile', 'ovulation', 'luteal'].map((phase) => `
             <div class="fit-cycle-phase ${cycle.phase === phase ? 'is-current' : ''}">
@@ -224,28 +286,15 @@ Object.assign(window.FitCarePlugin, {
                 <span>${this.esc(phaseRanges[phase])}</span>
             </div>
         `).join('');
-        const history = this.pageSlice('cyclesPage', cycles, 5).map((item) => `
-            <div class="fit-cycle-history-row">
-                <b>${this.esc(this.formatShortDate(item.start_date))}</b>
-                <span title="${this.esc(this.t('cycle_avg'))} / ${this.esc(this.t('period_length'))}">
-                    ${this.esc(item.cycle_length || '—')} / ${this.esc(item.period_length || '—')}
-                </span>
-                <button type="button" class="fit-btn-icon" data-fit-action="health-cycle-delete" data-id="${item.id}" aria-label="${this.esc(this.t('delete'))}" style="width:22px;height:22px"><i data-lucide="x"></i></button>
-            </div>
-        `).join('');
         const forecast = cycle.confidence !== 'recorded';
-        const nextPeriodLine = this.esc(forecast
-            ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
-            : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`);
-        const confidenceNote = cycle.stale
-            ? `<div class="fit-alert fit-alert-warn" style="margin:9px 0 0"><i data-lucide="circle-alert"></i><span>${this.esc(this.t('cycle_stale_warning', {
-                date: this.formatShortDate(cycle.lastStart),
-                days: cycle.daysSinceLastStart,
-                n: cycle.predictedCycles
-            }))}</span></div>`
-            : forecast
-                ? `<div class="fit-alert fit-alert-info" style="margin:9px 0 0"><i data-lucide="calendar-clock"></i><span>${this.esc(this.t('cycle_forecast_note'))}</span></div>`
-                : '';
+        const nextPeriodLine = cycle.nextPeriod
+            ? this.esc(forecast
+                ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
+                : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`)
+            : '';
+        const confidenceNote = forecast
+            ? `<div class="fit-alert fit-alert-info" style="margin:9px 0 0"><i data-lucide="calendar-clock"></i><span>${this.esc(this.t('cycle_forecast_note'))}</span></div>`
+            : '';
         return `
             <section class="fit-card">
                 <div class="fit-card-head">
@@ -257,7 +306,7 @@ Object.assign(window.FitCarePlugin, {
                         <div class="fit-cycle-ring-inner"><b>${cycle.day}</b><span>${this.esc(this.t('cycle_day'))}</span></div>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
-                        <b style="font-size:.84rem">${nextPeriodLine}</b>
+                        ${nextPeriodLine ? `<b style="font-size:.84rem">${nextPeriodLine}</b>` : ''}
                         ${hasFertile ? `<span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_fertile'))}: ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileStart - 1)))} – ${this.esc(this.formatShortDate(this.addDays(cycle.cycleStart, cycle.fertileEnd - 1)))}</span>` : ''}
                         <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('cycle_avg'))}: ${cycle.avg} · ${this.esc(this.t(regularityLabel))}${lengths.length ? ` (${lengths.length})` : ''}</span>
                     </div>
@@ -269,7 +318,7 @@ Object.assign(window.FitCarePlugin, {
                     <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="cycle-end" data-date="${this.todayKey()}"><i data-lucide="square"></i>${this.esc(this.t('cycle_end'))}</button>
                     <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="add-cycle" data-date="${this.todayKey()}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_log_title'))}</button>
                 </div>
-                ${cycles.length ? `<div class="fit-section-title" style="margin-top:14px"><i data-lucide="history"></i><span>${this.esc(this.t('cycle_history'))}</span><small class="fit-muted" style="margin-left:auto;font-weight:500">${this.esc(this.t('cycle_days_header'))}</small></div><div class="fit-cycle-history">${history}</div>${this.renderPager('cyclesPage', cycles.length, 5)}` : ''}
+                ${historyBlock}
                 <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.45">${this.esc(this.t('cycle_prediction_note'))}</p>
             </section>
         `;
@@ -516,11 +565,13 @@ Object.assign(window.FitCarePlugin, {
                 });
                 return true;
             case 'health-private-accept':
+                if (!this.intimacyEnabled()) return true;
                 this.state.showPrivate = true;
                 this.closeModal();
                 this.render();
                 return true;
             case 'health-intimacy-delete': {
+                if (!this.intimacyEnabled()) return true;
                 const id = Number(el.dataset.id);
                 if (!id) return true;
                 this.openConfirm(this.t('delete'), this.t('intimacy_delete_confirm'), () => {

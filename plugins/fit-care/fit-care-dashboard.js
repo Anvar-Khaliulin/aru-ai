@@ -1,7 +1,7 @@
 /*
 ---ARU-LAB.SPACE---ALMATY---2026---
-Aru Fit & Care - dashboard: KPIs, hand-drawn SVG charts, activity heatmap,
-local factual insights and a shortcut into Aru's day chat.
+Aru Fit & Care - dashboard: KPIs, nutrition macros, strength e1RM progression,
+sRPE/ACWR training load, readiness, SVG charts, heatmap and honest cycle card.
 ---chat.aru-lab.space---PWA---
 */
 window.FitCarePlugin = window.FitCarePlugin || {};
@@ -25,12 +25,8 @@ Object.assign(window.FitCarePlugin, {
         `).join('');
         container.innerHTML = `
             <div class="fit-page">
-                <div class="fit-page-head">
-                    <div>
-                        <p class="fit-kicker">Aru Fit &amp; Care</p>
-                        <h2>${this.esc(this.t('dash_title'))}</h2>
-                        <p>${this.esc(this.t('dash_sub'))}</p>
-                    </div>
+                <div class="fit-page-head is-compact">
+                    <h2>${this.esc(this.t('dash_title'))}</h2>
                     <div class="fit-row">
                         <div class="fit-range-select" role="group">${ranges}</div>
                     </div>
@@ -50,12 +46,12 @@ Object.assign(window.FitCarePlugin, {
                     <section class="fit-card">
                         <div class="fit-card-head">
                             <div>
-                                <h3>${this.esc(this.t('body_comp'))}</h3>
-                                <p>${stats.latestBody ? this.esc(this.formatShortDate(stats.latestBodyDate)) : this.esc(this.t('latest'))}</p>
+                                <h3>${this.esc(this.t('macro_balance'))}</h3>
+                                <p>${this.esc(this.t('avg_per_logged_day'))}</p>
                             </div>
-                            <i data-lucide="activity" style="width:16px;height:16px;color:var(--fit-violet)"></i>
+                            <i data-lucide="utensils" style="width:16px;height:16px;color:var(--fit-amber)"></i>
                         </div>
-                        ${this.renderBodyComposition(stats)}
+                        ${this.renderDashboardNutrition(stats)}
                     </section>
                     <section class="fit-card">
                         <div class="fit-card-head">
@@ -75,9 +71,33 @@ Object.assign(window.FitCarePlugin, {
                                 <h3>${this.esc(this.t('workout_volume'))}</h3>
                                 <p>${this.esc(this.t('workouts_done', { n: stats.doneWorkouts.length }))}</p>
                             </div>
-                            <i data-lucide="bar-chart-3" style="width:16px;height:16px;color:var(--fit-violet)"></i>
+                            ${stats.load && stats.load.acwr !== null
+                                ? `<span class="fit-badge ${stats.load.zone === 'optimal' ? 'fit-badge-green' : (stats.load.zone === 'overload' ? 'fit-badge-danger' : 'fit-badge-amber')}">${this.esc(this.t(`acwr_${stats.load.zone}`, { v: this.fmt(stats.load.acwr, 2) }))}</span>`
+                                : `<i data-lucide="bar-chart-3" style="width:16px;height:16px;color:var(--fit-violet)"></i>`}
                         </div>
                         ${this.renderTrainingLoad(stats)}
+                    </section>
+                    <section class="fit-card">
+                        <div class="fit-card-head">
+                            <div>
+                                <h3>${this.esc(this.t('strength_progress'))}</h3>
+                                <p>${this.esc(this.t('e1rm_label'))}</p>
+                            </div>
+                            <i data-lucide="trending-up" style="width:16px;height:16px;color:var(--fit-emerald)"></i>
+                        </div>
+                        ${this.renderStrengthProgress(stats)}
+                    </section>
+                    <section class="fit-card">
+                        <div class="fit-card-head">
+                            <div>
+                                <h3>${this.esc(this.t('body_comp'))}</h3>
+                                <p>${stats.latestBody ? this.esc(this.formatShortDate(stats.latestBodyDate)) : this.esc(this.t('latest'))}</p>
+                            </div>
+                            ${stats.load && stats.load.readiness
+                                ? `<span class="fit-badge ${stats.load.readiness.level === 'high' ? 'fit-badge-green' : stats.load.readiness.level === 'moderate' ? 'fit-badge-amber' : 'fit-badge-danger'}">${this.esc(this.t(`readiness_${stats.load.readiness.level}`, { n: stats.load.readiness.score }))}</span>`
+                                : `<i data-lucide="activity" style="width:16px;height:16px;color:var(--fit-violet)"></i>`}
+                        </div>
+                        ${this.renderBodyComposition(stats)}
                     </section>
                     ${this.renderDashboardCycle(stats)}
                     <section class="fit-card fit-span-2">
@@ -117,24 +137,13 @@ Object.assign(window.FitCarePlugin, {
         const cycleByDate = new Map(cycleLogs.map((log) => [log.log_date, log]));
         const dailyByDate = new Map(dailyLogs.map((log) => [log.log_date, log]));
 
-        const calorieByDate = new Map();
-        const proteinByDate = new Map();
-        for (const [date, list] of mealsByDate.entries()) {
-            const kcal = list.reduce((sum, meal) => sum + (Number(meal.calories) || 0), 0);
-            const protein = list.reduce((sum, meal) => sum + (Number(meal.protein) || 0), 0);
-            if (kcal > 0) calorieByDate.set(date, kcal);
-            if (protein > 0) proteinByDate.set(date, protein);
-        }
-        for (const log of dailyLogs) {
-            if (!calorieByDate.has(log.log_date) && log.calories !== null && log.calories !== undefined) calorieByDate.set(log.log_date, Number(log.calories));
-            if (!proteinByDate.has(log.log_date) && log.protein !== null && log.protein !== undefined) proteinByDate.set(log.log_date, Number(log.protein));
-        }
+        const nutRange = (window.DB && typeof window.DB.getFitNutritionRange === 'function')
+            ? window.DB.getFitNutritionRange(range.from, range.to)
+            : { avgCalories: null, avgProtein: null, avgCarbs: null, avgFat: null, calorieDays: 0, proteinDays: 0, carbsDays: 0, fatDays: 0 };
 
         const sleepValues = dailyLogs
             .filter((log) => log.sleep_hours !== null && log.sleep_hours !== undefined)
             .map((log) => ({ date: log.log_date, value: Number(log.sleep_hours) }));
-        const calorieValues = Array.from(calorieByDate.values());
-        const proteinValues = Array.from(proteinByDate.values());
         const average = (values) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null);
         const latestOf = (list) => (list.length ? list[list.length - 1] : null);
 
@@ -142,25 +151,22 @@ Object.assign(window.FitCarePlugin, {
         const plan = this.getActivePlan();
         let plannedSessions = 0;
         let doneSessions = 0;
-        if (plan) {
-            const planDayIds = new Set(this.state.planDays.map((day) => Number(day.id)));
-            for (const date of days) {
-                const session = this.getPlanSessionForDate(date);
-                if (session && !session.isRest) plannedSessions++;
-            }
-            doneSessions = doneWorkouts.filter((workout) => (
-                workout.plan_day_id && planDayIds.has(Number(workout.plan_day_id))
-            )).length;
+        let adherence = null;
+        if (plan && window.FitCareEngine && typeof window.FitCareEngine.computePlanCompletion === 'function') {
+            const comp = window.FitCareEngine.computePlanCompletion(plan, this.state.planDays, workouts, range.from, range.to, this.todayKey());
+            plannedSessions = comp.plannedToDate;
+            doneSessions = comp.doneToDate;
+            adherence = comp.adherencePercent;
         } else {
             plannedSessions = workouts.length;
             doneSessions = doneWorkouts.length;
+            adherence = plannedSessions ? Math.min(100, Math.round((doneSessions / plannedSessions) * 100)) : null;
         }
-        const adherence = plannedSessions ? Math.min(100, Math.round((doneSessions / plannedSessions) * 100)) : null;
 
         const dayHasActivity = (log, dateWorkouts, dateMeals, dateHealth, cycleLog) => {
             const hasDaily = !!log && [
                 'weight', 'body_fat', 'muscle_mass', 'water_pct', 'bone_mass', 'visceral_fat',
-                'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein'
+                'steps', 'sleep_hours', 'energy', 'mood', 'stress', 'water_ml', 'calories', 'protein', 'carbs', 'fat'
             ].some((field) => log[field] !== null && log[field] !== undefined)
                 || !!(log && (log.note || log.workout_note || log.meal_note || log.workout_status));
             return dateWorkouts.length
@@ -228,6 +234,24 @@ Object.assign(window.FitCarePlugin, {
             dose.time && dose.time < this.nowTime() && dose.status !== 'taken' && dose.status !== 'skipped'
         )).length;
 
+        const targets = this.getTargets(this.todayKey());
+        const strengthProgress = window.FitCareEngine ? window.FitCareEngine.computeStrengthProgress(workouts) : [];
+        const load = window.FitCareEngine ? window.FitCareEngine.computeTrainingLoad(workouts, dailyLogs, this.todayKey()) : null;
+
+        let planProgress = this.getActivePlanProgress();
+        if (plan && window.FitCareEngine) {
+            const span = this.planSpan(plan);
+            const planWorkouts = span ? (window.DB.getFitWorkouts(plan.start_date, span.end) || []) : workouts;
+            const fullComp = window.FitCareEngine.computePlanCompletion(plan, this.state.planDays, planWorkouts, plan.start_date, span ? span.end : this.todayKey(), this.todayKey());
+            if (planProgress && fullComp.completionPercent !== null) {
+                planProgress = Object.assign({}, planProgress, {
+                    percent: fullComp.completionPercent,
+                    doneSessions: fullComp.totalPlanDone,
+                    totalSessions: fullComp.totalPlanSessions
+                });
+            }
+        }
+
         return {
             from: range.from,
             to: range.to,
@@ -247,12 +271,17 @@ Object.assign(window.FitCarePlugin, {
             sleepValues,
             latestSleep: latestOf(sleepValues),
             avgSleep: average(sleepValues.map((item) => item.value)),
-            calorieValues,
-            avgCalories: average(calorieValues),
-            calorieDays: calorieValues.length,
-            proteinValues,
-            avgProtein: average(proteinValues),
-            proteinDays: proteinValues.length,
+            avgCalories: nutRange.avgCalories,
+            calorieDays: nutRange.calorieDays,
+            avgProtein: nutRange.avgProtein,
+            proteinDays: nutRange.proteinDays,
+            avgCarbs: nutRange.avgCarbs,
+            carbsDays: nutRange.carbsDays,
+            avgFat: nutRange.avgFat,
+            fatDays: nutRange.fatDays,
+            targets,
+            strengthProgress,
+            load,
             latestBody,
             latestBodyDate: latestBody ? latestBody.log_date : '',
             loggedDays,
@@ -262,7 +291,7 @@ Object.assign(window.FitCarePlugin, {
             cycleAvg: this.cycleStats().lengths.length >= 2 ? this.averageCycleLength() : null,
             missedDoses,
             plan,
-            planProgress: this.getActivePlanProgress()
+            planProgress
         };
     },
 
@@ -271,36 +300,57 @@ Object.assign(window.FitCarePlugin, {
         const h = this.t('h');
         const kcal = this.t('kcal');
         const g = this.t('g');
+        const t = stats.targets;
+
         const weightValue = stats.lastWeight ? `${this.fmt(stats.lastWeight.value)} ${kg}` : '—';
         const weightHint = stats.lastWeight && stats.firstWeight
             ? `${this.t('kpi_change')}: ${stats.weightDelta > 0 ? '+' : ''}${this.fmt(stats.weightDelta)} ${kg}`
             : this.t('not_logged');
+
+        let calHint = this.t('avg_per_logged_day');
+        if (stats.avgCalories !== null && t && t.calorieMin && t.calorieMax) {
+            calHint = stats.avgCalories < t.calorieMin
+                ? this.t('avg_corridor_low', { min: t.calorieMin, max: t.calorieMax })
+                : stats.avgCalories > t.calorieMax
+                    ? this.t('avg_corridor_high', { min: t.calorieMin, max: t.calorieMax })
+                    : this.t('avg_corridor_in', { min: t.calorieMin, max: t.calorieMax });
+        }
+
+        const protHint = (t && t.protein)
+            ? `${this.t('target')}: ${t.protein} ${g}`
+            : this.t('avg_per_logged_day');
+
         const sleepHint = stats.latestSleep
             ? `${this.t('latest')}: ${this.fmt(stats.latestSleep.value)} ${h}`
             : this.t('not_logged');
-        const avgLogged = this.t('avg_per_logged_day');
-        const planHint = stats.plan
-            ? `${this.t('plan_week_of', { n: stats.planProgress.currentWeek, total: stats.plan.weeks })}`
-            : this.t('plan_no_active');
+
+        const readiness = stats.load && stats.load.readiness;
+        const lastCard = readiness
+            ? {
+                icon: 'heart-pulse',
+                label: 'readiness',
+                value: `${readiness.score}/100`,
+                hint: this.t(`readiness_${readiness.level}`, { n: readiness.score })
+            }
+            : {
+                icon: 'flame',
+                label: 'kpi_streak',
+                value: stats.streak,
+                hint: this.t('range_summary', { n: stats.rangeDays, logged: stats.loggedDays })
+            };
+
         const cards = [
             { icon: 'scale', label: 'kpi_weight', value: weightValue, hint: weightHint },
-            { icon: 'dumbbell', label: 'kpi_workouts', value: stats.doneWorkouts.length, hint: this.t('sessions') },
+            { icon: 'flame', label: 'kpi_calories', value: stats.avgCalories !== null ? `${this.fmt(stats.avgCalories, 0)} ${kcal}` : '—', hint: calHint },
+            { icon: 'beef', label: 'kpi_protein', value: stats.avgProtein !== null ? `${this.fmt(stats.avgProtein, 0)} ${g}` : '—', hint: protHint },
             {
                 icon: 'target',
                 label: 'kpi_adherence',
-                value: stats.adherence !== null ? `${stats.adherence}%` : '—',
-                hint: `${stats.doneSessions}/${stats.plannedSessions} ${this.t('sessions')}`
+                value: stats.adherence !== null ? `${stats.adherence}%` : stats.doneWorkouts.length,
+                hint: stats.plannedSessions ? `${stats.doneSessions}/${stats.plannedSessions} ${this.t('sessions')}` : `${stats.doneWorkouts.length} ${this.t('sessions')}`
             },
             { icon: 'moon', label: 'kpi_sleep', value: stats.avgSleep !== null ? `${this.fmt(stats.avgSleep)} ${h}` : '—', hint: sleepHint },
-            { icon: 'flame', label: 'kpi_calories', value: stats.avgCalories !== null ? `${this.fmt(stats.avgCalories, 0)} ${kcal}` : '—', hint: avgLogged },
-            { icon: 'beef', label: 'kpi_protein', value: stats.avgProtein !== null ? `${this.fmt(stats.avgProtein, 0)} ${g}` : '—', hint: avgLogged },
-            { icon: 'calendar-check', label: 'kpi_logged', value: stats.loggedDays, hint: this.t('range_summary', { n: stats.rangeDays, logged: stats.loggedDays }) },
-            {
-                icon: 'clipboard-list',
-                label: 'kpi_plan',
-                value: stats.planProgress ? `${stats.planProgress.percent}%` : '—',
-                hint: planHint
-            }
+            lastCard
         ];
         return cards.map((card) => `
             <div class="fit-kpi">
@@ -309,6 +359,61 @@ Object.assign(window.FitCarePlugin, {
                 <small>${this.esc(card.hint)}</small>
             </div>
         `).join('');
+    },
+
+    renderDashboardNutrition(stats) {
+        if (stats.avgCalories === null && stats.avgProtein === null && stats.avgCarbs === null && stats.avgFat === null) {
+            return `<div class="fit-chart-empty" style="min-height:130px"><i data-lucide="utensils"></i><span>${this.esc(this.t('no_meals_today'))}</span></div>`;
+        }
+        const t = stats.targets || {};
+        const row = (cls, label, val, unit, target) => {
+            const pct = target && val !== null ? Math.min(100, Math.round((val / target) * 100)) : (val ? 55 : 0);
+            const tgtText = target ? ` / ${this.fmt(target, 0)} ${unit}` : ` ${unit}`;
+            return `
+                <div class="fit-dash-macro-row">
+                    <span>${this.esc(label)}</span>
+                    <div class="fit-compo-track"><div class="fit-compo-fill ${cls}" style="width:${pct}%"></div></div>
+                    <b>${val !== null ? this.esc(this.fmt(val, 0)) : '—'}<small class="fit-muted">${this.esc(tgtText)}</small></b>
+                </div>
+            `;
+        };
+        return `
+            <div class="fit-stack" style="gap:10px">
+                ${row('is-cal', this.t('calories'), stats.avgCalories, this.t('kcal'), t.calorieTarget)}
+                ${row('is-p', this.t('protein'), stats.avgProtein, this.t('g'), t.protein)}
+                ${row('is-c', this.t('carbs'), stats.avgCarbs, this.t('g'), t.carbs)}
+                ${row('is-f', this.t('fat'), stats.avgFat, this.t('g'), t.fat)}
+            </div>
+            ${t.bmr ? `<p class="fit-muted" style="margin:12px 0 0;font-size:.65rem">${this.esc(this.t('bmr_label'))}: ${this.esc(this.fmt(t.bmr, 0))} · ${this.esc(this.t('tdee_label'))}: ${this.esc(this.fmt(t.tdee, 0))} ${this.esc(this.t('kcal'))}</p>` : ''}
+        `;
+    },
+
+    renderStrengthProgress(stats) {
+        const list = stats.strengthProgress || [];
+        if (!list.length) {
+            return `<div class="fit-chart-empty" style="min-height:140px"><i data-lucide="dumbbell"></i><span>${this.esc(this.t('no_strength_data'))}</span></div>`;
+        }
+        return `
+            <div class="fit-stack" style="gap:7px">
+                ${list.map((item) => {
+                    const delta = item.deltaE1RM !== null ? item.deltaE1RM : item.deltaWeight;
+                    const deltaCls = delta > 0 ? 'positive' : delta < 0 ? 'negative' : '';
+                    const deltaText = delta !== null && delta !== 0
+                        ? `${delta > 0 ? '+' : ''}${this.fmt(delta, 1)} ${this.t('kg')}`
+                        : `${item.sessionCount}×`;
+                    const e1rmStr = item.latestE1RM ? `${this.t('e1rm_label')} ${this.fmt(item.latestE1RM, 1)} ${this.t('kg')}` : '';
+                    return `
+                        <div class="fit-strength-row">
+                            <div class="fit-grow" style="min-width:0">
+                                <b>${this.esc(item.name)}</b>
+                                <small>${this.esc(this.fmt(item.latestWeight, 1))} ${this.esc(this.t('kg'))}${item.latestSets || item.latestReps ? ` · ${item.latestSets || '?'}×${item.latestReps || '?'}` : ''}${e1rmStr ? ` · ${this.esc(e1rmStr)}` : ''}</small>
+                            </div>
+                            <span class="fit-strength-delta ${deltaCls}">${this.esc(deltaText)}</span>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
     },
 
     renderWeightChart(stats) {
@@ -469,13 +574,14 @@ Object.assign(window.FitCarePlugin, {
                 to: end,
                 count: list.length,
                 volume: list.reduce((sum, workout) => sum + (Number(workout.volume_kg) || 0), 0),
+                srpe: list.reduce((sum, w) => sum + Math.round((Number(w.duration_min) || 35) * (Number(w.rpe) || 6)), 0),
                 duration: list.reduce((sum, workout) => sum + (Number(workout.duration_min) || 0), 0)
             });
             end = this.addDays(from, -1);
         }
         const useVolume = buckets.some((bucket) => bucket.volume > 0);
-        const useDuration = !useVolume && buckets.some((bucket) => bucket.duration > 0);
-        const values = buckets.map((bucket) => (useVolume ? bucket.volume : (useDuration ? bucket.duration : bucket.count)));
+        const useSrpe = !useVolume && buckets.some((bucket) => bucket.srpe > 0);
+        const values = buckets.map((bucket) => (useVolume ? bucket.volume : (useSrpe ? bucket.srpe : bucket.count)));
         const maxValue = Math.max(...values, 1);
         const W = 460;
         const H = 190;
@@ -484,7 +590,7 @@ Object.assign(window.FitCarePlugin, {
         const innerH = H - pad.t - pad.b;
         const slot = innerW / buckets.length;
         const barW = Math.max(4, Math.min(26, slot * 0.62));
-        const unit = useVolume ? this.t('kg') : (useDuration ? this.t('min') : this.t('sessions'));
+        const unit = useVolume ? this.t('kg') : (useSrpe ? 'AU' : this.t('sessions'));
 
         const bars = buckets.map((bucket, index) => {
             const value = values[index];
@@ -516,7 +622,7 @@ Object.assign(window.FitCarePlugin, {
                 </svg>
             </div>
             <div class="fit-chart-legend">
-                <span class="fit-legend-item"><span class="fit-legend-swatch violet"></span>${this.esc(this.fmt(total, useVolume || useDuration ? 1 : 0))} ${this.esc(unit)}</span>
+                <span class="fit-legend-item"><span class="fit-legend-swatch violet"></span>${this.esc(this.fmt(total, useVolume ? 0 : 0))} ${this.esc(unit)}</span>
                 <span class="fit-legend-item">${this.esc(this.t('sessions'))}: ${stats.doneWorkouts.length}</span>
             </div>
         `;
@@ -545,15 +651,58 @@ Object.assign(window.FitCarePlugin, {
                 </section>
             `;
         }
+        if (cycle.paused || cycle.confidence === 'paused') {
+            return `
+                <section class="fit-card">
+                    <div class="fit-card-head">
+                        <div>
+                            <h3>${this.esc(this.t('cycle_title'))}</h3>
+                            <p>${this.esc(this.t('cycle_avg'))}: ${cycle.avg}</p>
+                        </div>
+                        <span class="fit-badge"><i data-lucide="pause-circle"></i>${this.esc(this.t('cycle_phase_paused'))}</span>
+                    </div>
+                    <div class="fit-empty" style="padding:14px">
+                        <strong>${this.esc(this.t('cycle_paused'))}</strong>
+                        <span>${this.esc(this.t('cycle_paused_desc', { date: this.formatShortDate(cycle.lastStart), days: cycle.daysSinceLastStartToday ?? cycle.daysSinceLastStart }))}</span>
+                    </div>
+                    <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}" style="margin-top:10px;width:100%">
+                        <i data-lucide="play"></i>${this.esc(this.t('cycle_resume'))}
+                    </button>
+                </section>
+            `;
+        }
+        if (cycle.confidence === 'late') {
+            return `
+                <section class="fit-card">
+                    <div class="fit-card-head">
+                        <div>
+                            <h3>${this.esc(this.t('cycle_title'))}</h3>
+                            <p>${this.esc(this.t('cycle_avg'))}: ${cycle.avg}</p>
+                        </div>
+                        <span class="fit-badge fit-badge-amber"><i data-lucide="clock"></i>${this.esc(this.t('cycle_late', { day: cycle.day, late: cycle.lateDays }))}</span>
+                    </div>
+                    <div class="fit-alert fit-alert-warn" style="margin:0 0 10px">
+                        <i data-lucide="calendar-clock"></i>
+                        <span>${this.esc(this.t('cycle_late_desc', { late: cycle.lateDays, avg: cycle.avg, date: this.formatShortDate(cycle.lastStart) }))}</span>
+                    </div>
+                    <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}" style="width:100%">
+                        <i data-lucide="play"></i>${this.esc(this.t('cycle_resume'))}
+                    </button>
+                </section>
+            `;
+        }
+
         const percent = Math.min(100, Math.max(2, (cycle.day / cycle.avg) * 100));
         const phase = this.t(`cycle_phase_${cycle.phase}`);
         const forecast = cycle.confidence !== 'recorded';
         const confidenceBadge = forecast
             ? `<span class="fit-badge fit-badge-amber" title="${this.esc(this.t('cycle_forecast_note'))}"><i data-lucide="calendar-clock"></i>${this.esc(this.t('cycle_forecast'))}</span>`
             : '';
-        const nextLine = this.esc(forecast
-            ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
-            : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`);
+        const nextLine = cycle.nextPeriod
+            ? this.esc(forecast
+                ? this.t('cycle_next_period_forecast', { date: this.formatShortDate(cycle.nextPeriod) })
+                : `${this.t('cycle_next_period')}: ${this.formatShortDate(cycle.nextPeriod)}`)
+            : '';
         return `
             <section class="fit-card">
                 <div class="fit-card-head">
@@ -569,18 +718,13 @@ Object.assign(window.FitCarePlugin, {
                     </div>
                     <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
                         <b class="fit-row" style="font-size:.86rem;gap:5px">${this.esc(phase)}${confidenceBadge}</b>
-                        <span class="fit-muted" style="font-size:.68rem">${nextLine}</span>
+                        ${nextLine ? `<span class="fit-muted" style="font-size:.68rem">${nextLine}</span>` : ''}
                         <div class="fit-row" style="gap:5px">
                             <span class="fit-badge fit-badge-violet"><i data-lucide="refresh-cw"></i>${this.esc(this.t('cycle_avg'))} ${cycle.avg}</span>
                             ${stats.cycleAvg && stats.cycleAvg !== cycle.avg ? `<span class="fit-badge">${this.esc(this.t('insight_cycle_long', { n: stats.cycleAvg }))}</span>` : ''}
                         </div>
                     </div>
                 </div>
-                ${cycle.stale ? `<div class="fit-alert fit-alert-warn" style="margin:10px 0 0"><i data-lucide="circle-alert"></i><span>${this.esc(this.t('cycle_stale_warning', {
-                    date: this.formatShortDate(cycle.lastStart),
-                    days: cycle.daysSinceLastStart,
-                    n: cycle.predictedCycles
-                }))}</span></div>` : ''}
                 <p class="fit-muted" style="margin:11px 0 0;font-size:.63rem;line-height:1.5">${this.esc(this.t('cycle_prediction_note'))}</p>
             </section>
         `;
@@ -608,6 +752,22 @@ Object.assign(window.FitCarePlugin, {
                 });
             }
         }
+        if (stats.load && stats.load.acwr !== null && stats.load.zone === 'overload') {
+            insights.push({
+                icon: 'triangle-alert',
+                tone: 'amber',
+                title: this.t('training_load'),
+                text: this.t('insight_acwr_overload', { acwr: this.fmt(stats.load.acwr, 2) })
+            });
+        }
+        if (stats.load && stats.load.readiness && stats.load.readiness.level === 'low') {
+            insights.push({
+                icon: 'heart-pulse',
+                tone: 'amber',
+                title: this.t('readiness'),
+                text: this.t('insight_readiness_low', { score: stats.load.readiness.score })
+            });
+        }
         if (stats.plannedSessions > 0) {
             const good = (stats.adherence || 0) >= 70;
             insights.push({
@@ -626,24 +786,29 @@ Object.assign(window.FitCarePlugin, {
                 text: this.t(low ? 'insight_sleep_low' : 'insight_sleep_ok', { h: this.fmt(stats.avgSleep) })
             });
         }
-        if (stats.avgProtein !== null && stats.lastWeight) {
-            const targetProtein = stats.lastWeight.value * 1.2;
-            if (stats.avgProtein < targetProtein) {
-                insights.push({
-                    icon: 'beef',
-                    tone: 'amber',
-                    title: this.t('protein'),
-                    text: this.t('insight_protein_low', { g: this.fmt(stats.avgProtein, 0) })
-                });
-            }
+        const targetProtein = (stats.targets && stats.targets.protein) || (stats.lastWeight ? Math.round(stats.lastWeight.value * 1.4) : null);
+        if (stats.avgProtein !== null && targetProtein && stats.avgProtein < targetProtein * 0.88) {
+            insights.push({
+                icon: 'beef',
+                tone: 'amber',
+                title: this.t('protein'),
+                text: this.t('insight_protein_dynamic', { g: this.fmt(stats.avgProtein, 0), target: this.fmt(targetProtein, 0) })
+            });
         }
         if (stats.avgCalories !== null && stats.calorieDays >= 2) {
-            insights.push({
-                icon: 'flame',
-                tone: 'violet',
-                title: this.t('calories'),
-                text: this.t('insight_calories_in', { n: this.fmt(stats.avgCalories, 0) })
-            });
+            const min = stats.targets && stats.targets.calorieMin;
+            const max = stats.targets && stats.targets.calorieMax;
+            if (min && max) {
+                if (stats.avgCalories < min) {
+                    insights.push({ icon: 'flame', tone: 'amber', title: this.t('calories'), text: this.t('insight_calories_corridor_low', { n: this.fmt(stats.avgCalories, 0), min, max }) });
+                } else if (stats.avgCalories > max) {
+                    insights.push({ icon: 'flame', tone: 'amber', title: this.t('calories'), text: this.t('insight_calories_corridor_high', { n: this.fmt(stats.avgCalories, 0), min, max }) });
+                } else {
+                    insights.push({ icon: 'flame', tone: 'green', title: this.t('calories'), text: this.t('insight_calories_corridor_ok', { n: this.fmt(stats.avgCalories, 0), min, max }) });
+                }
+            } else {
+                insights.push({ icon: 'flame', tone: 'violet', title: this.t('calories'), text: this.t('insight_calories_in', { n: this.fmt(stats.avgCalories, 0) }) });
+            }
         }
         if (!stats.doneWorkouts.length) {
             insights.push({ icon: 'dumbbell', tone: 'amber', title: this.t('workouts'), text: this.t('insight_no_workouts') });
@@ -657,29 +822,16 @@ Object.assign(window.FitCarePlugin, {
             const target = Number(weight.target_weight);
             const spanWeight = start - target;
             if (Math.abs(current - target) <= 0.5 || (Math.abs(spanWeight) > 0.5 && Math.round(((start - current) / spanWeight) * 100) >= 100)) {
-                insights.push({
-                    icon: 'flag',
-                    tone: 'green',
-                    title: this.t('target'),
-                    text: this.t('insight_target_reached')
-                });
+                insights.push({ icon: 'flag', tone: 'green', title: this.t('target'), text: this.t('insight_target_reached') });
             } else if (Math.abs(spanWeight) > 0.5) {
                 const progress = Math.round(((start - current) / spanWeight) * 100);
                 if (progress > 0 && progress < 100) {
-                    insights.push({
-                        icon: 'flag',
-                        tone: 'green',
-                        title: this.t('target'),
-                        text: this.t('insight_target_progress', { pct: Math.min(99, progress) })
-                    });
+                    insights.push({ icon: 'flag', tone: 'green', title: this.t('target'), text: this.t('insight_target_progress', { pct: Math.min(99, progress) }) });
                 }
             }
         }
         if (stats.missedDoses > 0) {
             insights.push({ icon: 'pill', tone: 'amber', title: this.t('today_doses'), text: this.t('insight_med_missed', { n: stats.missedDoses }) });
-        }
-        if (stats.cycleAvg && this.cycleStats().lengths.length >= 2) {
-            insights.push({ icon: 'droplet', tone: 'violet', title: this.t('cycle'), text: this.t('insight_cycle_long', { n: stats.cycleAvg }) });
         }
         const selected = insights.slice(0, 6);
         if (!selected.length) {
@@ -728,7 +880,7 @@ Object.assign(window.FitCarePlugin, {
             return true;
         }
         if (action === 'dash-ask-aru') {
-            this.openDayPanel(this.todayKey(), 'aru', this.t('dash_aru_prompt', { n: this.state.dashRange }));
+            this.openDayPanel(this.todayKey(), 'aru', this.t('dash_aru_prompt', { n: this.state.dashRange }), true);
             return true;
         }
         return false;

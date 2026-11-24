@@ -1,6 +1,6 @@
 /*
 ---ARU-LAB.SPACE---ALMATY---2026---
-Aru Fit & Care — calendar, day card and daily Aru chat.
+Aru Fit & Care — calendar, de-duplicated day panel and modern Aru day chat.
 ---chat.aru-lab.space---PWA---
 */
 window.FitCarePlugin = window.FitCarePlugin || {};
@@ -10,14 +10,11 @@ Object.assign(window.FitCarePlugin, {
         const container = document.getElementById('fit-view');
         if (!container) return;
         const summary = this.calendarSummary();
+        const wideChat = this.state.dayTab === 'aru' && this.state.chatWide;
         container.innerHTML = `
             <div class="fit-page">
-                <div class="fit-page-head">
-                    <div>
-                        <p class="fit-kicker">Aru Fit &amp; Care</p>
-                        <h2>${this.esc(this.t('nav_calendar'))}</h2>
-                        <p>${this.esc(this.t('cal_sub'))}</p>
-                    </div>
+                <div class="fit-page-head is-compact">
+                    <h2>${this.esc(this.t('nav_calendar'))}</h2>
                     <div class="fit-row">${summary}</div>
                 </div>
                 <div class="fit-cal-toolbar">
@@ -36,7 +33,7 @@ Object.assign(window.FitCarePlugin, {
                     </div>
                 </div>
                 ${this.renderCycleNotice()}
-                <div class="fit-cal-layout">
+                <div class="fit-cal-layout ${wideChat ? 'is-chat-wide' : ''}">
                     <section class="fit-calendar-card">
                         ${this.state.calendarMode === 'week' ? this.renderWeekView() : this.renderMonthView()}
                         ${this.renderCalendarLegend()}
@@ -83,8 +80,14 @@ Object.assign(window.FitCarePlugin, {
         }
         badges.push(`<span class="fit-badge fit-badge-green"><i data-lucide="dumbbell"></i>${this.esc(this.t('workouts_done', { n: workouts.length }))}</span>`);
         if (cycle.tracking && cycle.hasData) {
-            const forecast = cycle.confidence !== 'recorded';
-            badges.push(`<span class="fit-badge fit-badge-accent" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day}${forecast ? ` · ${this.esc(this.t('cycle_forecast_short'))}` : ''}</span>`);
+            if (cycle.paused) {
+                badges.push(`<span class="fit-badge"><i data-lucide="pause-circle"></i>${this.esc(this.t('cycle_phase_paused'))}</span>`);
+            } else if (cycle.confidence === 'late') {
+                badges.push(`<span class="fit-badge fit-badge-amber"><i data-lucide="clock"></i>${this.esc(this.t('cycle_late', { day: cycle.day, late: cycle.lateDays }))}</span>`);
+            } else if (cycle.day) {
+                const forecast = cycle.confidence !== 'recorded';
+                badges.push(`<span class="fit-badge fit-badge-accent" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day}${forecast ? ` · ${this.esc(this.t('cycle_forecast_short'))}` : ''}</span>`);
+            }
         }
         if (this.state.activePlan) {
             badges.push(`<span class="fit-badge"><i data-lucide="target"></i>${this.esc(this.state.activePlan.title)}</span>`);
@@ -92,25 +95,44 @@ Object.assign(window.FitCarePlugin, {
         return badges.join('');
     },
 
-    // The calendar keeps predictions visible when tracking is quiet, but it has
-    // to say out loud that they are forecasts once real starts stop arriving.
     renderCycleNotice() {
         const cycle = this.getCycleInfo(this.todayKey());
-        if (!cycle.tracking || !cycle.hasData || cycle.confidence === 'recorded') return '';
-        const stale = cycle.confidence === 'stale';
-        const text = stale
-            ? this.t('cycle_stale_warning', {
+        if (!cycle.tracking || !cycle.hasData) return '';
+        if (cycle.confidence === 'recorded' || cycle.confidence === 'too_far') return '';
+
+        if (cycle.paused || cycle.confidence === 'paused') {
+            const days = cycle.daysSinceLastStartToday ?? cycle.daysSinceLastStart;
+            const text = this.t('cycle_paused_desc', {
                 date: this.formatShortDate(cycle.lastStart),
-                days: cycle.daysSinceLastStart,
-                n: cycle.predictedCycles
-            })
-            : this.t('cycle_forecast_warning', {
-                date: this.formatShortDate(cycle.nextPeriod)
+                days
             });
-        return `<div class="fit-alert fit-alert-warn" style="margin:0 0 12px">
-            <i data-lucide="${stale ? 'circle-alert' : 'calendar-clock'}"></i>
-            <span>${this.esc(text)}</span>
-            <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}" style="margin-left:auto">${this.esc(this.t('cycle_mark_start'))}</button>
+            return `<div class="fit-alert fit-alert-info" style="margin:0 0 12px;align-items:center">
+                <i data-lucide="pause-circle"></i>
+                <span class="fit-grow">${this.esc(text)}</span>
+                <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}">${this.esc(this.t('cycle_resume'))}</button>
+            </div>`;
+        }
+
+        if (cycle.confidence === 'late') {
+            const text = this.t('cycle_late_desc', {
+                late: cycle.lateDays || 1,
+                avg: cycle.avg,
+                date: this.formatShortDate(cycle.lastStart)
+            });
+            return `<div class="fit-alert fit-alert-warn" style="margin:0 0 12px;align-items:center">
+                <i data-lucide="calendar-clock"></i>
+                <span class="fit-grow">${this.esc(text)}</span>
+                <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}">${this.esc(this.t('cycle_resume'))}</button>
+            </div>`;
+        }
+
+        const text = this.t('cycle_forecast_warning', {
+            date: this.formatShortDate(cycle.nextPeriod)
+        });
+        return `<div class="fit-alert fit-alert-warn" style="margin:0 0 12px;align-items:center">
+            <i data-lucide="calendar-clock"></i>
+            <span class="fit-grow">${this.esc(text)}</span>
+            <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="cycle-start" data-date="${this.todayKey()}">${this.esc(this.t('cycle_mark_start'))}</button>
         </div>`;
     },
 
@@ -186,13 +208,17 @@ Object.assign(window.FitCarePlugin, {
         if (log.note) {
             marks.push(`<span class="fit-mark note" title="${this.esc(this.t('day_note'))}"><i data-lucide="notebook-pen"></i></span>`);
         }
-        const forecast = cycle.tracking && cycle.hasData && cycle.confidence !== 'recorded';
-        const phaseClass = cycle.tracking && cycle.hasData && ['menstrual', 'fertile', 'ovulation'].includes(cycle.phase)
+
+        const showCyclePhase = cycle.tracking && cycle.hasData && !cycle.paused && cycle.phase
+            && !['paused', 'late', 'too_far'].includes(cycle.phase);
+        const forecast = showCyclePhase && cycle.confidence !== 'recorded';
+        const phaseClass = showCyclePhase && ['menstrual', 'fertile', 'ovulation'].includes(cycle.phase)
             ? ` is-${cycle.phase === 'menstrual' ? 'period' : cycle.phase}${forecast ? ' is-forecast' : ''}`
             : '';
-        const phaseDot = cycle.tracking && cycle.hasData
+        const phaseDot = showCyclePhase
             ? `<i class="fit-day-phase ${cycle.phase === 'menstrual' ? 'period' : cycle.phase}${forecast ? ' is-forecast' : ''}" title="${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}"></i>`
             : '';
+
         const intimacyEntries = (this.state.showPrivate && this.intimacyEnabled()) ? (this.getIntimacy(key) || []) : [];
         const unsafeIntimacy = intimacyEntries.some((entry) => !entry.protection);
         const lockBadge = intimacyEntries.length
@@ -212,8 +238,10 @@ Object.assign(window.FitCarePlugin, {
         if (meals.length) titleBits.push(`${this.t('day_meals')}: ${meals.length}`);
         if (medCount) titleBits.push(`${this.t('cal_mark_med')}: ${medCount}`);
         if (cycleLog && cycleLog.flow) titleBits.push(`${this.t('cycle_flow')}: ${this.t(`flow_${cycleLog.flow}`)}`);
-        if (cycle.tracking && cycle.hasData) {
+        if (showCyclePhase) {
             titleBits.push(`${this.t('cycle_day')} ${cycle.day} · ${this.t(`cycle_phase_${cycle.phase}`)}${forecast ? ` · ${this.t('cycle_forecast')}` : ''}`);
+        } else if (cycle.confidence === 'late') {
+            titleBits.push(cycle.day != null ? this.t('cycle_late', { day: cycle.day, late: cycle.lateDays }) : this.t('cycle_phase_late'));
         }
         if (intimacyEntries.length) titleBits.push(`${this.t('intimacy_title')}: ${intimacyEntries.map((entry) => entry.log_time || '—').join(', ')}`);
         if (log.note) titleBits.push(this.t('day_note'));
@@ -269,11 +297,12 @@ Object.assign(window.FitCarePlugin, {
             const weekLock = weekIntimacy.length
                 ? `<span class="fit-day-lock ${weekIntimacy.some((entry) => !entry.protection) ? 'is-red' : ''}" title="${this.esc(this.t('intimacy_title'))}"><i data-lucide="lock"></i></span>`
                 : '';
+            const showPhase = cycle.tracking && cycle.hasData && !cycle.paused && cycle.phase && !['paused', 'late', 'too_far'].includes(cycle.phase);
             cells += `
                 <button type="button" class="${classes}" data-fit-action="select-date" data-date="${key}">
                     <span class="fit-week-day-head">
                         <b>${this.esc(this.t(`weekday_${this.weekdayIndex(key)}`))}</b>
-                        <span>${this.formatShortDate(key)}${cycle.tracking && cycle.hasData ? ` · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}` : ''}</span>
+                        <span>${this.formatShortDate(key)}${showPhase ? ` · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}` : ''}</span>
                         ${weekLock}
                     </span>
                     ${sessionHtml}
@@ -290,6 +319,8 @@ Object.assign(window.FitCarePlugin, {
     },
 
     updateDayPanel() {
+        const layout = document.querySelector('#fit-view .fit-cal-layout');
+        if (layout) layout.classList.toggle('is-chat-wide', this.state.dayTab === 'aru' && !!this.state.chatWide);
         const panel = document.getElementById('fit-day-panel');
         if (!panel) return;
         panel.innerHTML = this.renderDayPanelContent();
@@ -300,15 +331,18 @@ Object.assign(window.FitCarePlugin, {
     renderDayPanelContent() {
         const date = this.state.selectedDate || this.todayKey();
         const cycle = this.getCycleInfo(date);
-        const forecast = cycle.tracking && cycle.hasData && cycle.confidence !== 'recorded';
-        const phaseBadge = cycle.tracking && cycle.hasData
-            ? `<span class="fit-badge fit-badge-accent" title="${forecast ? this.esc(this.t('cycle_forecast_note')) : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}</span>`
-            : '';
-        const cycleWarning = forecast
-            ? `<div class="fit-alert fit-alert-warn" style="margin:7px 0 0"><i data-lucide="${cycle.stale ? 'circle-alert' : 'calendar-clock'}"></i><span>${this.esc(cycle.stale
-                ? this.t('cycle_stale_warning', { date: this.formatShortDate(cycle.lastStart), days: cycle.daysSinceLastStart, n: cycle.predictedCycles })
-                : this.t('cycle_forecast_note'))}</span></div>`
-            : '';
+        let phaseBadge = '';
+        if (cycle.tracking && cycle.hasData) {
+            if (cycle.paused || cycle.confidence === 'paused') {
+                phaseBadge = `<span class="fit-badge"><i data-lucide="pause-circle"></i>${this.esc(this.t('cycle_paused'))}</span>`;
+            } else if (cycle.confidence === 'late') {
+                const lateLabel = cycle.day != null ? this.t('cycle_late', { day: cycle.day, late: cycle.lateDays }) : this.t('cycle_phase_late');
+                phaseBadge = `<span class="fit-badge fit-badge-amber"><i data-lucide="clock"></i>${this.esc(lateLabel)}</span>`;
+            } else if (cycle.confidence !== 'too_far' && cycle.day) {
+                const forecast = cycle.confidence !== 'recorded';
+                phaseBadge = `<span class="fit-badge fit-badge-accent" title="${forecast ? this.esc(this.t('cycle_forecast_note')) : ''}"><i data-lucide="droplet"></i>${this.esc(this.t('cycle_day'))} ${cycle.day} · ${this.esc(this.t(`cycle_phase_${cycle.phase}`))}${forecast ? ` · ${this.esc(this.t('cycle_forecast'))}` : ''}</span>`;
+            }
+        }
         const dateLabel = this.formatDate(date);
         const tabs = `
             <div class="fit-day-tabs" role="tablist">
@@ -323,11 +357,9 @@ Object.assign(window.FitCarePlugin, {
         return `
             <header class="fit-day-head">
                 <div class="fit-day-head-top">
-                    <div>
-                        <p class="fit-kicker">${this.esc(this.t('nav_calendar'))}</p>
+                    <div style="min-width:0">
                         <h3>${this.esc(dateLabel)}</h3>
-                        <p>${phaseBadge}</p>
-                        ${cycleWarning}
+                        ${phaseBadge ? `<p>${phaseBadge}</p>` : ''}
                     </div>
                     <div class="fit-row" style="gap:2px;flex-wrap:nowrap">
                         <button type="button" class="fit-btn-icon" data-fit-action="day-prev" data-date="${date}" aria-label="${this.esc(this.t('cal_prev'))}"><i data-lucide="chevron-left"></i></button>
@@ -352,131 +384,214 @@ Object.assign(window.FitCarePlugin, {
                     ${alerts.map((alert) => `<div class="fit-alert fit-alert-${alert.type}"><i data-lucide="${alert.icon}"></i><span>${this.esc(alert.text)}</span></div>`).join('')}
                 </section>
             ` : ''}
-            ${this.renderPlanSection(date)}
-            ${this.renderActualSection(date)}
+            ${this.renderNutritionSection(date, log)}
+            ${this.renderTrainingSection(date)}
             ${this.renderMetricsSection(date, log)}
-            ${this.renderMealsSection(date)}
-            ${this.renderTimelineSection(date)}
+            ${this.renderCareSection(date)}
             <section class="fit-day-section">
                 <div class="fit-day-section-head"><h4><i data-lucide="notebook-pen"></i>${this.esc(this.t('day_note'))}</h4></div>
                 <textarea id="fit-day-note" class="fit-note-box" data-date="${date}" placeholder="${this.esc(this.t('note_placeholder'))}">${this.esc((this.state.noteDrafts && Object.prototype.hasOwnProperty.call(this.state.noteDrafts, date)) ? this.state.noteDrafts[date] : (log.note || ''))}</textarea>
-                <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="save-note" data-date="${date}"><i data-lucide="save"></i>${this.esc(this.t('save_note'))}</button>
+                <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="save-note" data-date="${date}" style="align-self:flex-start"><i data-lucide="save"></i>${this.esc(this.t('save_note'))}</button>
             </section>
         `;
     },
 
-    renderPlanSection(date) {
+    renderNutritionSection(date, log) {
+        const nut = this.getDayNutrition(date);
+        const targets = this.getTargets(date);
+        const meals = this.getMeals(date);
+        const workouts = this.getWorkouts(date).filter((w) => w && w.status === 'done');
+        const wKg = this.getLatestWeightKg() || 70;
+        const burnTotal = window.FitCareEngine
+            ? workouts.reduce((s, w) => s + (window.FitCareEngine.estimateWorkoutBurn(w, wKg) || 0), 0)
+            : 0;
+
+        const kcal = nut.calories;
+        const calTarget = targets && targets.calorieTarget ? targets.calorieTarget : null;
+        const calPct = calTarget && kcal !== null ? Math.min(100, Math.round((kcal / calTarget) * 100)) : 0;
+        const overCorridor = targets && targets.calorieMax && kcal !== null && kcal > targets.calorieMax;
+
+        const waterVal = log.water_ml !== null && log.water_ml !== undefined ? Number(log.water_ml) : null;
+        const waterTarget = targets && targets.waterMl ? targets.waterMl : 2000;
+        const waterPct = waterVal !== null ? Math.min(100, Math.round((waterVal / waterTarget) * 100)) : 0;
+
+        const macroItem = (cls, shortKey, val, targetVal) => {
+            const hasVal = val !== null && val !== undefined;
+            const pct = targetVal && hasVal ? Math.min(100, Math.round((val / targetVal) * 100)) : 0;
+            const valText = hasVal ? this.fmt(val, 0) : '—';
+            const tgtText = targetVal ? `/${targetVal}${this.t('g')}` : this.t('g');
+            return `
+                <div class="fit-macro-bar ${cls}">
+                    <div class="fit-macro-bar-top"><span>${this.esc(this.t(shortKey))}</span><b>${this.esc(valText)}<small>${this.esc(tgtText)}</small></b></div>
+                    <div class="fit-macro-track"><i style="width:${pct}%"></i></div>
+                </div>
+            `;
+        };
+
+        const showMacros = kcal !== null || nut.protein !== null || nut.carbs !== null || nut.fat !== null || calTarget || waterVal !== null;
+        const kcalSubtitleParts = [];
+        if (targets && targets.calorieMin && targets.calorieMax) {
+            kcalSubtitleParts.push(`${targets.calorieMin}–${targets.calorieMax} ${this.t('kcal')}`);
+        }
+        if (burnTotal > 0) {
+            kcalSubtitleParts.push(this.t('workout_burn_est', { n: burnTotal }));
+            if (kcal !== null) kcalSubtitleParts.push(this.t('net_kcal', { n: Math.max(0, Math.round(kcal - burnTotal)) }));
+        }
+
+        const mealsHtml = meals.length
+            ? `<div class="fit-stack" style="gap:5px">${meals.map((meal) => {
+                const tags = this.parseJson(meal.tags, []);
+                const macroMini = [
+                    meal.protein ? `${this.t('protein_short')}${this.fmt(meal.protein, 0)}` : '',
+                    meal.carbs ? `${this.t('carbs_short')}${this.fmt(meal.carbs, 0)}` : '',
+                    meal.fat ? `${this.t('fat_short')}${this.fmt(meal.fat, 0)}` : ''
+                ].filter(Boolean).join(' · ');
+                return `
+                    <div class="fit-meal-row">
+                        <span class="fit-muted" style="font-size:.63rem;min-width:32px">${this.esc(meal.meal_time || '')}</span>
+                        <span class="fit-grow" style="min-width:0">
+                            <b style="font-size:.73rem">${this.esc(meal.title)}</b>
+                            ${macroMini ? `<span class="fit-meal-tags"> · ${this.esc(macroMini)}</span>` : ''}
+                            ${tags.length ? `<span class="fit-meal-tags"> · ${this.esc(tags.join(', '))}</span>` : ''}
+                            ${Number(meal.estimated) ? `<span class="fit-est" title="${this.esc(this.t('estimated_hint'))}">~</span>` : ''}
+                        </span>
+                        ${meal.calories !== null && meal.calories !== undefined ? `<span class="fit-meal-kcal">${this.esc(this.fmt(meal.calories, 0))} ${this.esc(this.t('kcal'))}</span>` : ''}
+                        <button type="button" class="fit-btn-icon" data-fit-action="edit-meal" data-date="${date}" data-id="${meal.id}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
+                        <button type="button" class="fit-btn-icon" data-fit-action="delete-meal" data-date="${date}" data-id="${meal.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
+                    </div>
+                `;
+            }).join('')}</div>`
+            : `<div class="fit-empty" style="padding:11px"><span>${this.esc(this.t('no_meals_today'))}</span></div>`;
+
+        return `
+            <section class="fit-day-section">
+                <div class="fit-day-section-head">
+                    <h4><i data-lucide="utensils"></i>${this.esc(this.t('day_nutrition'))}</h4>
+                    <div class="fit-row" style="gap:4px">
+                        <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="quick-water" data-date="${date}" data-ml="250" title="${this.esc(this.t('water_add_250'))}">
+                            <i data-lucide="droplets"></i>${this.esc(this.t('water_add_250'))}
+                        </button>
+                        <button type="button" class="fit-btn-icon" data-fit-action="add-meal" data-date="${date}" aria-label="${this.esc(this.t('add_meal'))}"><i data-lucide="plus"></i></button>
+                    </div>
+                </div>
+                ${showMacros ? `
+                    <div class="fit-nut-card">
+                        <div class="fit-nut-kcal-row">
+                            <span class="fit-nut-kcal-val">${kcal !== null ? `${nut.hasEstimated ? '~' : ''}${this.esc(this.fmt(kcal, 0))}` : '—'} <small>${calTarget ? `/ ${this.esc(this.fmt(calTarget, 0))} ` : ''}${this.esc(this.t('kcal'))}</small></span>
+                            <span class="fit-nut-water"><i data-lucide="droplets"></i>${waterVal !== null ? this.esc(this.fmt(waterVal, 0)) : '0'} / ${this.esc(this.fmt(waterTarget, 0))} ${this.esc(this.t('unit_ml'))}</span>
+                        </div>
+                        ${calTarget ? `<div class="fit-nut-track ${overCorridor ? 'is-over' : ''}"><i style="width:${calPct}%"></i></div>` : ''}
+                        ${kcalSubtitleParts.length ? `<small class="fit-muted" style="font-size:.62rem">${this.esc(kcalSubtitleParts.join(' · '))}</small>` : ''}
+                        <div class="fit-macro-bars">
+                            ${macroItem('is-p', 'protein_short', nut.protein, targets ? targets.protein : null)}
+                            ${macroItem('is-c', 'carbs_short', nut.carbs, targets ? targets.carbs : null)}
+                            ${macroItem('is-f', 'fat_short', nut.fat, targets ? targets.fat : null)}
+                        </div>
+                        ${waterVal !== null ? `<div class="fit-nut-water-track"><i style="width:${waterPct}%"></i></div>` : ''}
+                    </div>
+                ` : ''}
+                ${mealsHtml}
+            </section>
+        `;
+    },
+
+    renderTrainingSection(date) {
         const session = this.getPlanSessionForDate(date);
         const workouts = this.getWorkouts(date);
-        const plannedWorkouts = workouts.filter((workout) => workout.status === 'planned' && (!session || Number(workout.plan_day_id) !== Number(session.day.id)));
-        let body = '';
-        if (session && session.isRest) {
-            body = `<div class="fit-empty"><i data-lucide="moon"></i><strong>${this.esc(this.t('rest_day'))}</strong><span>${this.esc(session.plan.title)}</span></div>`;
-        } else if (session) {
-            const exercises = this.parseExercises(session.day.exercises);
-            const existing = workouts.find((workout) => Number(workout.plan_day_id) === Number(session.day.id));
+        const wKg = this.getLatestWeightKg() || 70;
+        let linkedWorkout = null;
+        if (session && !session.isRest) {
+            linkedWorkout = workouts.find((w) => Number(w.plan_day_id) === Number(session.day.id)) || null;
+        }
+        const extraWorkouts = workouts.filter((w) => !linkedWorkout || Number(w.id) !== Number(linkedWorkout.id));
+
+        let planHtml = '';
+        if (session && session.isRest && !extraWorkouts.length) {
+            planHtml = `<div class="fit-empty" style="padding:11px"><i data-lucide="moon"></i><strong>${this.esc(this.t('rest_day'))}</strong><span>${this.esc(session.plan.title)}</span></div>`;
+        } else if (session && !session.isRest) {
+            const exercises = this.parseExercises(linkedWorkout ? linkedWorkout.exercises : session.day.exercises);
             const badges = [
-                `<span class="fit-badge fit-badge-accent">${this.esc(this.t('plan_week'))} ${this.esc(session.week)}/${this.esc(session.plan.weeks)}</span>`,
-                session.fromTemplate ? `<span class="fit-badge">${this.esc(this.t('plan_template_badge'))}</span>` : `<span class="fit-badge fit-badge-violet">${this.esc(this.t('plan_override_badge'))}</span>`
+                `<span class="fit-badge fit-badge-accent">${this.esc(this.t('plan_week'))} ${this.esc(session.week)}/${this.esc(session.plan.weeks)}</span>`
             ];
-            if (existing) {
-                badges.push(`<span class="fit-badge ${existing.status === 'done' ? 'fit-badge-green' : 'fit-badge-amber'}">${this.esc(this.t(`workout_${existing.status}`))}</span>`);
+            if (linkedWorkout) {
+                badges.push(`<span class="fit-badge ${linkedWorkout.status === 'done' ? 'fit-badge-green' : 'fit-badge-amber'}">${this.esc(this.t(`workout_${linkedWorkout.status}`))}</span>`);
             }
-            body = `
-                <div class="fit-plan-session">
+            const statsLine = linkedWorkout ? (() => {
+                const burn = window.FitCareEngine ? window.FitCareEngine.estimateWorkoutBurn(linkedWorkout, wKg) : null;
+                return [
+                    linkedWorkout.log_time,
+                    linkedWorkout.duration_min ? `${linkedWorkout.duration_min} ${this.t('min')}` : '',
+                    linkedWorkout.volume_kg ? `${linkedWorkout.volume_kg} ${this.t('kg')}` : '',
+                    linkedWorkout.rpe ? `RPE ${linkedWorkout.rpe}` : '',
+                    burn ? `~${burn} ${this.t('kcal')}` : ''
+                ].filter(Boolean).map((p) => this.esc(p)).join(' · ');
+            })() : '';
+
+            planHtml = `
+                <div class="fit-plan-session ${linkedWorkout && linkedWorkout.status === 'done' ? 'is-done' : ''}">
                     <div class="fit-plan-session-top">
                         <div>
-                            <strong>${this.esc(session.day.title || session.day.focus || this.t('day_plan'))}</strong>
-                            <p>${this.esc(session.day.focus || '')}</p>
+                            <strong>${this.esc((linkedWorkout && linkedWorkout.title) || session.day.title || session.day.focus || this.t('day_plan'))}</strong>
+                            <p>${this.esc(statsLine || session.day.focus || '')}</p>
                         </div>
                         <div class="fit-row" style="gap:3px;justify-content:flex-end">${badges.join('')}</div>
                     </div>
-                    ${exercises.length ? `<div class="fit-session-ex">${exercises.slice(0, 7).map((exercise) => `<span>${this.esc(this.exerciseLabel(exercise))}</span>`).join('')}${exercises.length > 7 ? `<span>+${exercises.length - 7}</span>` : ''}</div>` : ''}
-                    ${session.day.notes ? `<p class="fit-muted" style="margin:0;font-size:.68rem">${this.esc(session.day.notes)}</p>` : ''}
-                    ${!existing ? `
-                        <div class="fit-row" style="margin-top:2px">
+                    ${exercises.length ? `<div class="fit-session-ex">${exercises.slice(0, 7).map((ex) => `<span>${this.esc(this.exerciseLabel(ex))}</span>`).join('')}${exercises.length > 7 ? `<span>+${exercises.length - 7}</span>` : ''}</div>` : ''}
+                    ${(linkedWorkout && linkedWorkout.note) || session.day.notes ? `<p class="fit-muted" style="margin:0;font-size:.66rem">${this.esc((linkedWorkout && linkedWorkout.note) || session.day.notes)}</p>` : ''}
+                    <div class="fit-row" style="margin-top:2px">
+                        ${!linkedWorkout ? `
                             <button type="button" class="fit-btn fit-btn-primary fit-btn-xs" data-fit-action="log-plan-session" data-date="${date}" data-plan-day="${session.day.id}"><i data-lucide="play"></i>${this.esc(this.t('start_session'))}</button>
                             <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="log-plan-skip" data-date="${date}" data-plan-day="${session.day.id}">${this.esc(this.t('mark_skipped'))}</button>
-                        </div>
-                    ` : `<button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" style="align-self:flex-start" data-fit-action="log-plan-session" data-date="${date}" data-plan-day="${session.day.id}">${this.esc(this.t('edit'))}</button>`}
+                        ` : `
+                            ${linkedWorkout.status === 'planned' ? `<button type="button" class="fit-btn fit-btn-primary fit-btn-xs" data-fit-action="complete-workout" data-date="${date}" data-id="${linkedWorkout.id}"><i data-lucide="check"></i>${this.esc(this.t('plan_mark_done'))}</button>` : ''}
+                            <button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="log-plan-session" data-date="${date}" data-plan-day="${session.day.id}"><i data-lucide="pencil"></i>${this.esc(this.t('edit'))}</button>
+                            <button type="button" class="fit-btn-icon" data-fit-action="delete-workout" data-date="${date}" data-id="${linkedWorkout.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
+                        `}
+                    </div>
                 </div>
             `;
         }
 
-        if (plannedWorkouts.length) {
-            body += plannedWorkouts.map((workout) => {
-                const details = [
-                    workout.log_time,
-                    workout.duration_min ? `${workout.duration_min} ${this.t('min')}` : '',
-                    workout.volume_kg ? `${workout.volume_kg} ${this.t('kg')}` : '',
-                    workout.rpe ? `RPE ${workout.rpe}` : ''
-                ].filter(Boolean).map((part) => this.esc(part)).join(' · ');
-                return `
-                    <div class="fit-plan-session">
-                        <div class="fit-plan-session-top">
-                            <div>
-                                <strong>${this.esc(workout.title)}</strong>
-                                <p>${details}</p>
-                            </div>
-                            <span class="fit-badge fit-badge-amber">${this.esc(this.t('workout_planned'))}</span>
-                        </div>
-                        ${workout.note ? `<p class="fit-muted" style="margin:0;font-size:.68rem">${this.esc(workout.note)}</p>` : ''}
-                        <div class="fit-row" style="margin-top:2px">
-                            <button type="button" class="fit-btn fit-btn-primary fit-btn-xs" data-fit-action="complete-workout" data-date="${date}" data-id="${workout.id}"><i data-lucide="check"></i>${this.esc(this.t('plan_mark_done'))}</button>
-                            <button type="button" class="fit-btn-icon" data-fit-action="edit-workout" data-date="${date}" data-id="${workout.id}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
-                            <button type="button" class="fit-btn-icon" data-fit-action="delete-workout" data-date="${date}" data-id="${workout.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        if (!body) {
-            if (this.state.activePlan) {
-                body = `<div class="fit-empty"><i data-lucide="calendar"></i><strong>${this.esc(this.t('no_plan_today'))}</strong></div>`;
-            } else {
-                body = `<div class="fit-empty"><i data-lucide="dumbbell"></i><strong>${this.esc(this.t('no_plan_today'))}</strong><span>${this.esc(this.t('no_plan_hint'))}</span><button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="view-plan">${this.esc(this.t('view_plan'))}</button></div>`;
-            }
-        }
-        return `
-            <section class="fit-day-section">
-                <div class="fit-day-section-head"><h4><i data-lucide="target"></i>${this.esc(this.t('day_plan'))}</h4></div>
-                ${body}
-            </section>
-        `;
-    },
-
-    renderActualSection(date) {
-        const workouts = this.getWorkouts(date).filter((workout) => workout.status !== 'planned');
-        const body = workouts.length
-            ? workouts.map((workout) => `
+        const extrasHtml = extraWorkouts.map((workout) => {
+            const exercises = this.parseExercises(workout.exercises);
+            const burn = window.FitCareEngine ? window.FitCareEngine.estimateWorkoutBurn(workout, wKg) : null;
+            const details = [
+                workout.log_time,
+                workout.duration_min ? `${workout.duration_min} ${this.t('min')}` : '',
+                workout.volume_kg ? `${workout.volume_kg} ${this.t('kg')}` : '',
+                workout.rpe ? `RPE ${workout.rpe}` : '',
+                burn ? `~${burn} ${this.t('kcal')}` : '',
+                this.t(`workout_${workout.status}`)
+            ].filter(Boolean).map((p) => this.esc(p)).join(' · ');
+            return `
                 <div class="fit-actual-card ${workout.status === 'skipped' ? 'is-skipped' : ''}">
                     <span class="fit-actual-icon"><i data-lucide="${workout.status === 'skipped' ? 'x' : workout.status === 'planned' ? 'clock' : 'dumbbell'}"></i></span>
                     <div class="fit-grow">
                         <strong>${this.esc(workout.title)}</strong>
-                        <small>${[
-                            workout.log_time,
-                            workout.duration_min ? `${workout.duration_min} ${this.t('min')}` : '',
-                            workout.volume_kg ? `${workout.volume_kg} ${this.t('kg')}` : '',
-                            workout.rpe ? `RPE ${workout.rpe}` : '',
-                            this.t(`workout_${workout.status}`)
-                        ].filter(Boolean).map((part) => this.esc(part)).join(' · ')}</small>
-                        ${workout.note ? `<small style="display:block;margin-top:2px">${this.esc(workout.note)}</small>` : ''}
+                        <small>${details}</small>
+                        ${exercises.length ? `<div class="fit-session-ex" style="margin-top:5px">${exercises.slice(0, 5).map((ex) => `<span>${this.esc(this.exerciseLabel(ex))}</span>`).join('')}${exercises.length > 5 ? `<span>+${exercises.length - 5}</span>` : ''}</div>` : ''}
+                        ${workout.note ? `<small style="display:block;margin-top:3px">${this.esc(workout.note)}</small>` : ''}
                     </div>
                     <div class="fit-row" style="gap:1px;flex-wrap:nowrap">
+                        ${workout.status === 'planned' ? `<button type="button" class="fit-btn-icon" data-fit-action="complete-workout" data-date="${date}" data-id="${workout.id}" aria-label="${this.esc(this.t('plan_mark_done'))}"><i data-lucide="check"></i></button>` : ''}
                         <button type="button" class="fit-btn-icon" data-fit-action="edit-workout" data-date="${date}" data-id="${workout.id}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
                         <button type="button" class="fit-btn-icon" data-fit-action="delete-workout" data-date="${date}" data-id="${workout.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
                     </div>
                 </div>
-            `).join('')
-            : `<div class="fit-empty" style="padding:14px"><span>${this.esc(this.t('no_actual_workouts'))}</span></div>`;
+            `;
+        }).join('');
+
+        const emptyHtml = (!planHtml && !extrasHtml)
+            ? `<div class="fit-empty" style="padding:11px"><span>${this.esc(this.t('no_actual_workouts'))}</span>${!this.state.activePlan ? `<button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="view-plan">${this.esc(this.t('view_plan'))}</button>` : ''}</div>`
+            : '';
+
         return `
             <section class="fit-day-section">
                 <div class="fit-day-section-head">
-                    <h4><i data-lucide="dumbbell"></i>${this.esc(this.t('day_actual'))}</h4>
+                    <h4><i data-lucide="dumbbell"></i>${this.esc(this.t('day_training'))}</h4>
                     <button type="button" class="fit-btn-icon" data-fit-action="add-workout" data-date="${date}" aria-label="${this.esc(this.t('add_workout'))}"><i data-lucide="plus"></i></button>
                 </div>
-                ${body}
+                ${planHtml}${extrasHtml}${emptyHtml}
             </section>
         `;
     },
@@ -487,22 +602,20 @@ Object.assign(window.FitCarePlugin, {
             { key: 'body_fat', label: 'metric_body_fat', unit: '%', digits: 1 },
             { key: 'muscle_mass', label: 'metric_muscle', unit: 'kg', digits: 1 },
             { key: 'water_pct', label: 'metric_water_pct', unit: '%', digits: 1 },
+            { key: 'bone_mass', label: 'metric_bone', unit: 'kg', digits: 1 },
+            { key: 'visceral_fat', label: 'metric_visceral', unit: '', digits: 1 },
             { key: 'sleep_hours', label: 'metric_sleep', unit: 'h', digits: 1 },
             { key: 'steps', label: 'metric_steps', unit: '', digits: 0 },
-            { key: 'water_ml', label: 'metric_water_ml', unit: 'unit_ml', digits: 0 },
             { key: 'energy', label: 'metric_energy', unit: '/5', digits: 0 },
             { key: 'mood', label: 'metric_mood', unit: '/5', digits: 0 },
-            { key: 'stress', label: 'metric_stress', unit: '/5', digits: 0 },
-            { key: 'calories', label: 'metric_calories', unit: 'kcal', digits: 0 }
+            { key: 'stress', label: 'metric_stress', unit: '/5', digits: 0 }
         ];
-        const any = metrics.some((metric) => log[metric.key] !== null && log[metric.key] !== undefined);
+        const filled = metrics.filter((m) => log[m.key] !== null && log[m.key] !== undefined);
         const symptoms = this.parseJson(log.symptoms, []);
-        const grid = metrics.map((metric) => {
-            const value = log[metric.key];
-            const shown = value !== null && value !== undefined
-                ? `${this.fmt(value, metric.digits)}${metric.unit ? (metric.unit === '%' || metric.unit === '/5' ? metric.unit : ' ' + this.t(metric.unit)) : ''}`
-                : '—';
-            return `<div class="fit-metric"><span>${this.esc(this.t(metric.label))}</span><b>${this.esc(shown)}</b></div>`;
+        const pills = filled.map((m) => {
+            const val = log[m.key];
+            const suffix = m.unit ? (m.unit === '%' || m.unit === '/5' ? m.unit : ' ' + this.t(m.unit)) : '';
+            return `<div class="fit-metric-pill"><span>${this.esc(this.t(m.label))}</span><b>${this.esc(this.fmt(val, m.digits))}${this.esc(suffix)}</b></div>`;
         }).join('');
         return `
             <section class="fit-day-section">
@@ -510,67 +623,17 @@ Object.assign(window.FitCarePlugin, {
                     <h4><i data-lucide="scale"></i>${this.esc(this.t('day_metrics'))}</h4>
                     <button type="button" class="fit-btn-icon" data-fit-action="add-metrics" data-date="${date}" aria-label="${this.esc(this.t('add_metrics'))}"><i data-lucide="pencil"></i></button>
                 </div>
-                ${any ? `<div class="fit-metric-grid">${grid}</div>` : `<div class="fit-empty" style="padding:14px"><span>${this.esc(this.t('no_metrics_today'))}</span><button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="add-metrics" data-date="${date}">${this.esc(this.t('add_metrics'))}</button></div>`}
-                ${symptoms.length ? `<div class="fit-session-ex">${symptoms.slice(0, 8).map((symptom) => `<span>${this.esc(symptom)}</span>`).join('')}${symptoms.length > 8 ? `<span>+${symptoms.length - 8}</span>` : ''}</div>` : ''}
-                ${log.measurement_note ? `<p class="fit-muted" style="margin:0;font-size:.68rem">${this.esc(log.measurement_note)}</p>` : ''}
+                ${filled.length
+                    ? `<div class="fit-metric-pills">${pills}</div>`
+                    : `<button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" style="align-self:flex-start" data-fit-action="add-metrics" data-date="${date}"><i data-lucide="plus"></i>${this.esc(this.t('add_metrics'))}</button>`}
+                ${symptoms.length ? `<div class="fit-session-ex">${symptoms.slice(0, 8).map((s) => `<span>${this.esc(s)}</span>`).join('')}${symptoms.length > 8 ? `<span>+${symptoms.length - 8}</span>` : ''}</div>` : ''}
+                ${log.measurement_note ? `<p class="fit-muted" style="margin:0;font-size:.66rem">${this.esc(log.measurement_note)}</p>` : ''}
             </section>
         `;
     },
 
-    renderMealsSection(date) {
-        const meals = this.getMeals(date);
-        const total = meals.reduce((sum, meal) => sum + (Number(meal.calories) || 0), 0);
-        const body = meals.length
-            ? meals.map((meal) => {
-                const tags = this.parseJson(meal.tags, []);
-                return `
-                    <div class="fit-meal-row">
-                        <span class="fit-muted" style="font-size:.64rem;min-width:34px">${this.esc(meal.meal_time || '')}</span>
-                        <span class="fit-grow">
-                            <b style="font-size:.73rem">${this.esc(meal.title)}</b>
-                            ${tags.length ? `<span class="fit-meal-tags"> · ${this.esc(tags.join(', '))}</span>` : ''}
-                            ${Number(meal.estimated) ? `<span class="fit-est" title="${this.esc(this.t('estimated_hint'))}">~${this.esc(this.t('estimated'))}</span>` : ''}
-                        </span>
-                        ${meal.calories !== null && meal.calories !== undefined ? `<span class="fit-meal-kcal">${this.esc(this.fmt(meal.calories, 0))} ${this.esc(this.t('kcal'))}</span>` : ''}
-                        <button type="button" class="fit-btn-icon" data-fit-action="edit-meal" data-date="${date}" data-id="${meal.id}" aria-label="${this.esc(this.t('edit'))}"><i data-lucide="pencil"></i></button>
-                        <button type="button" class="fit-btn-icon" data-fit-action="delete-meal" data-date="${date}" data-id="${meal.id}" aria-label="${this.esc(this.t('delete'))}"><i data-lucide="trash-2"></i></button>
-                    </div>
-                `;
-            }).join('')
-            : `<div class="fit-empty" style="padding:14px"><span>${this.esc(this.t('no_meals_today'))}</span></div>`;
-        return `
-            <section class="fit-day-section">
-                <div class="fit-day-section-head">
-                    <h4><i data-lucide="utensils"></i>${this.esc(this.t('day_meals'))}${total ? ` · ${this.esc(this.t('meal_kcal_total', { n: this.fmt(total, 0) }))}` : ''}</h4>
-                    <button type="button" class="fit-btn-icon" data-fit-action="add-meal" data-date="${date}" aria-label="${this.esc(this.t('add_meal'))}"><i data-lucide="plus"></i></button>
-                </div>
-                ${body}
-            </section>
-        `;
-    },
-
-    renderTimelineSection(date) {
+    renderCareSection(date) {
         const events = [];
-        for (const meal of this.getMeals(date)) {
-            const tilde = Number(meal.estimated) ? '~' : '';
-            const macros = [meal.calories ? `${tilde}${this.fmt(meal.calories, 0)} ${this.t('kcal')}` : '', meal.protein ? `${tilde}${this.t('protein_short')} ${this.fmt(meal.protein, 0)} ${this.t('g')}` : ''].filter(Boolean).join(' · ');
-            events.push({
-                time: meal.meal_time || '',
-                icon: 'utensils',
-                cls: 'meal',
-                title: meal.title,
-                sub: macros
-            });
-        }
-        for (const workout of this.getWorkouts(date)) {
-            events.push({
-                time: workout.log_time || '',
-                icon: 'dumbbell',
-                cls: 'workout',
-                title: workout.title,
-                sub: [this.t(`workout_${workout.status}`), workout.duration_min ? `${workout.duration_min} ${this.t('min')}` : '', workout.rpe ? `RPE ${workout.rpe}` : ''].filter(Boolean).join(' · ')
-            });
-        }
         for (const dose of this.getDosesForDate(date)) {
             events.push({
                 time: dose.time || '',
@@ -590,7 +653,7 @@ Object.assign(window.FitCarePlugin, {
                 icon: entry.type === 'symptom' ? 'thermometer' : 'activity',
                 cls: 'health',
                 title: entry.name || this.t(`health_type_${entry.type}`),
-                sub: `${valueBits.length ? `${valueBits.join('/')}${entry.unit ? ' ' + entry.unit : ''} · ` : ''}${entry.note || ''}`
+                sub: `${valueBits.length ? `${valueBits.join('/')}${entry.unit ? ' ' + entry.unit : ''}` : ''}${entry.note ? `${valueBits.length ? ' · ' : ''}${entry.note}` : ''}`
             });
         }
         const cycleLog = this.getCycleLog(date);
@@ -615,11 +678,7 @@ Object.assign(window.FitCarePlugin, {
                 });
             }
         }
-        events.sort((a, b) => {
-            const timeA = a.time || '12:00';
-            const timeB = b.time || '12:00';
-            return timeA.localeCompare(timeB);
-        });
+        events.sort((a, b) => (a.time || '12:00').localeCompare(b.time || '12:00'));
         const body = events.length ? `
             <div class="fit-timeline">
                 ${events.map((event, index) => `
@@ -642,13 +701,95 @@ Object.assign(window.FitCarePlugin, {
                     </div>
                 `).join('')}
             </div>
-        ` : `<div class="fit-empty" style="padding:14px"><span>${this.esc(this.t('no_events_today'))}</span></div>`;
+        ` : `<div class="fit-empty" style="padding:10px"><span>${this.esc(this.t('no_events_today'))}</span></div>`;
+
         return `
             <section class="fit-day-section">
-                <div class="fit-day-section-head"><h4><i data-lucide="clock"></i>${this.esc(this.t('day_timeline'))}</h4></div>
+                <div class="fit-day-section-head">
+                    <h4><i data-lucide="heart-pulse"></i>${this.esc(this.t('day_care'))}</h4>
+                    <div class="fit-row" style="gap:2px">
+                        <button type="button" class="fit-btn-icon" data-fit-action="add-med" data-date="${date}" title="${this.esc(this.t('add_med'))}" aria-label="${this.esc(this.t('add_med'))}"><i data-lucide="pill"></i></button>
+                        <button type="button" class="fit-btn-icon" data-fit-action="add-health" data-date="${date}" title="${this.esc(this.t('add_health'))}" aria-label="${this.esc(this.t('add_health'))}"><i data-lucide="plus"></i></button>
+                    </div>
+                </div>
                 ${body}
             </section>
         `;
+    },
+
+    formatChatTime(timestamp) {
+        if (!timestamp) return '';
+        try {
+            const iso = String(timestamp).includes('T') ? String(timestamp) : String(timestamp).replace(' ', 'T') + 'Z';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleTimeString(this.state.lang, { hour: '2-digit', minute: '2-digit' });
+        } catch (_) {
+            return '';
+        }
+    },
+
+    renderChatActionCards(metaRaw) {
+        if (!metaRaw) return '';
+        const meta = this.parseJson(metaRaw, null);
+        const actions = meta && Array.isArray(meta.actions) ? meta.actions : [];
+        if (!actions.length) return '';
+        const cards = actions.map((act) => {
+            if (!act || !act.kind) return '';
+            let icon = 'check';
+            let label = '';
+            let sub = '';
+            if (act.kind === 'meal') {
+                icon = 'utensils';
+                label = act.title || this.t('quick_meal');
+                const bits = [];
+                if (act.calories != null) bits.push(`${act.estimated ? '~' : ''}${act.calories} ${this.t('kcal')}`);
+                if (act.protein != null) bits.push(`${this.t('protein_short')} ${act.protein}${this.t('g')}`);
+                sub = bits.join(' · ');
+            } else if (act.kind === 'workout') {
+                icon = 'dumbbell';
+                label = act.title || this.t('quick_workout');
+                const bits = [this.t(`workout_${act.status || 'done'}`)];
+                if (act.duration_min) bits.push(`${act.duration_min} ${this.t('min')}`);
+                if (act.volume_kg) bits.push(`${act.volume_kg} ${this.t('kg')}`);
+                sub = bits.join(' · ');
+            } else if (act.kind === 'log') {
+                icon = 'scale';
+                label = this.t('quick_metrics');
+                const p = act.patch || {};
+                const bits = [];
+                if (p.weight != null) bits.push(`${p.weight} ${this.t('kg')}`);
+                if (p.sleep_hours != null) bits.push(`${p.sleep_hours} ${this.t('h')}`);
+                if (p.water_ml != null) bits.push(`${p.water_ml} ${this.t('unit_ml')}`);
+                if (p.steps != null) bits.push(`${p.steps}`);
+                sub = bits.join(' · ');
+            } else if (act.kind === 'med') {
+                icon = 'pill';
+                label = act.name || this.t('med_protocol');
+                sub = this.t(`med_${act.status || 'taken'}`);
+            } else if (act.kind === 'health') {
+                icon = 'heart-pulse';
+                label = act.name || this.t('quick_health');
+                sub = act.value != null ? `${act.value}${act.value2 != null ? '/' + act.value2 : ''}${act.unit ? ' ' + act.unit : ''}` : '';
+            } else if (act.kind === 'cycle') {
+                icon = 'droplet';
+                label = act.event === 'CYCLE_START' ? this.t('cycle_start') : act.event === 'CYCLE_END' ? this.t('cycle_end') : this.t('cycle_log_title');
+                sub = act.date || '';
+            } else if (act.kind === 'plan') {
+                icon = 'clipboard-list';
+                label = act.title || this.t('plan_title');
+                sub = act.dayTitle || (act.weeks ? `${act.weeks} ${this.t('plan_weeks')}` : '');
+            }
+            if (!label) return '';
+            return `
+                <div class="fit-chat-action-card">
+                    <span class="fit-chat-action-icon"><i data-lucide="${icon}"></i></span>
+                    <span class="fit-chat-action-copy"><b>${this.esc(label)}</b>${sub ? `<small>${this.esc(sub)}</small>` : ''}</span>
+                    <button type="button" class="fit-chat-action-link" data-fit-action="chat-open-day">${this.esc(this.t('chat_open_day'))}</button>
+                </div>
+            `;
+        }).filter(Boolean);
+        return cards.length ? `<div class="fit-chat-actions-wrap">${cards.join('')}</div>` : '';
     },
 
     renderDayChat(date) {
@@ -658,23 +799,74 @@ Object.assign(window.FitCarePlugin, {
         const thread = messages.length
             ? messages.map((message) => {
                 const role = message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system';
-                const body = role === 'assistant' ? this.renderChatMarkdown(message.content) : this.esc(message.content);
-                return `<div class="fit-chat-bubble ${role}">${body}</div>`;
+                const time = this.formatChatTime(message.created_at);
+                if (role === 'assistant') {
+                    const body = this.renderChatMarkdown(message.content);
+                    const actionCards = this.renderChatActionCards(message.meta);
+                    return `
+                        <div class="fit-chat-row is-assistant">
+                            <img class="fit-chat-avatar" src="media/int/aru.png" alt="Aru">
+                            <div class="fit-chat-msg-col">
+                                <div class="fit-chat-bubble assistant">${body}${actionCards}</div>
+                                <div class="fit-chat-msg-foot">
+                                    ${time ? `<span class="fit-chat-time">${this.esc(time)}</span>` : ''}
+                                    <button type="button" class="fit-chat-copy-btn" data-fit-action="chat-copy" data-id="${message.id}" title="${this.esc(this.t('chat_copy'))}"><i data-lucide="copy"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="fit-chat-row is-${role}">
+                        <div class="fit-chat-msg-col">
+                            <div class="fit-chat-bubble ${role}">${this.esc(message.content)}</div>
+                            ${time ? `<div class="fit-chat-msg-foot"><span class="fit-chat-time">${this.esc(time)}</span></div>` : ''}
+                        </div>
+                    </div>
+                `;
             }).join('')
-            : `<div class="fit-empty" style="border:0;padding:18px 10px"><i data-lucide="sparkles"></i><span>${this.esc(this.t('chat_empty'))}</span></div>`;
+            : `<div class="fit-chat-welcome"><img src="media/int/aru.png" alt="Aru"><strong>Aru Fit &amp; Care</strong><span>${this.esc(this.t('chat_empty'))}</span></div>`;
+
+        const chips = [
+            { label: this.t('chat_chip_summary'), prompt: this.t('chat_chip_summary_prompt') },
+            { label: this.t('chat_chip_macros'), prompt: this.t('chat_chip_macros_prompt') },
+            { label: this.t('chat_chip_workout'), prompt: this.t('chat_chip_workout_prompt') }
+        ];
+        if (!this.state.activePlan) {
+            chips.push({ label: this.t('chat_chip_plan'), prompt: this.t('chat_chip_plan_prompt') });
+        }
+
         return `
             <div class="fit-chat">
-                <div class="fit-chat-note"><i data-lucide="shield-check"></i><span>${this.esc(this.t('chat_note'))}</span></div>
-                <div id="fit-chat-thread" class="fit-chat-thread">${thread}</div>
-                ${busy ? `<div class="fit-chat-typing">${this.esc(this.t('chat_thinking'))}</div>` : ''}
+                <div class="fit-chat-head">
+                    <div class="fit-chat-head-id">
+                        <img class="fit-chat-avatar sm" src="media/int/aru.png" alt="Aru">
+                        <div>
+                            <b>Aru</b>
+                            <span>${this.esc(this.t('chat_context_pill'))}</span>
+                        </div>
+                    </div>
+                    <div class="fit-row" style="gap:3px">
+                        <button type="button" class="fit-btn-icon" data-fit-action="chat-toggle-wide" title="${this.esc(this.t(this.state.chatWide ? 'chat_collapse' : 'chat_expand'))}" aria-label="${this.esc(this.t(this.state.chatWide ? 'chat_collapse' : 'chat_expand'))}">
+                            <i data-lucide="${this.state.chatWide ? 'minimize-2' : 'maximize-2'}"></i>
+                        </button>
+                        ${messages.length ? `<button type="button" class="fit-btn-icon" data-fit-action="chat-clear" data-date="${date}" title="${this.esc(this.t('chat_clear'))}" aria-label="${this.esc(this.t('chat_clear'))}"><i data-lucide="trash-2"></i></button>` : ''}
+                    </div>
+                </div>
+                <div id="fit-chat-thread" class="fit-chat-thread">
+                    ${thread}
+                    ${busy ? `<div class="fit-chat-row is-assistant"><img class="fit-chat-avatar" src="media/int/aru.png" alt="Aru"><div class="fit-chat-bubble assistant fit-chat-typing-dots"><i></i><i></i><i></i></div></div>` : ''}
+                </div>
                 ${error ? `<div class="fit-alert fit-alert-danger"><i data-lucide="circle-alert"></i><span>${this.esc(error)}</span></div>` : ''}
+                <div class="fit-chat-chips">
+                    ${chips.map((c) => `<button type="button" class="fit-chat-chip" data-fit-action="chat-chip" data-prompt="${this.esc(c.prompt)}" ${busy ? 'disabled' : ''}>${this.esc(c.label)}</button>`).join('')}
+                </div>
                 <div class="fit-chat-composer">
-                    <textarea id="fit-chat-input" rows="3" aria-label="${this.esc(this.t('aru_tab'))}">${this.esc(this.state.chatDraft || '')}</textarea>
+                    <textarea id="fit-chat-input" rows="2" placeholder="${this.esc(this.t('chat_placeholder'))}" aria-label="${this.esc(this.t('aru_tab'))}">${this.esc(this.state.chatDraft || '')}</textarea>
                     <button type="button" class="fit-chat-send" data-fit-action="chat-send" aria-label="${this.esc(this.t('chat_send'))}" ${busy ? 'disabled' : ''}>
-                        <i data-lucide="send"></i>
+                        <i data-lucide="arrow-up"></i>
                     </button>
                 </div>
-                ${messages.length ? `<button type="button" class="fit-btn fit-btn-ghost fit-btn-xs" data-fit-action="chat-clear" data-date="${date}" style="align-self:flex-start"><i data-lucide="trash-2"></i>${this.esc(this.t('chat_clear'))}</button>` : ''}
             </div>
         `;
     },
@@ -803,13 +995,13 @@ Object.assign(window.FitCarePlugin, {
         this.render();
     },
 
-    openDayPanel(date, tab, draft) {
+    openDayPanel(date, tab, draft, autoSend = false) {
         this.state.view = 'calendar';
         localStorage.setItem('aru_fit_view', 'calendar');
         this.state.selectedDate = date || this.todayKey();
         this.state.cursor = this.dateFromKey(this.state.selectedDate);
         this.state.dayTab = tab === 'day' ? 'day' : 'aru';
-        this.state.chatDraft = draft || '';
+        this.state.chatDraft = autoSend ? '' : (draft || '');
         this.loadAll();
         this.render();
         const container = document.getElementById('fit-view');
@@ -819,8 +1011,12 @@ Object.assign(window.FitCarePlugin, {
             if (panel && (document.getElementById('fit-view')?.clientWidth || window.innerWidth) <= 1080) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
             if (this.state.dayTab === 'aru') {
                 this.scrollChatToBottom();
-                const input = document.getElementById('fit-chat-input');
-                if (input && window.innerWidth > 760) input.focus({ preventScroll: true });
+                if (autoSend && draft) {
+                    void this.sendChat(draft);
+                } else {
+                    const input = document.getElementById('fit-chat-input');
+                    if (input && window.innerWidth > 760) input.focus({ preventScroll: true });
+                }
             }
         }, 60);
     }

@@ -1,82 +1,124 @@
- <!--
+<!--
 ---ARU-LAB.SPACE---ALMATY---2026---
-ARU TASK PLUGIN - UI FRAGMENT
+ARU TASK PLUGIN v2 - UI FRAGMENT (Trello-style Board, List View, Filters & AI Planner)
 ---chat.aru-lab.space---PWA---
 -->
 <link rel="stylesheet" href="plugins/task/task.css">
 
 <div id="task-plugin-root" class="task-plugin-root">
     <aside id="task-sidebar" class="task-sidebar">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-[10px] font-extrabold uppercase tracking-[0.2em] text-gray-400"
-                data-task-i18n="task_projects_list">
-                Projects List</h3>
-            <button type="button" class="p-1 text-gray-400 hover:text-purple-500 transition md:hidden"
-                aria-label="Close sidebar"
-                onclick="TaskPlugin.toggleSidebar()">
+        <div class="task-sidebar-head">
+            <h3 class="task-sidebar-title" data-task-i18n="task_projects_list">Projects</h3>
+            <button type="button" class="task-icon-btn md:hidden" aria-label="Close sidebar" onclick="TaskPlugin.toggleSidebar()">
                 <i data-lucide="chevrons-left" class="w-4 h-4"></i>
             </button>
         </div>
-        <div id="task-projects-list" class="flex-1 space-y-1 overflow-y-auto no-scrollbar">
+
+        <div id="task-projects-list" class="task-projects-list no-scrollbar">
             <!-- Projects injected here -->
         </div>
-        <div class="pt-4 mt-auto">
-            <button type="button" class="btn-task btn-task-primary w-full flex items-center justify-center gap-2"
-                onclick="TaskPlugin.addProject()">
+
+        <div class="task-sidebar-footer">
+            <button type="button" class="btn-task btn-task-primary w-full flex items-center justify-center gap-2" data-task-action="add-project">
                 <i data-lucide="plus" class="w-4 h-4"></i>
                 <span data-task-i18n="task_new_project">New Project</span>
             </button>
+            <button type="button" class="btn-task btn-task-outline w-full flex items-center justify-center gap-1.5 mt-2" data-task-action="open-backup">
+                <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                <span data-task-i18n="task_export_import">Backup</span>
+            </button>
+            <input type="file" id="task-import-file" accept=".json,application/json" class="hidden">
         </div>
     </aside>
 
-    <div id="task-sidebar-backdrop" class="task-sidebar-backdrop hidden absolute inset-0 z-[25]"
-        onclick="TaskPlugin.toggleSidebar()"></div>
+    <div id="task-sidebar-backdrop" class="task-sidebar-backdrop hidden" onclick="TaskPlugin.toggleSidebar()"></div>
 
     <main id="task-board" class="task-board">
         <header id="board-header" class="board-header">
-            <div class="flex items-center gap-3 min-w-0">
-                <button type="button" id="btn-sidebar-toggle"
-                    class="p-2 text-gray-400 hover:text-purple-500 transition-all rounded-xl shrink-0"
-                    onclick="TaskPlugin.toggleSidebar()" title="Toggle Sidebar"
-                    data-task-i18n-title="task_toggle_sidebar">
+            <div class="task-header-left">
+                <button type="button" id="btn-sidebar-toggle" class="task-icon-btn" onclick="TaskPlugin.toggleSidebar()" title="Toggle Sidebar" data-task-i18n-title="task_toggle_sidebar">
                     <i data-lucide="menu" class="w-5 h-5"></i>
                 </button>
-                <h2 id="active-project-name" class="font-bold text-lg truncate min-w-0" data-task-i18n="task_empty_board">Select a
-                    project
-                </h2>
+                <button type="button" id="active-project-dot" class="task-project-dot is-violet hidden" data-task-action="cycle-color" title="Project color" data-task-i18n-title="task_project_color" aria-label="Project color"></button>
+                <h2 id="active-project-name" class="task-board-title"></h2>
+                <span id="active-project-progress" class="task-progress-pill hidden"></span>
             </div>
-            <div class="flex gap-2 shrink-0">
-                <button type="button" id="btn-add-column" class="btn-task btn-task-outline flex items-center gap-1.5" onclick="TaskPlugin.addColumn()"
-                    title="Add Column" data-task-i18n-title="task_add_column_title">
+
+            <div class="task-header-actions">
+                <div class="task-view-tabs" role="tablist">
+                    <button type="button" role="tab" id="btn-view-board" class="task-view-tab is-active" data-task-action="set-view" data-view="board" aria-selected="true">
+                        <i data-lucide="kanban" class="w-3.5 h-3.5"></i>
+                        <span class="hidden sm:inline" data-task-i18n="task_view_board">Board</span>
+                    </button>
+                    <button type="button" role="tab" id="btn-view-list" class="task-view-tab" data-task-action="set-view" data-view="list" aria-selected="false">
+                        <i data-lucide="list-todo" class="w-3.5 h-3.5"></i>
+                        <span class="hidden sm:inline" data-task-i18n="task_view_list">List</span>
+                    </button>
+                </div>
+
+                <button type="button" id="btn-task-ai-plan" class="btn-task btn-task-soft flex items-center gap-1.5" data-task-action="ai-plan" title="AI Plan" data-task-i18n-title="task_ai_plan">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    <span class="hidden md:inline" data-task-i18n="task_ai_plan">AI Plan</span>
+                </button>
+
+                <button type="button" id="btn-add-column" class="btn-task btn-task-outline flex items-center gap-1.5" data-task-action="add-column" title="Add Column" data-task-i18n-title="task_add_column_title">
                     <i data-lucide="columns" class="w-4 h-4"></i>
                     <span class="hidden sm:inline" data-task-i18n="task_add_column_title">Add Column</span>
                 </button>
             </div>
         </header>
 
-        <div id="board-columns" class="board-columns">
-            <!-- Columns injected here -->
-            <div class="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50">
-                <i data-lucide="clipboard-check" class="w-16 h-16 mb-4"></i>
-                <p data-task-i18n="task_empty_board">Choose or create a project to see your board</p>
+        <div id="task-toolbar" class="task-toolbar hidden">
+            <div class="task-search-wrap">
+                <i data-lucide="search" class="w-3.5 h-3.5 task-search-icon"></i>
+                <input type="search" id="task-search-input" class="task-search-input" placeholder="Search tasks or #tags..." data-task-i18n-placeholder="task_search_placeholder" autocomplete="off">
+                <button type="button" id="btn-task-search-clear" class="task-search-clear hidden" data-task-action="clear-search" aria-label="Clear search">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
             </div>
+
+            <div class="task-filter-pills">
+                <button type="button" class="task-filter-pill is-active" data-task-action="set-filter" data-filter="all" data-task-i18n="task_filter_all">All</button>
+                <button type="button" class="task-filter-pill" data-task-action="set-filter" data-filter="today" data-task-i18n="task_filter_today">Today</button>
+                <button type="button" class="task-filter-pill" data-task-action="set-filter" data-filter="overdue" data-task-i18n="task_filter_overdue">Overdue</button>
+                <button type="button" class="task-filter-pill" data-task-action="set-filter" data-filter="high" data-task-i18n="task_filter_high">High priority</button>
+                <button type="button" id="btn-hide-done" class="task-filter-pill" data-task-action="toggle-hide-done">
+                    <i data-lucide="eye-off" class="w-3 h-3"></i>
+                    <span data-task-i18n="task_filter_hide_done">Hide done</span>
+                </button>
+            </div>
+
+            <div id="task-tag-filters" class="task-tag-filters hidden"></div>
+        </div>
+
+        <div class="board-viewport">
+            <button type="button" id="task-scroll-left" class="task-scroll-arrow is-left hidden" data-task-action="scroll-board" data-dir="-1" aria-label="Scroll left">
+                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+
+            <div id="board-columns" class="board-columns">
+                <!-- Columns or List view injected here -->
+            </div>
+
+            <button type="button" id="task-scroll-right" class="task-scroll-arrow is-right hidden" data-task-action="scroll-board" data-dir="1" aria-label="Scroll right">
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
         </div>
     </main>
 
-    <!-- Task detail modal -->
-    <div id="task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"
-        class="task-detail-modal hidden absolute inset-0 z-[50] flex items-center justify-center p-4">
-        <div
-            class="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[24px] shadow-2xl relative overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in pointer-events-auto flex flex-col max-h-[85dvh]">
-            <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center shrink-0">
-                <h3 id="task-modal-title" class="text-xl font-bold text-gray-800 dark:text-gray-100" data-task-i18n="task_modal_header">Task Details
-                </h3>
-                <button type="button" onclick="TaskPlugin.closeTaskModal()"
-                    class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition" aria-label="Close">
+    <!-- Task detail / AI modal -->
+    <div id="task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title" class="task-detail-modal hidden">
+        <div class="task-modal-dialog">
+            <div class="task-modal-head">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div id="task-modal-head-action"></div>
+                    <h3 id="task-modal-title" class="task-modal-title truncate" data-task-i18n="task_modal_header">Task</h3>
+                </div>
+                <button type="button" data-task-action="close-modal" class="task-icon-btn" aria-label="Close">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <div id="task-modal-content" class="p-4 overflow-y-auto">
+            <div id="task-modal-content" class="task-modal-body">
                 <!-- Content injected here -->
             </div>
         </div>

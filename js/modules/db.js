@@ -257,8 +257,10 @@ export const DB = {
             } else {
                 this.run("INSERT INTO modules_data (type, name, content) VALUES ('plugin', ?, ?)", [pluginId, content], autoSave);
             }
+            return true;
         } catch (e) {
             console.error(`DB.savePluginData failed for ${pluginId}`, e);
+            return false;
         }
     },
 
@@ -279,13 +281,13 @@ export const DB = {
     // FK constraints are not enforced by sql.js, so deletions cascade manually.
 
     _skillTableFields: {
-        skills: ['title', 'system_prompt', 'llm_type', 'api_key', 'base_url', 'model_name', 'temperature', 'input_limit', 'max_output'],
+        skills: ['title', 'system_prompt', 'llm_type', 'api_key', 'base_url', 'model_name', 'temperature', 'input_limit', 'max_output', 'role'],
         skill_projects: ['title', 'context_limit'],
         skill_project_items: ['kind', 'name', 'content'],
-        skill_pipeline_steps: ['skill_id', 'sort_order', 'enabled', 'is_final'],
+        skill_pipeline_steps: ['skill_id', 'sort_order', 'enabled', 'is_final', 'role', 'parallel_with_prev', 'pause_after', 'max_revisions', 'input_mode'],
         skill_runs: ['input_text', 'status'],
-        skill_run_steps: ['step_id', 'step_order', 'skill_id', 'skill_title', 'provider', 'model', 'input_text', 'output_text', 'status', 'error', 'tokens_est', 'truncated'],
-        skill_artifacts: ['project_id', 'run_id', 'title', 'type', 'code'],
+        skill_run_steps: ['step_id', 'step_order', 'skill_id', 'skill_title', 'provider', 'model', 'input_text', 'output_text', 'status', 'error', 'tokens_est', 'truncated', 'stage_index', 'role', 'iteration', 'duration_ms', 'verdict', 'edited_by_user'],
+        skill_artifacts: ['project_id', 'run_id', 'title', 'type', 'code', 'version', 'step_title'],
         skill_project_messages: ['project_id', 'kind', 'content', 'meta'],
     },
 
@@ -319,9 +321,9 @@ export const DB = {
 
     createSkill(data) {
         const d = data || {};
-        this.run(`INSERT INTO skills (title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [d.title || 'Skill', d.system_prompt || '', d.llm_type || 'gemini', d.api_key || '', d.base_url || '', d.model_name || '', d.temperature ?? 0.9, d.input_limit ?? 4096, d.max_output ?? 2048]);
+        this.run(`INSERT INTO skills (title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output, role)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [d.title || 'Skill', d.system_prompt || '', d.llm_type || 'gemini', d.api_key || '', d.base_url || '', d.model_name || '', d.temperature ?? 0.5, d.input_limit ?? 32768, d.max_output ?? 8192, d.role || 'worker']);
         return this._lastInsertId('skills');
     },
 
@@ -342,7 +344,7 @@ export const DB = {
         this.run("DELETE FROM skills WHERE id = ?", [id]);
     },
 
-    createSkillProject(title, contextLimit = 16384) {
+    createSkillProject(title, contextLimit = 65536) {
         this.run("INSERT INTO skill_projects (title, context_limit) VALUES (?, ?)", [title || 'Project', contextLimit]);
         return this._lastInsertId('skill_projects');
     },
@@ -397,15 +399,30 @@ export const DB = {
         this.run("DELETE FROM skill_project_items WHERE id = ?", [id]);
     },
 
-    addPipelineStep(projectId, skillId) {
+    addPipelineStep(projectId, skillId, opts = {}) {
+        const o = opts || {};
         const max = this.query("SELECT MAX(sort_order) AS m FROM skill_pipeline_steps WHERE project_id = ?", [projectId]);
         const order = (max.length > 0 && max[0].m !== null) ? max[0].m + 1 : 0;
-        this.run("INSERT INTO skill_pipeline_steps (project_id, skill_id, sort_order) VALUES (?, ?, ?)", [projectId, skillId, order]);
+        const parallel = (order > 0 && (o.parallel_with_prev === 1 || o.parallel_with_prev === true)) ? 1 : 0;
+        this.run(`INSERT INTO skill_pipeline_steps (project_id, skill_id, sort_order, enabled, is_final, role, parallel_with_prev, pause_after, max_revisions, input_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            projectId,
+            skillId,
+            order,
+            o.enabled === 0 || o.enabled === false ? 0 : 1,
+            o.is_final === 1 || o.is_final === true ? 1 : 0,
+            o.role || '',
+            parallel,
+            o.pause_after === 1 || o.pause_after === true ? 1 : 0,
+            Math.max(0, Math.min(3, parseInt(o.max_revisions, 10) || 0)),
+            o.input_mode || 'auto'
+        ]);
         return this._lastInsertId('skill_pipeline_steps');
     },
 
     getPipelineSteps(projectId) {
-        return this.query(`SELECT s.*, k.title AS skill_title, k.llm_type AS skill_llm_type, k.model_name AS skill_model_name
+        return this.query(`SELECT s.*, k.title AS skill_title, k.llm_type AS skill_llm_type, k.model_name AS skill_model_name,
+            k.role AS skill_role, k.input_limit AS skill_input_limit, k.max_output AS skill_max_output
             FROM skill_pipeline_steps s LEFT JOIN skills k ON k.id = s.skill_id
             WHERE s.project_id = ? ORDER BY s.sort_order ASC, s.id ASC`, [projectId]);
     },
@@ -429,7 +446,11 @@ export const DB = {
     setPipelineOrder(projectId, orderedIds) {
         if (!Array.isArray(orderedIds)) return;
         orderedIds.forEach((stepId, idx) => {
-            this.run("UPDATE skill_pipeline_steps SET sort_order = ? WHERE id = ? AND project_id = ?", [idx, stepId, projectId], false);
+            if (idx === 0) {
+                this.run("UPDATE skill_pipeline_steps SET sort_order = ?, parallel_with_prev = 0 WHERE id = ? AND project_id = ?", [idx, stepId, projectId], false);
+            } else {
+                this.run("UPDATE skill_pipeline_steps SET sort_order = ? WHERE id = ? AND project_id = ?", [idx, stepId, projectId], false);
+            }
         });
         this.save();
     },
@@ -476,14 +497,15 @@ export const DB = {
 
     addSkillRunStep(runId, data) {
         const d = data || {};
-        this.run(`INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [runId, d.step_id ?? null, d.step_order ?? 0, d.skill_id ?? null, d.skill_title || '', d.provider || '', d.model || '', d.input_text || '', d.status || 'pending']);
+        this.run(`INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, status, stage_index, role, iteration, duration_ms, verdict, edited_by_user)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [runId, d.step_id ?? null, d.step_order ?? 0, d.skill_id ?? null, d.skill_title || '', d.provider || '', d.model || '', d.input_text || '', d.status || 'pending',
+                d.stage_index ?? 0, d.role || 'worker', d.iteration ?? 1, d.duration_ms ?? 0, d.verdict || '', d.edited_by_user ? 1 : 0]);
         return this._lastInsertId('skill_run_steps');
     },
 
     getSkillRunSteps(runId) {
-        return this.query("SELECT * FROM skill_run_steps WHERE run_id = ? ORDER BY step_order ASC, id ASC", [runId]);
+        return this.query("SELECT * FROM skill_run_steps WHERE run_id = ? ORDER BY id ASC", [runId]);
     },
 
     getSkillRunStep(id) {
@@ -493,17 +515,26 @@ export const DB = {
 
     updateSkillRunStep(id, data) { return this._skillUpdate('skill_run_steps', id, data); },
 
+    deleteSkillRunStepsFromStage(runId, stageIndex) {
+        this.run("DELETE FROM skill_run_steps WHERE run_id = ? AND COALESCE(stage_index, 0) >= ?", [runId, stageIndex]);
+    },
+
     // Artifacts produced by a relay run; titles are unique per project so a re-run
-    // of the same deliverable updates the row instead of piling up copies
-    saveSkillArtifact(projectId, runId, title, type, code) {
+    // of the same deliverable increments version instead of piling up copies
+    saveSkillArtifact(projectId, runId, title, type, code, stepTitle = '') {
         const existing = this.query("SELECT id FROM skill_artifacts WHERE project_id = ? AND title = ?", [projectId, title]);
         if (existing.length > 0) {
-            this.run("UPDATE skill_artifacts SET run_id = ?, type = ?, code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                [runId ?? null, type || 'doc', code || '', existing[0].id]);
+            if (stepTitle) {
+                this.run("UPDATE skill_artifacts SET run_id = ?, type = ?, code = ?, version = COALESCE(version, 1) + 1, step_title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [runId ?? null, type || 'doc', code || '', stepTitle, existing[0].id]);
+            } else {
+                this.run("UPDATE skill_artifacts SET run_id = ?, type = ?, code = ?, version = COALESCE(version, 1) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [runId ?? null, type || 'doc', code || '', existing[0].id]);
+            }
             return existing[0].id;
         }
-        this.run("INSERT INTO skill_artifacts (project_id, run_id, title, type, code) VALUES (?, ?, ?, ?, ?)",
-            [projectId, runId ?? null, title || 'Artifact', type || 'doc', code || '']);
+        this.run("INSERT INTO skill_artifacts (project_id, run_id, title, type, code, version, step_title) VALUES (?, ?, ?, ?, ?, 1, ?)",
+            [projectId, runId ?? null, title || 'Artifact', type || 'doc', code || '', stepTitle || '']);
         return this._lastInsertId('skill_artifacts');
     },
 
@@ -571,13 +602,13 @@ export const DB = {
 
     _skillDdl() {
         return [
-            `CREATE TABLE IF NOT EXISTS skills (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, system_prompt TEXT, llm_type TEXT DEFAULT 'gemini', api_key TEXT DEFAULT '', base_url TEXT DEFAULT '', model_name TEXT DEFAULT '', temperature REAL DEFAULT 0.9, input_limit INTEGER DEFAULT 4096, max_output INTEGER DEFAULT 2048, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-            `CREATE TABLE IF NOT EXISTS skill_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, context_limit INTEGER DEFAULT 16384, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+            `CREATE TABLE IF NOT EXISTS skills (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, system_prompt TEXT, llm_type TEXT DEFAULT 'gemini', api_key TEXT DEFAULT '', base_url TEXT DEFAULT '', model_name TEXT DEFAULT '', temperature REAL DEFAULT 0.5, input_limit INTEGER DEFAULT 32768, max_output INTEGER DEFAULT 8192, role TEXT DEFAULT 'worker', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+            `CREATE TABLE IF NOT EXISTS skill_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, context_limit INTEGER DEFAULT 65536, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
             `CREATE TABLE IF NOT EXISTS skill_project_items (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, kind TEXT DEFAULT 'file', name TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-            `CREATE TABLE IF NOT EXISTS skill_pipeline_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, skill_id INTEGER, sort_order INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1, is_final INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+            `CREATE TABLE IF NOT EXISTS skill_pipeline_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, skill_id INTEGER, sort_order INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1, is_final INTEGER DEFAULT 0, role TEXT DEFAULT '', parallel_with_prev INTEGER DEFAULT 0, pause_after INTEGER DEFAULT 0, max_revisions INTEGER DEFAULT 0, input_mode TEXT DEFAULT 'auto', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
             `CREATE TABLE IF NOT EXISTS skill_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, input_text TEXT, status TEXT DEFAULT 'pending', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-            `CREATE TABLE IF NOT EXISTS skill_run_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, step_id INTEGER, step_order INTEGER, skill_id INTEGER, skill_title TEXT, provider TEXT, model TEXT, input_text TEXT, output_text TEXT, status TEXT DEFAULT 'pending', error TEXT, tokens_est INTEGER DEFAULT 0, truncated INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-            `CREATE TABLE IF NOT EXISTS skill_artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, run_id INTEGER, title TEXT, type TEXT DEFAULT 'doc', code TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(project_id, title))`,
+            `CREATE TABLE IF NOT EXISTS skill_run_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, step_id INTEGER, step_order INTEGER, skill_id INTEGER, skill_title TEXT, provider TEXT, model TEXT, input_text TEXT, output_text TEXT, status TEXT DEFAULT 'pending', error TEXT, tokens_est INTEGER DEFAULT 0, truncated INTEGER DEFAULT 0, stage_index INTEGER DEFAULT 0, role TEXT DEFAULT 'worker', iteration INTEGER DEFAULT 1, duration_ms INTEGER DEFAULT 0, verdict TEXT DEFAULT '', edited_by_user INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+            `CREATE TABLE IF NOT EXISTS skill_artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, run_id INTEGER, title TEXT, type TEXT DEFAULT 'doc', code TEXT, version INTEGER DEFAULT 1, step_title TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(project_id, title))`,
             `CREATE TABLE IF NOT EXISTS skill_project_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, kind TEXT DEFAULT 'user', content TEXT, meta TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`
         ];
     },
@@ -588,32 +619,32 @@ export const DB = {
         const runSql = (target === this) ? (sql, p) => this.run(sql, p, false) : (sql, p) => target.run(sql, p);
         const num = (v) => (v === undefined || v === null) ? null : Number(v);
         for (const s of data.skills || []) {
-            runSql("INSERT INTO skills (id, title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num(s.id), s.title || 'Skill', s.system_prompt || '', s.llm_type || 'gemini', s.api_key || '', s.base_url || '', s.model_name || '', num(s.temperature ?? 0.9), num(s.input_limit ?? 4096), num(s.max_output ?? 2048), s.created_at || null, s.updated_at || null]);
+            runSql("INSERT INTO skills (id, title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num(s.id), s.title || 'Skill', s.system_prompt || '', s.llm_type || 'gemini', s.api_key || '', s.base_url || '', s.model_name || '', num(s.temperature ?? 0.5), num(s.input_limit ?? 32768), num(s.max_output ?? 8192), s.role || 'worker', s.created_at || null, s.updated_at || null]);
         }
         for (const p of data.skill_projects || []) {
             runSql("INSERT INTO skill_projects (id, title, context_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                [num(p.id), p.title || 'Project', num(p.context_limit ?? 16384), p.created_at || null, p.updated_at || null]);
+                [num(p.id), p.title || 'Project', num(p.context_limit ?? 65536), p.created_at || null, p.updated_at || null]);
         }
         for (const it of data.skill_project_items || []) {
             runSql("INSERT INTO skill_project_items (id, project_id, kind, name, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 [num(it.id), num(it.project_id), it.kind || 'file', it.name || '', it.content || '', it.created_at || null]);
         }
         for (const st of data.skill_pipeline_steps || []) {
-            runSql("INSERT INTO skill_pipeline_steps (id, project_id, skill_id, sort_order, enabled, is_final, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [num(st.id), num(st.project_id), num(st.skill_id), num(st.sort_order ?? 0), num(st.enabled ?? 1), num(st.is_final ?? 0), st.created_at || null]);
+            runSql("INSERT INTO skill_pipeline_steps (id, project_id, skill_id, sort_order, enabled, is_final, role, parallel_with_prev, pause_after, max_revisions, input_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num(st.id), num(st.project_id), num(st.skill_id), num(st.sort_order ?? 0), num(st.enabled ?? 1), num(st.is_final ?? 0), st.role || '', num(st.parallel_with_prev ?? 0), num(st.pause_after ?? 0), num(st.max_revisions ?? 0), st.input_mode || 'auto', st.created_at || null]);
         }
         for (const r of data.skill_runs || []) {
             runSql("INSERT INTO skill_runs (id, project_id, input_text, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
                 [num(r.id), num(r.project_id), r.input_text || '', r.status || 'pending', r.created_at || null, r.updated_at || null]);
         }
         for (const rs of data.skill_run_steps || []) {
-            runSql("INSERT INTO skill_run_steps (id, run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num(rs.id), num(rs.run_id), num(rs.step_id), num(rs.step_order ?? 0), num(rs.skill_id), rs.skill_title || '', rs.provider || '', rs.model || '', rs.input_text || '', rs.output_text || '', rs.status || 'pending', rs.error ?? null, num(rs.tokens_est ?? 0), num(rs.truncated ?? 0), rs.created_at || null]);
+            runSql("INSERT INTO skill_run_steps (id, run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, stage_index, role, iteration, duration_ms, verdict, edited_by_user, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num(rs.id), num(rs.run_id), num(rs.step_id), num(rs.step_order ?? 0), num(rs.skill_id), rs.skill_title || '', rs.provider || '', rs.model || '', rs.input_text || '', rs.output_text || '', rs.status || 'pending', rs.error ?? null, num(rs.tokens_est ?? 0), num(rs.truncated ?? 0), num(rs.stage_index ?? 0), rs.role || 'worker', num(rs.iteration ?? 1), num(rs.duration_ms ?? 0), rs.verdict || '', num(rs.edited_by_user ?? 0), rs.created_at || null]);
         }
         for (const a of data.skill_artifacts || []) {
-            runSql("INSERT INTO skill_artifacts (id, project_id, run_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [num(a.id), num(a.project_id), num(a.run_id), a.title || 'Artifact', a.type || 'doc', a.code || '', a.created_at || null, a.updated_at || null]);
+            runSql("INSERT INTO skill_artifacts (id, project_id, run_id, title, type, code, version, step_title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num(a.id), num(a.project_id), num(a.run_id), a.title || 'Artifact', a.type || 'doc', a.code || '', num(a.version ?? 1), a.step_title || '', a.created_at || null, a.updated_at || null]);
         }
         for (const m of data.skill_project_messages || []) {
             runSql("INSERT INTO skill_project_messages (id, project_id, kind, content, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -627,13 +658,13 @@ export const DB = {
         const num = (v) => (v === undefined || v === null) ? null : Number(v);
         const mapSkill = new Map(), mapProject = new Map(), mapStep = new Map(), mapRun = new Map(), mapArtifact = new Map();
         for (const s of data.skills || []) {
-            this.run("INSERT INTO skills (title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [s.title || 'Skill', s.system_prompt || '', s.llm_type || 'gemini', s.api_key || '', s.base_url || '', s.model_name || '', num(s.temperature ?? 0.9), num(s.input_limit ?? 4096), num(s.max_output ?? 2048), s.created_at || null, s.updated_at || null], false);
+            this.run("INSERT INTO skills (title, system_prompt, llm_type, api_key, base_url, model_name, temperature, input_limit, max_output, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [s.title || 'Skill', s.system_prompt || '', s.llm_type || 'gemini', s.api_key || '', s.base_url || '', s.model_name || '', num(s.temperature ?? 0.5), num(s.input_limit ?? 32768), num(s.max_output ?? 8192), s.role || 'worker', s.created_at || null, s.updated_at || null], false);
             mapSkill.set(Number(s.id), this._lastInsertId('skills'));
         }
         for (const p of data.skill_projects || []) {
             this.run("INSERT INTO skill_projects (title, context_limit, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                [p.title || 'Project', num(p.context_limit ?? 16384), p.created_at || null, p.updated_at || null], false);
+                [p.title || 'Project', num(p.context_limit ?? 65536), p.created_at || null, p.updated_at || null], false);
             mapProject.set(Number(p.id), this._lastInsertId('skill_projects'));
         }
         for (const it of data.skill_project_items || []) {
@@ -645,8 +676,8 @@ export const DB = {
         for (const st of data.skill_pipeline_steps || []) {
             const pid = mapProject.get(Number(st.project_id));
             if (pid === undefined) continue;
-            this.run("INSERT INTO skill_pipeline_steps (project_id, skill_id, sort_order, enabled, is_final, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                [pid, mapSkill.get(Number(st.skill_id)) ?? null, num(st.sort_order ?? 0), num(st.enabled ?? 1), num(st.is_final ?? 0), st.created_at || null], false);
+            this.run("INSERT INTO skill_pipeline_steps (project_id, skill_id, sort_order, enabled, is_final, role, parallel_with_prev, pause_after, max_revisions, input_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [pid, mapSkill.get(Number(st.skill_id)) ?? null, num(st.sort_order ?? 0), num(st.enabled ?? 1), num(st.is_final ?? 0), st.role || '', num(st.parallel_with_prev ?? 0), num(st.pause_after ?? 0), num(st.max_revisions ?? 0), st.input_mode || 'auto', st.created_at || null], false);
             mapStep.set(Number(st.id), this._lastInsertId('skill_pipeline_steps'));
         }
         for (const r of data.skill_runs || []) {
@@ -659,8 +690,8 @@ export const DB = {
         for (const rs of data.skill_run_steps || []) {
             const rid = mapRun.get(Number(rs.run_id));
             if (rid === undefined) continue;
-            this.run("INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [rid, mapStep.get(Number(rs.step_id)) ?? null, num(rs.step_order ?? 0), mapSkill.get(Number(rs.skill_id)) ?? null, rs.skill_title || '', rs.provider || '', rs.model || '', rs.input_text || '', rs.output_text || '', rs.status || 'pending', rs.error ?? null, num(rs.tokens_est ?? 0), num(rs.truncated ?? 0), rs.created_at || null], false);
+            this.run("INSERT INTO skill_run_steps (run_id, step_id, step_order, skill_id, skill_title, provider, model, input_text, output_text, status, error, tokens_est, truncated, stage_index, role, iteration, duration_ms, verdict, edited_by_user, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [rid, mapStep.get(Number(rs.step_id)) ?? null, num(rs.step_order ?? 0), mapSkill.get(Number(rs.skill_id)) ?? null, rs.skill_title || '', rs.provider || '', rs.model || '', rs.input_text || '', rs.output_text || '', rs.status || 'pending', rs.error ?? null, num(rs.tokens_est ?? 0), num(rs.truncated ?? 0), num(rs.stage_index ?? 0), rs.role || 'worker', num(rs.iteration ?? 1), num(rs.duration_ms ?? 0), rs.verdict || '', num(rs.edited_by_user ?? 0), rs.created_at || null], false);
         }
         for (const a of data.skill_artifacts || []) {
             const pid = mapProject.get(Number(a.project_id));
@@ -672,8 +703,8 @@ export const DB = {
                 title = `${base} ${n++}`;
             }
             const rid = (a.run_id === undefined || a.run_id === null) ? null : (mapRun.get(Number(a.run_id)) ?? null);
-            this.run("INSERT INTO skill_artifacts (project_id, run_id, title, type, code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [pid, rid, title, a.type || 'doc', a.code || '', a.created_at || null, a.updated_at || null], false);
+            this.run("INSERT INTO skill_artifacts (project_id, run_id, title, type, code, version, step_title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [pid, rid, title, a.type || 'doc', a.code || '', num(a.version ?? 1), a.step_title || '', a.created_at || null, a.updated_at || null], false);
             mapArtifact.set(Number(a.id), this._lastInsertId('skill_artifacts'));
         }
         for (const m of data.skill_project_messages || []) {

@@ -25,6 +25,8 @@ export const WizardController = {
     _eulaLangCache: {},
     _eulaActiveStrings: null,
     _eulaSeconds: 0,
+    _gplTextCache: null,
+    _activeRulesTab: 'usage',
 
     showEULA: async () => {
         const modalContainer = document.getElementById('modal-container');
@@ -67,9 +69,11 @@ export const WizardController = {
             const mainContent = doc.querySelector('main');
             if (mainContent) {
                 frame.innerHTML = `<div class="p-6 md:p-10">${mainContent.innerHTML}</div>`;
+                WizardController._activeRulesTab = 'usage';
                 await updateUI(state.lang || 'ru');
-                // Replace lucide placeholders with SVG icons inside injected EULA
-                try { lucide.createIcons(); } catch (e) { console.warn('lucide.createIcons failed on EULA injection', e); }
+                WizardController.switchEULATab(frame, 'usage');
+                // Replace lucide placeholders with SVG icons inside injected usage modal
+                try { lucide.createIcons(); } catch (e) { console.warn('lucide.createIcons failed on usage modal injection', e); }
             }
         } catch (e) {
             console.error('Failed to load EULA', e);
@@ -94,7 +98,7 @@ export const WizardController = {
                 btn.disabled = false;
                 btn.classList.remove('bg-gray-300', 'dark:bg-slate-800', 'text-gray-500', 'cursor-not-allowed');
                 btn.classList.add('bg-aru-500', 'hover:bg-aru-600', 'text-white', 'shadow-lg', 'shadow-aru-500/30');
-                if (btnText) btnText.textContent = curT.eula_confirm_btn || 'Confirm';
+                if (btnText) btnText.textContent = curT.eula_confirm_btn || 'Continue';
                 btn.onclick = () => {
                     DB.saveSetting('rules', '1');
                     modalContainer.innerHTML = '';
@@ -145,6 +149,7 @@ export const WizardController = {
         const modal = container.closest('.fixed');
         if (modal) {
             modal.querySelectorAll('[data-i18n]').forEach((el) => {
+                if (el.id === 'rules-gpl-text' && el.dataset && el.dataset.loaded === '1') return;
                 const key = el.getAttribute('data-i18n');
                 if (dict[key]) el.textContent = dict[key];
             });
@@ -153,9 +158,68 @@ export const WizardController = {
             if (btn && btnText) {
                 btnText.textContent = btn.disabled
                     ? `${dict.eula_wait_prefix || 'Please wait'}... (${Math.max(1, WizardController._eulaSeconds)})`
-                    : (dict.eula_confirm_btn || 'Confirm');
+                    : (dict.eula_confirm_btn || 'Continue');
             }
             try { if (window.lucide) lucide.createIcons(); } catch (_) {}
+        }
+    },
+
+    switchEULATab: async (container, tab = 'usage') => {
+        const root = container || document.getElementById('eula-content-frame');
+        if (!root) return;
+        const target = tab === 'license' ? 'license' : 'usage';
+        WizardController._activeRulesTab = target;
+
+        const isLicense = target === 'license';
+        const usagePanel = root.querySelector('#rules-panel-usage');
+        const licensePanel = root.querySelector('#rules-panel-license');
+        if (usagePanel) usagePanel.classList.toggle('hidden', isLicense);
+        if (licensePanel) licensePanel.classList.toggle('hidden', !isLicense);
+
+        const usageBtn = root.querySelector('#btn-rules-tab-usage');
+        const licenseBtn = root.querySelector('#btn-rules-tab-license');
+        [
+            [usageBtn, !isLicense],
+            [licenseBtn, isLicense]
+        ].forEach(([btn, active]) => {
+            if (!btn) return;
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            if (active) {
+                btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                btn.classList.remove('text-slate-500', 'dark:text-slate-400');
+            } else {
+                btn.classList.remove('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                btn.classList.add('text-slate-500', 'dark:text-slate-400');
+            }
+        });
+
+        root.scrollTop = 0;
+
+        if (!isLicense) return;
+        const preEl = root.querySelector('#rules-gpl-text');
+        const fbEl = root.querySelector('#rules-gpl-fallback');
+        if (preEl && preEl.dataset && preEl.dataset.loaded === '1') return;
+
+        try {
+            let text = WizardController._gplTextCache;
+            if (!text) {
+                const resp = await fetch('LICENSE');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                text = await resp.text();
+                if (!text || !text.trim()) throw new Error('Empty LICENSE file');
+                WizardController._gplTextCache = text;
+            }
+            if (preEl) {
+                preEl.removeAttribute('data-i18n');
+                if (preEl.dataset) preEl.dataset.loaded = '1';
+                preEl.textContent = text;
+                preEl.classList.remove('hidden');
+            }
+            if (fbEl) fbEl.classList.add('hidden');
+        } catch (err) {
+            console.warn('Failed to load LICENSE file:', err);
+            if (preEl) preEl.classList.add('hidden');
+            if (fbEl) fbEl.classList.remove('hidden');
         }
     },
 
@@ -167,6 +231,134 @@ export const WizardController = {
     // In-memory only: a freshly authorized remote profile awaiting the DB password to be persisted encrypted
     _pendingRemoteProfile: null,
     _pendingLinkAfterLogin: false,
+    _quickStarting: false,
+
+    quickStart: async () => {
+        if (WizardController._quickStarting) return;
+        WizardController._quickStarting = true;
+        try {
+            const t = state.translations || {};
+            if (DB.db) {
+                const existing = DB.getSettings();
+                if (!existing.db_password) {
+                    WizardController.app.startSession();
+                    return;
+                }
+                const ok = await UI.confirm(
+                    t.quick_start_confirm_replace
+                    || 'В этом браузере уже открыта защищённая паролем база. Создать новую пустую базу в кэше без пароля и переключиться на неё? Предыдущая база не будет удалена.'
+                );
+                if (!ok) return;
+            }
+
+            const dbKey = `aru_db_quick_${Date.now()}`;
+            await DB.createDBWithKey('', dbKey);
+
+            DB.saveSetting('db_name', t.quick_start_db_name || 'Aru Quick', false);
+            DB.saveSetting('user_mode', 'adult', false);
+            DB.saveSetting('user_name', '', false);
+            DB.saveSetting('db_password', '', false);
+
+            DB.saveSetting('llm_type', 'gemini', false);
+            DB.saveSetting('gemini_key', '', false);
+            DB.saveSetting('gemini_model', 'gemini-2.5-flash', false);
+            DB.saveSetting('openrouter_key', '', false);
+            DB.saveSetting('openrouter_model', '', false);
+            DB.saveSetting('openrouter_url', 'https://openrouter.ai/api/v1/chat/completions', false);
+            DB.saveSetting('custom_key', '', false);
+            DB.saveSetting('custom_model', '', false);
+            DB.saveSetting('custom_url', '', false);
+
+            DB.saveSetting('remote_sync_mode', 'auto', false);
+            DB.saveSetting('remote_conflict', 'ask', false);
+            DB.saveSetting('remote_poll', '0', false);
+            DB.saveSetting('biometrics_enabled', 'false', false);
+            DB.saveSetting('quick_start', '1', false);
+            DB.saveSetting('quick_start_notice_shown', '0', false);
+
+            await DB.save();
+            localStorage.removeItem('aru_last_chat');
+            WizardController.app.startSession();
+        } catch (err) {
+            console.error('Quick start failed:', err);
+            await UI.alert('Quick Start Error: ' + err.message);
+        } finally {
+            WizardController._quickStarting = false;
+        }
+    },
+
+    showQuickStartNotice: () => {
+        const t = state.translations || {};
+        const host = (typeof UI._dialogHost === 'function' ? UI._dialogHost() : null) || document.body;
+        const existing = document.getElementById('aru-quick-start-notice');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'aru-quick-start-notice';
+        overlay.className = 'aru-dialog-root fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm fade-in p-4';
+        overlay.innerHTML = `
+            <div class="aru-dialog bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-6 md:p-7 w-full max-w-lg border border-gray-200 dark:border-gray-700 space-y-5" role="dialog" aria-modal="true">
+                <div class="flex items-start gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="sparkles" class="w-6 h-6"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-lg font-bold text-gray-800 dark:text-white leading-snug">${esc(t.quick_start_notice_title || 'Режим быстрого старта')}</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">${esc(t.quick_start_notice_intro || 'Вы вошли без создания пароля и подключения ИИ. Все локальные инструменты уже доступны: дашборд, задачи, Fit & Care, библиотека и рабочий стол.')}</p>
+                    </div>
+                </div>
+                <div class="space-y-2.5 text-xs text-gray-600 dark:text-gray-300">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/70 rounded-xl border border-gray-100 dark:border-gray-800 flex items-start gap-2.5">
+                        <i data-lucide="cpu" class="w-4 h-4 text-aru-500 flex-shrink-0 mt-0.5"></i>
+                        <span class="leading-relaxed">${esc(t.quick_start_notice_ai || 'ИИ-чат заработает после того, как вы выберете провайдера и укажете API-ключ (или локальный сервер) в разделе Настройки - Общие.')}</span>
+                    </div>
+                    <div class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800/40 text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+                        <i data-lucide="key-round" class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"></i>
+                        <span class="leading-relaxed">${esc(t.quick_start_notice_security || 'База хранится в кэше браузера без пароля. Задайте мастер-пароль в разделе Настройки - Безопасность, чтобы защитить данные и подключить облако или биометрию.')}</span>
+                    </div>
+                    <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800/40 text-blue-800 dark:text-blue-200 flex items-start gap-2.5">
+                        <i data-lucide="download" class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"></i>
+                        <span class="leading-relaxed">${esc(t.quick_start_notice_backup || 'Чтобы не потерять данные при очистке кэша браузера, периодически скачивайте файл базы в разделе Настройки - Хранилище.')}</span>
+                    </div>
+                </div>
+                <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-1">
+                    <button type="button" id="qs-notice-settings" class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                        <span>${esc(t.quick_start_open_settings || 'Открыть настройки')}</span>
+                    </button>
+                    <button type="button" id="qs-notice-ok" class="px-5 py-2.5 bg-aru-500 hover:bg-aru-600 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-aru-500/20 flex items-center justify-center gap-1.5">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        <span>${esc(t.quick_start_got_it || 'Понятно, продолжить')}</span>
+                    </button>
+                </div>
+            </div>`;
+        host.appendChild(overlay);
+        if (window.lucide) lucide.createIcons();
+
+        let closed = false;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (document.querySelectorAll('.aru-dialog-root').length > 1 && overlay !== host.lastElementChild) return;
+            e.preventDefault();
+            close();
+        };
+        const close = () => {
+            if (closed) return;
+            closed = true;
+            document.removeEventListener('keydown', onKeyDown, true);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        };
+
+        document.addEventListener('keydown', onKeyDown, true);
+        overlay.addEventListener('mousedown', (e) => {
+            if (e.target === overlay) close();
+        });
+        overlay.querySelector('#qs-notice-ok').onclick = close;
+        overlay.querySelector('#qs-notice-settings').onclick = () => {
+            close();
+            WizardController.app.openSettings('general');
+        };
+    },
 
     openModal: (type) => {
         const modalContainer = document.getElementById('modal-container');
@@ -185,29 +377,37 @@ export const WizardController = {
             html = WizardController._renderRemoteConnect();
         } else if (type === 'login') {
             const hasFile = !!DB.fileHandle;
+            const isPasswordless = !!(DB.db && !DB.getSettings().db_password);
             const t = state.translations || {};
+            const loginDescKey = isPasswordless
+                ? 'login_desc_no_pwd'
+                : (hasFile ? 'login_desc_connected' : 'login_desc_enter_pwd');
+            const loginDescFallback = isPasswordless
+                ? (t.login_desc_no_pwd || 'База в кэше открывается без пароля. Вы можете продолжить работу или выбрать другой файл.')
+                : (hasFile ? (t.login_desc_connected || 'Ваша база подключена и синхронизирована с диском.') : (t.login_desc_enter_pwd || 'Введите пароль от вашей базы данных'));
             html = `
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm fade-in p-4">
                 <div class="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-md p-8 shadow-2xl relative border border-gray-100 dark:border-gray-700 animate-fade-in-up">
                     <div class="flex flex-col items-center mb-6">
                         <div class="w-16 h-16 bg-aru-50 dark:bg-aru-900/30 rounded-2xl flex items-center justify-center text-aru-500 mb-4 shadow-inner">
-                            <i data-lucide="${hasFile ? 'cloud-check' : 'lock'}" class="w-8 h-8"></i>
+                            <i data-lucide="${(hasFile || isPasswordless) ? 'database' : 'lock'}" class="w-8 h-8"></i>
                         </div>
-                        <h3 class="text-2xl font-bold dark:text-white" data-i18n="${hasFile ? 'login_title_continue' : 'login_title_entry'}">${hasFile ? (t.login_title_continue || 'Продолжить сессию') : (t.login_title_entry || 'Вход в систему')}</h3>
-                        <p class="text-gray-400 text-xs mt-1 text-center" data-i18n="${hasFile ? 'login_desc_connected' : 'login_desc_enter_pwd'}">${hasFile ? (t.login_desc_connected || 'Ваша база подключена и синхронизирована с диском.') : (t.login_desc_enter_pwd || 'Введите пароль от вашей базы данных')}</p>
+                        <h3 class="text-2xl font-bold dark:text-white" data-i18n="${(hasFile || isPasswordless) ? 'login_title_continue' : 'login_title_entry'}">${(hasFile || isPasswordless) ? (t.login_title_continue || 'Продолжить сессию') : (t.login_title_entry || 'Вход в систему')}</h3>
+                        <p class="text-gray-400 text-xs mt-1 text-center" data-i18n="${loginDescKey}">${loginDescFallback}</p>
                     </div>
                     
                     <form onsubmit="app.handleLogin(event)" class="space-y-5">
+                        ${isPasswordless ? '' : `
                         <div class="space-y-2">
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1" data-i18n="label_master_password">${t.label_master_password || 'Мастер-пароль'}</label>
                             <input type="password" name="password" required autofocus class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white transition-all text-sm" placeholder="••••••••">
-                        </div>
+                        </div>`}
 
                         <button type="submit" class="w-full py-4 bg-aru-500 hover:bg-aru-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-aru-500/20 flex items-center justify-center gap-2">
                             <span data-i18n="btn_login_aru">${t.btn_login_aru || 'Зайти в Ару'}</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
                         </button>
 
-                        ${Auth.isWebAuthnSupported() && Auth.hasBiometrics(DB.dbPath || 'default') ? `
+                        ${!isPasswordless && Auth.isWebAuthnSupported() && Auth.hasBiometrics(DB.dbPath || 'default') ? `
                         <button type="button" onclick="app.loginWithBiometrics()" class="w-full py-3.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-2xl font-bold transition flex items-center justify-center gap-2">
                             <i data-lucide="fingerprint" class="w-5 h-5 text-aru-500"></i>
                             <span data-i18n="btn_login_biometrics">${t.btn_login_biometrics || 'Войти по биометрии'}</span>
@@ -248,7 +448,8 @@ export const WizardController = {
 
                         <div class="space-y-2">
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1" data-i18n="label_file_password">${t.label_file_password || 'Пароль от файла'}</label>
-                            <input type="password" name="password" required class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm" placeholder="••••••••">
+                            <input type="password" name="password" class="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-aru-500 outline-none dark:text-white text-sm" placeholder="••••••••">
+                            <p class="text-[11px] text-gray-400" data-i18n="import_password_optional_hint">${t.import_password_optional_hint || 'Если файл базы был сохранён без пароля, оставьте поле пустым.'}</p>
                         </div>
 
                         <button type="submit" class="w-full py-4 bg-aru-500 hover:bg-aru-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-aru-500/20">
@@ -276,6 +477,7 @@ export const WizardController = {
 
     _setRemoteProvider: (p) => {
         WizardController.wizardData.remoteProvider = p;
+        if (p === 'gdrive') RemoteAdapters.gdrive._ensureGisLoaded().catch(() => {});
         document.getElementById('rc-tab-gdrive').className = 'flex-1 py-2 px-1 rounded-lg text-[10px] font-bold transition ' + (p === 'gdrive' ? 'bg-white shadow-sm text-aru-600' : 'text-gray-500');
         document.getElementById('rc-tab-webdav').className = 'flex-1 py-2 px-1 rounded-lg text-[10px] font-bold transition ' + (p === 'webdav' ? 'bg-white shadow-sm text-aru-600' : 'text-gray-500');
         document.getElementById('remote-connect-body').innerHTML = WizardController._renderRemoteConnectBody();
@@ -324,6 +526,7 @@ export const WizardController = {
         const t = state.translations || {};
         const d = WizardController.wizardData;
         if (!d.remoteProvider) d.remoteProvider = 'gdrive';
+        if (d.remoteProvider !== 'webdav') RemoteAdapters.gdrive._ensureGisLoaded().catch(() => {});
         return `
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm fade-in p-4">
             <div class="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-md p-8 shadow-2xl relative border border-gray-100 dark:border-gray-700 animate-fade-in-up max-h-[90vh] flex flex-col">
@@ -792,6 +995,7 @@ export const WizardController = {
             d.webdav_path = g('wiz-webdav-path').trim();
         }
         d.storage = s;
+        if (s === 'gdrive') RemoteAdapters.gdrive._ensureGisLoaded().catch(() => {});
         WizardController.app.renderWizard();
     },
 
@@ -1028,25 +1232,29 @@ export const WizardController = {
             await UI.alert(t.alert_db_not_found || 'Error: Password not found');
             return;
         }
-        const storedHash = res[0].values[0][0];
-        const isValid = await Auth.verifyPassword(pwd, storedHash);
-        if (!isValid) {
-            const t = state.translations || {};
-            await UI.alert(t.alert_wrong_password || 'Wrong password');
-            return;
+        const storedHash = res[0].values[0][0] ?? '';
+        if (storedHash !== '') {
+            const isValid = pwd ? await Auth.verifyPassword(pwd, storedHash) : false;
+            if (!isValid) {
+                const t = state.translations || {};
+                await UI.alert(t.alert_wrong_password || 'Wrong password');
+                return;
+            }
         }
 
         const linkAfterLogin = WizardController._pendingLinkAfterLogin;
         WizardController._pendingLinkAfterLogin = false;
 
         if (WizardController._pendingRemoteProfile) {
-            try {
-                await RemoteStorage.saveProfile(WizardController._pendingRemoteProfile, pwd);
-            } catch (e) {
-                console.warn('Failed to persist remote profile', e);
+            if (pwd) {
+                try {
+                    await RemoteStorage.saveProfile(WizardController._pendingRemoteProfile, pwd);
+                } catch (e) {
+                    console.warn('Failed to persist remote profile', e);
+                }
             }
             WizardController._pendingRemoteProfile = null;
-        } else if (await RemoteStorage.isConfigured()) {
+        } else if (pwd && await RemoteStorage.isConfigured()) {
             try {
                 await RemoteStorage.unlock(pwd);
             } catch (e) {
@@ -1056,10 +1264,12 @@ export const WizardController = {
 
         // A known password can unwrap the workspace key of an existing cloud
         // workspace; v2 then owns sync and refreshRemoteSync skips the legacy path.
-        try {
-            await window.SyncEngine?.start?.({ password: pwd });
-        } catch (e) {
-            console.warn('Sync v2 start after login failed', e);
+        if (pwd) {
+            try {
+                await window.SyncEngine?.start?.({ password: pwd });
+            } catch (e) {
+                console.warn('Sync v2 start after login failed', e);
+            }
         }
 
         await WizardController.app.refreshRemoteSync();
@@ -1069,7 +1279,7 @@ export const WizardController = {
 
     handleLogin: async (e) => {
         e.preventDefault();
-        const pwd = e.target.password.value;
+        const pwd = e.target.password ? e.target.password.value : '';
 
         await WizardController._completeLoginWithPassword(pwd);
     },
@@ -1083,7 +1293,7 @@ export const WizardController = {
 
     handleImportDB: async (e) => {
         e.preventDefault();
-        const pwd = e.target.password.value;
+        const pwd = e.target.password ? e.target.password.value : '';
         const fileInput = document.getElementById('open-file');
 
         try {
@@ -1097,17 +1307,19 @@ export const WizardController = {
             // replaces the live DB immediately, so a wrong password or broken
             // file must not touch the current data.
             const storedHash = await DB.readPasswordHashFromFile(fileInput.files[0]);
-            if (!storedHash) {
+            if (storedHash === null || storedHash === undefined) {
                 const t = state.translations || {};
                 await UI.alert(t.alert_corrupt_db || 'Eror: File is not a base or broken');
                 return;
             }
 
-            const isValid = await Auth.verifyPassword(pwd, storedHash);
-            if (!isValid) {
-                const t = state.translations || {};
-                await UI.alert(t.alert_wrong_password || 'Неверный пароль');
-                return;
+            if (storedHash !== '') {
+                const isValid = pwd ? await Auth.verifyPassword(pwd, storedHash) : false;
+                if (!isValid) {
+                    const t = state.translations || {};
+                    await UI.alert(t.alert_wrong_password || 'Неверный пароль');
+                    return;
+                }
             }
 
             const previousDb = DB.db;

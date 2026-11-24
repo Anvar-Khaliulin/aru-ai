@@ -244,9 +244,10 @@ export const ChatController = {
         }
         if (navigation) navigation.classList.remove('hidden');
 
+        const dashOpen = !!window.Dashboard?.isOpen?.();
         bar.innerHTML = state.tabs.map((tab, index) => {
             const isPrivate = tab.isPrivate;
-            const activeClass = state.activeTabIndex === index ? 'active bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 pb-2.5' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 pb-2';
+            const activeClass = (!dashOpen && state.activeTabIndex === index) ? 'active bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 pb-2.5' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 pb-2';
 
             let tabClass = '';
             if (tab.type === 'plugin') {
@@ -383,6 +384,10 @@ export const ChatController = {
 
     switchTab: async (index) => {
         if (index < 0 || index >= state.tabs.length) return;
+
+        if (window.Dashboard?.isOpen?.()) {
+            window.Dashboard.close({ silent: true });
+        }
 
         const previousIndex = state.activeTabIndex;
         const previousTab = previousIndex >= 0 && previousIndex < state.tabs.length ? state.tabs[previousIndex] : null;
@@ -537,6 +542,7 @@ export const ChatController = {
             document.getElementById('btn-tools-trigger').classList.remove('hidden');
             ChatController.renderTabs();
             Chapters.refreshVisibility();
+            window.Dashboard?.syncEmptyState?.();
         } else {
             const nextIndex = state.activeTabIndex >= index ? Math.max(0, state.activeTabIndex - 1) : state.activeTabIndex;
             state.activeTabIndex = wasActive ? -1 : nextIndex;
@@ -787,9 +793,13 @@ export const ChatController = {
                 const nextIdx = Math.max(0, Math.min(tabIndex !== -1 ? tabIndex : 0, state.tabs.length - 1));
                 await ChatController.switchTab(nextIdx);
             } else {
-                const placeholder = document.getElementById('chat-placeholder');
-                if (placeholder) placeholder.classList.remove('hidden');
                 CanvasManager.close();
+                if (window.Dashboard?.syncEmptyState) {
+                    window.Dashboard.syncEmptyState();
+                } else {
+                    const placeholder = document.getElementById('chat-placeholder');
+                    if (placeholder) placeholder.classList.remove('hidden');
+                }
             }
         }
         ChatController.app.loadChatsList();
@@ -800,8 +810,13 @@ export const ChatController = {
     sendMessage: async (e) => {
         if (e) e.preventDefault();
 
-        // Auto-create chat if none exists
-        if (state.currentChatId === null || state.tabs.length === 0) {
+        const draftInput = document.getElementById('prompt-input');
+        if (window.Dashboard?.isOpen?.()) {
+            if (!draftInput || !draftInput.value.trim()) return;
+            window.Dashboard.close({ silent: true });
+            await ChatController.newChat();
+        } else if (state.currentChatId === null || state.tabs.length === 0) {
+            // Auto-create chat if none exists
             await ChatController.newChat();
         }
 
@@ -997,7 +1012,7 @@ export const ChatController = {
                 if (aborted) {
                     UI.showToast(state.translations?.btn_stop || 'Generation stopped', 'square');
                 } else {
-                    UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                    ChatController._renderChatError(err);
                 }
             }
             if (aborted) console.info('Generation stopped by the user');
@@ -1010,6 +1025,16 @@ export const ChatController = {
             UI.setComposerSending(!!(currentTab && currentTab.isSending));
             ChatController.renderTabs();
         }
+    },
+
+    _renderChatError: (err) => {
+        if (err && err.code === 'MISSING_API_KEY') {
+            const notice = state.translations?.chat_no_ai_key_notice
+                || 'ИИ-провайдер пока не настроен. Откройте Настройки - Общие, выберите провайдера и укажите API-ключ (или адрес локального сервера), чтобы начать общение.';
+            UI.appendMessage({ role: 'model', content: notice, emotion: 'normal' });
+            return;
+        }
+        UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
     },
 
     stopGeneration: () => {
@@ -1035,8 +1060,11 @@ export const ChatController = {
     /**
      * Prepare prompt for discussing a news item and send it as a user message.
      */
-    discussNews: async (title, link, desc, fullText) => {
-        let targetChatId = state.currentChatId;
+    discussNews: async (title, link, desc, fullText, options = {}) => {
+        if (window.Dashboard?.isOpen?.()) {
+            window.Dashboard.close({ silent: true });
+        }
+        let targetChatId = (options && options.forceNewChat) ? null : state.currentChatId;
         if (!targetChatId) {
             const id = DB.createChat(state.translations?.sidebar_new_chat || 'New Chat');
             state.tabs.push({
@@ -1163,7 +1191,7 @@ export const ChatController = {
                 if (aborted) {
                     UI.showToast(state.translations?.btn_stop || 'Generation stopped', 'square');
                 } else {
-                    UI.appendMessage({ role: 'model', content: `**Error:** ${err.message}`, emotion: 'sad' });
+                    ChatController._renderChatError(err);
                 }
             }
             if (aborted) console.info('Generation stopped by the user');

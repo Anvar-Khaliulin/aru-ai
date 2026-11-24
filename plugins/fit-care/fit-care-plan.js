@@ -15,12 +15,8 @@ Object.assign(window.FitCarePlugin, {
         if (!plan) {
             container.innerHTML = `
                 <div class="fit-page">
-                    <div class="fit-page-head">
-                        <div>
-                            <p class="fit-kicker">Aru Fit &amp; Care</p>
-                            <h2>${this.esc(this.t('plan_title'))}</h2>
-                            <p>${this.esc(this.t('plan_sub'))}</p>
-                        </div>
+                    <div class="fit-page-head is-compact">
+                        <h2>${this.esc(this.t('plan_title'))}</h2>
                         <button type="button" class="fit-btn fit-btn-primary" data-fit-action="plan-new">
                             <i data-lucide="plus"></i>${this.esc(this.t('new_plan'))}
                         </button>
@@ -84,12 +80,8 @@ Object.assign(window.FitCarePlugin, {
 
         container.innerHTML = `
             <div class="fit-page">
-                <div class="fit-page-head">
-                    <div>
-                        <p class="fit-kicker">Aru Fit &amp; Care</p>
-                        <h2>${this.esc(this.t('plan_title'))}</h2>
-                        <p>${this.esc(this.t('plan_sub'))}</p>
-                    </div>
+                <div class="fit-page-head is-compact">
+                    <h2>${this.esc(this.t('plan_title'))}</h2>
                     <button type="button" class="fit-btn fit-btn-primary" data-fit-action="plan-new">
                         <i data-lucide="plus"></i>${this.esc(this.t('new_plan'))}
                     </button>
@@ -126,7 +118,7 @@ Object.assign(window.FitCarePlugin, {
                     <div class="fit-card" style="margin-bottom:14px;padding:13px 16px">
                         <div class="fit-row" style="justify-content:space-between;margin-bottom:7px">
                             <span class="fit-section-title" style="margin:0"><i data-lucide="calendar-range"></i>${this.esc(this.t('plan_progress'))}</span>
-                            <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('plan_week_of', { n: progress.currentWeek, total: progress.totalWeeks }))}</span>
+                            <span class="fit-muted" style="font-size:.68rem">${this.esc(this.t('plan_week_of', { n: progress.currentWeek, total: progress.totalWeeks }))}${progress.totalSessions ? ` · ${this.esc(this.t('plan_completed_sessions', { done: progress.doneSessions, total: progress.totalSessions }))}` : ''}</span>
                         </div>
                         <div class="fit-progress"><i style="width:${progress.percent}%"></i></div>
                     </div>
@@ -183,8 +175,23 @@ Object.assign(window.FitCarePlugin, {
         const totalWeeks = Number(plan.weeks) || 0;
         const totalDays = Math.max(1, this.diffDays(plan.start_date, span.end) + 1);
         const elapsed = Math.min(Math.max(this.diffDays(plan.start_date, today) + 1, 0), totalDays);
+        let percent = totalDays ? Math.round((elapsed / totalDays) * 100) : 0;
+        let doneSessions = 0;
+        let totalSessions = 0;
+        if (window.FitCareEngine && typeof window.FitCareEngine.computePlanCompletion === 'function' && window.DB && typeof window.DB.getFitWorkouts === 'function') {
+            const pDays = window.DB.getFitPlanDays(plan.id) || [];
+            const pWorkouts = window.DB.getFitWorkouts(plan.start_date, span.end) || [];
+            const comp = window.FitCareEngine.computePlanCompletion(plan, pDays, pWorkouts, plan.start_date, span.end, today);
+            if (comp.completionPercent !== null) {
+                percent = comp.completionPercent;
+                doneSessions = comp.totalPlanDone;
+                totalSessions = comp.totalPlanSessions;
+            }
+        }
         return {
-            percent: totalDays ? Math.round((elapsed / totalDays) * 100) : 0,
+            percent,
+            doneSessions,
+            totalSessions,
             currentWeek: Math.min(Math.max(Math.floor(this.diffDays(span.weekStart, today) / 7) + 1, 1), Math.max(totalWeeks, 1)),
             totalWeeks,
             inPlan: today >= plan.start_date && today <= span.end,

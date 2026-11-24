@@ -1,34 +1,34 @@
 /*
 ---ARU-LAB.SPACE---ALMATY---2026---
-Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care-plugin-root.
+Aru Fit & Care — calm modern styles, scoped to #fit-care-plugin-root / .fit-care-plugin-root.
 ---chat.aru-lab.space---PWA---
 */
 #fit-care-plugin-root,
 .fit-care-plugin-root {
-    --fit-accent: #e11d48;
-    --fit-accent-strong: #be123c;
-    --fit-accent-soft: #fff1f2;
-    --fit-accent-ring: rgba(225, 29, 72, 0.14);
-    --fit-emerald: #059669;
-    --fit-emerald-soft: #ecfdf5;
-    --fit-violet: #7c3aed;
-    --fit-violet-soft: #f5f3ff;
-    --fit-amber: #d97706;
-    --fit-amber-soft: #fffbeb;
-    --fit-sky: #0284c7;
-    --fit-sky-soft: #f0f9ff;
-    --fit-bg: #fafafa;
-    --fit-card: #ffffff;
-    --fit-card-2: #f4f4f5;
-    --fit-text: #18181b;
-    --fit-subtle: #71717a;
-    --fit-faint: #a1a1aa;
-    --fit-border: #e4e4e7;
-    --fit-border-strong: #d4d4d8;
-    --fit-grid-line: rgba(24, 24, 27, 0.11);
-    --fit-shadow: 0 1px 2px rgba(24, 24, 27, 0.05);
-    --fit-shadow-lg: 0 18px 45px rgba(24, 24, 27, 0.16);
-    --fit-radius: 18px;
+    --fit-accent: #c9566e;
+    --fit-accent-strong: #b0435b;
+    --fit-accent-soft: #fdf2f4;
+    --fit-accent-ring: rgba(201, 86, 110, 0.16);
+    --fit-emerald: #1d9a6c;
+    --fit-emerald-soft: #eef9f4;
+    --fit-violet: #6d5cd6;
+    --fit-violet-soft: #f3f1fd;
+    --fit-amber: #c97a28;
+    --fit-amber-soft: #fef7ee;
+    --fit-sky: #2c82b5;
+    --fit-sky-soft: #eff7fc;
+    --fit-bg: var(--aru-bg, #f4f4f6);
+    --fit-card: var(--aru-surface, #ffffff);
+    --fit-card-2: var(--aru-surface-muted, #f4f4f6);
+    --fit-text: var(--aru-text, #1c1c1e);
+    --fit-subtle: var(--aru-text-muted, #6e6e73);
+    --fit-faint: var(--aru-text-faint, #9a9aa0);
+    --fit-border: var(--aru-border, #e2e2e7);
+    --fit-border-strong: var(--aru-border, #d1d1d8);
+    --fit-grid-line: rgba(24, 24, 27, 0.09);
+    --fit-shadow: var(--aru-shadow-xs, 0 1px 2px rgba(24, 24, 27, 0.05));
+    --fit-shadow-lg: var(--aru-shadow-lg, 0 18px 45px rgba(24, 24, 27, 0.16));
+    --fit-radius: 16px;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -46,27 +46,27 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .dark #fit-care-plugin-root,
 .dark .fit-care-plugin-root {
-    --fit-accent: #fb7185;
-    --fit-accent-strong: #f43f5e;
-    --fit-accent-soft: #3f1d29;
-    --fit-accent-ring: rgba(251, 113, 133, 0.18);
-    --fit-emerald: #34d399;
-    --fit-emerald-soft: #12362c;
-    --fit-violet: #a78bfa;
-    --fit-violet-soft: #2a2247;
-    --fit-amber: #fbbf24;
-    --fit-amber-soft: #3a2f14;
-    --fit-sky: #38bdf8;
-    --fit-sky-soft: #122c3d;
-    --fit-bg: var(--aru-surface, #1c1c1e);
-    --fit-card: #232328;
-    --fit-card-2: #2c2c32;
-    --fit-text: #f4f4f5;
-    --fit-subtle: #a1a1aa;
-    --fit-faint: #71717a;
-    --fit-border: #333338;
-    --fit-border-strong: #44444a;
-    --fit-grid-line: rgba(255, 255, 255, 0.11);
+    --fit-accent: #e07c92;
+    --fit-accent-strong: #cf637b;
+    --fit-accent-soft: rgba(224, 124, 146, 0.14);
+    --fit-accent-ring: rgba(224, 124, 146, 0.22);
+    --fit-emerald: #4cc294;
+    --fit-emerald-soft: rgba(76, 194, 148, 0.13);
+    --fit-violet: #9f92ed;
+    --fit-violet-soft: rgba(159, 146, 237, 0.14);
+    --fit-amber: #e2a24f;
+    --fit-amber-soft: rgba(226, 162, 79, 0.13);
+    --fit-sky: #5cb0e0;
+    --fit-sky-soft: rgba(92, 176, 224, 0.14);
+    --fit-bg: var(--aru-bg, #131315);
+    --fit-card: var(--aru-surface, #1c1c1e);
+    --fit-card-2: var(--aru-surface-muted, #252529);
+    --fit-text: var(--aru-text, #f4f4f5);
+    --fit-subtle: var(--aru-text-muted, #a1a1aa);
+    --fit-faint: var(--aru-text-faint, #71717a);
+    --fit-border: #2f2f35;
+    --fit-border-strong: #3f3f46;
+    --fit-grid-line: rgba(255, 255, 255, 0.1);
     --fit-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     --fit-shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.55);
 }
@@ -82,18 +82,16 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     color: inherit;
 }
 
-/* ---------- top bar ---------- */
+/* ---------- compact 1-row topbar ---------- */
 .fit-topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-        "brand actions"
-        "nav nav";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "brand nav actions";
     align-items: center;
-    gap: 9px 18px;
-    padding: 10px 22px 9px;
-    border-bottom: 1px solid var(--fit-border);
+    gap: 10px 14px;
+    padding: 8px 18px;
     background: var(--fit-card);
+    box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45);
     flex: none;
     z-index: 5;
 }
@@ -102,16 +100,16 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     grid-area: brand;
     display: flex;
     align-items: center;
-    gap: 11px;
+    gap: 9px;
     min-width: 0;
 }
 
 .fit-brand-mark {
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
     color: var(--fit-accent);
     background: var(--fit-accent-soft);
     flex: none;
@@ -121,24 +119,12 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-brand-copy h1 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.94rem;
     font-weight: 800;
     letter-spacing: -0.01em;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-.fit-brand-copy p {
-    margin: 1px 0 0;
-    color: var(--fit-subtle);
-    font-size: 0.7rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Navigation always sits on its own full-width row so it never fights the app sidebar. */
 .fit-nav {
     grid-area: nav;
     display: grid;
@@ -146,9 +132,11 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     gap: 3px;
     width: 100%;
+    max-width: 560px;
+    justify-self: center;
     min-width: 0;
     padding: 3px;
-    border-radius: 13px;
+    border-radius: 11px;
     background: var(--fit-card-2);
     container-type: inline-size;
     container-name: fitnav;
@@ -158,15 +146,15 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: 6px;
     width: 100%;
     min-width: 0;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border: 0;
-    border-radius: 10px;
+    border-radius: 8px;
     background: transparent;
     color: var(--fit-subtle);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
@@ -187,113 +175,81 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     box-shadow: var(--fit-shadow);
 }
 
-.fit-nav-btn svg { width: 15px; height: 15px; flex: none; }
+.fit-nav-btn svg { width: 14px; height: 14px; flex: none; }
 
-@container fitnav (max-width: 640px) {
-    .fit-nav-btn { padding: 7px 6px; font-size: 0.72rem; gap: 5px; }
-}
-
-@container fitnav (max-width: 500px) {
-    .fit-nav-btn { padding: 9px 4px; gap: 0; }
+@container fitnav (max-width: 480px) {
+    .fit-nav-btn { padding: 7px 4px; gap: 0; }
     .fit-nav-btn span { display: none; }
-    .fit-nav-btn svg { width: 17px; height: 17px; }
+    .fit-nav-btn svg { width: 16px; height: 16px; }
 }
 
 .fit-top-actions {
     grid-area: actions;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     flex: none;
 }
 
 .fit-quick-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
+    gap: 5px;
+    padding: 7px 12px;
     border: 0;
-    border-radius: 11px;
+    border-radius: 10px;
     background: var(--fit-accent);
     color: #fff;
-    font-size: 0.78rem;
-    font-weight: 800;
+    font-size: 0.75rem;
+    font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 6px 16px var(--fit-accent-ring);
 }
 
 .fit-quick-btn:hover { background: var(--fit-accent-strong); }
-
-.fit-quick-btn svg { width: 15px; height: 15px; }
-
-.fit-icon-btn {
-    display: inline-grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    border: 1px solid var(--fit-border);
-    border-radius: 10px;
-    background: var(--fit-card);
-    color: var(--fit-subtle);
-    cursor: pointer;
-}
-
-.fit-icon-btn:hover { color: var(--fit-accent); border-color: var(--fit-border-strong); }
+.fit-quick-btn svg { width: 14px; height: 14px; }
 
 /* ---------- viewport ---------- */
-/* Container queries (not media queries) drive the layout so an expanded app sidebar
-   is accounted for. Modal cards get their own "fitmodal" container. */
 .fit-view {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
-    scrollbar-color: var(--fit-border-strong) transparent;
+    scrollbar-color: #c7c7cc transparent;
     container-type: inline-size;
     container-name: fitview;
 }
 
-.fit-view::-webkit-scrollbar { width: 9px; }
-.fit-view::-webkit-scrollbar-thumb { background: var(--fit-border-strong); border-radius: 99px; border: 2px solid var(--fit-bg); }
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-view {
+    scrollbar-color: #45454b transparent;
+}
+
+.fit-view::-webkit-scrollbar { width: 8px; }
+.fit-view::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 99px; }
+.dark .fit-view::-webkit-scrollbar-thumb { background: #45454b; }
 
 .fit-page {
     width: 100%;
     max-width: 1240px;
     margin: 0 auto;
-    padding: 22px 22px 40px;
+    padding: 16px 20px 34px;
 }
 
 .fit-page-head {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 
+.fit-page-head.is-compact h2,
 .fit-page-head h2 {
     margin: 0;
-    font-size: 1.45rem;
+    font-size: 1.24rem;
     font-weight: 800;
     letter-spacing: -0.02em;
-}
-
-.fit-page-head p {
-    margin: 4px 0 0;
-    color: var(--fit-subtle);
-    font-size: 0.82rem;
-    max-width: 62ch;
-}
-
-.fit-kicker {
-    margin: 0 0 5px;
-    color: var(--fit-accent);
-    font-size: 0.66rem;
-    font-weight: 800;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
 }
 
 .fit-muted { color: var(--fit-subtle); }
@@ -301,18 +257,18 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-nowrap { white-space: nowrap; }
 .fit-grow { flex: 1; min-width: 0; }
 .fit-inline { display: inline-flex; align-items: center; gap: 6px; }
-.fit-stack { display: flex; flex-direction: column; gap: 14px; }
-.fit-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fit-stack { display: flex; flex-direction: column; gap: 12px; }
+.fit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fit-spacer { flex: 1; }
 .fit-hidden { display: none !important; }
 
 /* ---------- generic blocks ---------- */
 .fit-card {
-    border: 1px solid var(--fit-border);
+    border: 0;
     border-radius: var(--fit-radius);
     background: var(--fit-card);
     box-shadow: var(--fit-shadow);
-    padding: 18px;
+    padding: 16px;
 }
 
 .fit-card-head {
@@ -320,29 +276,29 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
 
 .fit-card-head h3 {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 800;
 }
 
 .fit-card-head p {
     margin: 2px 0 0;
     color: var(--fit-subtle);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
 }
 
 .fit-section-title {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin: 0 0 10px;
-    font-size: 0.68rem;
+    gap: 6px;
+    margin: 0 0 8px;
+    font-size: 0.67rem;
     font-weight: 800;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--fit-subtle);
 }
@@ -354,17 +310,18 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    padding: 22px 16px;
-    border: 1px dashed var(--fit-border-strong);
-    border-radius: 14px;
+    gap: 6px;
+    padding: 18px 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--fit-card-2);
     color: var(--fit-subtle);
     text-align: center;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
 }
 
-.fit-empty svg { width: 22px; height: 22px; color: var(--fit-faint); }
-.fit-empty strong { color: var(--fit-text); font-size: 0.82rem; }
+.fit-empty svg { width: 20px; height: 20px; color: var(--fit-faint); }
+.fit-empty strong { color: var(--fit-text); font-size: 0.8rem; }
 
 /* ---------- buttons ---------- */
 .fit-btn {
@@ -372,26 +329,25 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 8px 14px;
-    border: 1px solid transparent;
+    padding: 7px 13px;
+    border: 0;
     border-radius: 10px;
     background: var(--fit-card-2);
     color: var(--fit-text);
-    font-size: 0.76rem;
+    font-size: 0.75rem;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.16s, border-color 0.16s, color 0.16s, opacity 0.16s;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
 }
 
 .fit-btn svg { width: 14px; height: 14px; }
-.fit-btn:hover { background: var(--fit-border); }
+.fit-btn:hover { background: var(--aru-surface-hover, var(--fit-border)); }
 .fit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .fit-btn-primary {
     background: var(--fit-accent);
     color: #fff;
-    box-shadow: 0 5px 14px var(--fit-accent-ring);
 }
 
 .fit-btn-primary:hover { background: var(--fit-accent-strong); }
@@ -404,15 +360,14 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-btn-soft:hover { background: var(--fit-accent-soft); color: var(--fit-accent-strong); }
 
 .fit-btn-ghost {
-    background: transparent;
-    border-color: var(--fit-border);
+    background: var(--fit-card-2);
     color: var(--fit-subtle);
 }
 
-.fit-btn-ghost:hover { color: var(--fit-text); border-color: var(--fit-border-strong); background: transparent; }
+.fit-btn-ghost:hover { color: var(--fit-text); background: var(--aru-surface-hover, var(--fit-border)); }
 
 .fit-btn-danger { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-btn-danger, .dark .fit-care-plugin-root .fit-btn-danger { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-btn-danger, .dark .fit-care-plugin-root .fit-btn-danger { background: rgba(239, 68, 68, 0.14); color: #f87171; }
 .fit-btn-danger:hover { background: #fee2e2; }
 
 .fit-btn-xs { padding: 5px 9px; font-size: 0.68rem; border-radius: 8px; }
@@ -421,21 +376,21 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-btn-icon {
     display: inline-grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 0;
-    border-radius: 9px;
+    border-radius: 8px;
     background: transparent;
     color: var(--fit-subtle);
     cursor: pointer;
+    flex: none;
 }
 
 .fit-btn-icon:hover { background: var(--fit-card-2); color: var(--fit-accent); }
+.fit-btn-icon svg { width: 14px; height: 14px; }
 
-.fit-btn-icon svg { width: 15px; height: 15px; }
-
-/* ---------- badges and chips ---------- */
+/* ---------- badges ---------- */
 .fit-badge {
     display: inline-flex;
     align-items: center;
@@ -445,8 +400,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     background: var(--fit-card-2);
     color: var(--fit-subtle);
     font-size: 0.64rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+    font-weight: 700;
     white-space: nowrap;
 }
 
@@ -457,46 +411,24 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-badge-amber { background: var(--fit-amber-soft); color: var(--fit-amber); }
 .fit-badge-sky { background: var(--fit-sky-soft); color: var(--fit-sky); }
 .fit-badge-danger { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-badge-danger, .dark .fit-care-plugin-root .fit-badge-danger { background: #3a1a1a; color: #f87171; }
-
-.fit-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 9px;
-    border: 1px solid var(--fit-border);
-    border-radius: 99px;
-    background: var(--fit-card);
-    color: var(--fit-subtle);
-    font-size: 0.68rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.fit-chip.is-active {
-    border-color: transparent;
-    background: var(--fit-accent-soft);
-    color: var(--fit-accent);
-}
-
-.fit-chip:hover { border-color: var(--fit-border-strong); }
+.dark #fit-care-plugin-root .fit-badge-danger, .dark .fit-care-plugin-root .fit-badge-danger { background: rgba(239, 68, 68, 0.14); color: #f87171; }
 
 /* ---------- calendar ---------- */
 .fit-cal-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
 
 .fit-cal-title {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: 1.06rem;
     font-weight: 800;
     letter-spacing: -0.015em;
     text-transform: capitalize;
-    min-width: 160px;
+    min-width: 140px;
 }
 
 .fit-range-switch {
@@ -508,13 +440,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-range-switch button {
-    padding: 5px 11px;
+    padding: 5px 10px;
     border: 0;
     border-radius: 8px;
     background: transparent;
     color: var(--fit-subtle);
-    font-size: 0.7rem;
-    font-weight: 800;
+    font-size: 0.69rem;
+    font-weight: 700;
     cursor: pointer;
 }
 
@@ -526,15 +458,20 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-cal-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
-    gap: 16px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(330px, 1fr);
+    gap: 14px;
     align-items: stretch;
+    transition: grid-template-columns 0.18s ease;
+}
+
+.fit-cal-layout.is-chat-wide {
+    grid-template-columns: minmax(0, 0.85fr) minmax(420px, 1.45fr);
 }
 
 .fit-calendar-card {
     align-self: start;
-    padding: 16px;
-    border: 1px solid var(--fit-border);
+    padding: 14px;
+    border: 0;
     border-radius: var(--fit-radius);
     background: var(--fit-card);
     box-shadow: var(--fit-shadow);
@@ -544,13 +481,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-cal-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 5px;
+    gap: 4px;
 }
 
 .fit-weekdays {
-    margin-bottom: 6px;
+    margin-bottom: 5px;
     color: var(--fit-faint);
-    font-size: 0.63rem;
+    font-size: 0.61rem;
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -563,41 +500,34 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     flex-direction: column;
     align-items: flex-start;
     gap: 3px;
-    min-height: 76px;
-    padding: 7px 7px 6px;
-    border: 1px solid transparent;
-    border-radius: 12px;
+    min-height: 74px;
+    padding: 6px;
+    border: 0;
+    border-radius: 11px;
     background: transparent;
     color: inherit;
     cursor: pointer;
     text-align: left;
-    transition: background 0.14s, border-color 0.14s;
+    transition: background 0.14s;
     overflow: hidden;
 }
 
-.fit-day:hover { background: var(--fit-card-2); }
-
-.fit-day.is-selected {
-    border-color: var(--fit-accent);
-    background: var(--fit-accent-soft);
-}
-
+.fit-day:hover:not(.is-selected) { background: var(--fit-card-2); }
+.fit-day.is-selected { background: var(--fit-accent-soft); }
 .fit-day.is-outside { opacity: 0.35; }
 
-.fit-day.is-period { background: linear-gradient(180deg, rgba(225, 29, 72, 0.09), transparent 75%); }
-.fit-day.is-fertile { background: linear-gradient(180deg, rgba(2, 132, 199, 0.09), transparent 75%); }
-.fit-day.is-ovulation { background: linear-gradient(180deg, rgba(124, 58, 237, 0.12), transparent 78%); }
+.fit-day.is-period { background: linear-gradient(180deg, rgba(201, 86, 110, 0.09), transparent 75%); }
+.fit-day.is-fertile { background: linear-gradient(180deg, rgba(44, 130, 181, 0.08), transparent 75%); }
+.fit-day.is-ovulation { background: linear-gradient(180deg, rgba(109, 92, 214, 0.11), transparent 78%); }
 
 .fit-day.is-selected.is-period,
 .fit-day.is-selected.is-fertile,
-.fit-day.is-selected.is-ovulation { background: var(--fit-accent-soft); }
+.fit-day.is-selected.is-ovulation,
+.fit-day.is-forecast.is-selected { background: var(--fit-accent-soft); }
 
-/* Forecast days keep the phase hint but lose the solid fill, so predicted
-   periods are never mistaken for logged ones. */
 .fit-day.is-forecast.is-period,
 .fit-day.is-forecast.is-fertile,
 .fit-day.is-forecast.is-ovulation { background: transparent; }
-.fit-day.is-forecast.is-selected { background: var(--fit-accent-soft); }
 
 .fit-day-top {
     display: flex;
@@ -610,10 +540,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-day-num {
     display: grid;
     place-items: center;
-    width: 23px;
-    height: 23px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 800;
 }
 
@@ -634,10 +564,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-day-phase.ovulation { background: var(--fit-violet); }
 .fit-day-phase.luteal { background: var(--fit-amber); }
 
-.fit-day-phase.period.is-forecast { background: transparent; border: 1.5px solid var(--fit-accent); }
-.fit-day-phase.fertile.is-forecast { background: transparent; border: 1.5px solid var(--fit-sky); }
-.fit-day-phase.ovulation.is-forecast { background: transparent; border: 1.5px solid var(--fit-violet); }
-.fit-day-phase.luteal.is-forecast { background: transparent; border: 1.5px solid var(--fit-amber); }
+.fit-day-phase.period.is-forecast { background: color-mix(in srgb, var(--fit-accent) 45%, transparent); }
+.fit-day-phase.fertile.is-forecast { background: color-mix(in srgb, var(--fit-sky) 45%, transparent); }
+.fit-day-phase.ovulation.is-forecast { background: color-mix(in srgb, var(--fit-violet) 45%, transparent); }
+.fit-day-phase.luteal.is-forecast { background: color-mix(in srgb, var(--fit-amber) 45%, transparent); }
 
 .fit-day-lock {
     display: inline-flex;
@@ -652,14 +582,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-day-lock svg { width: 9px; height: 9px; }
-
 .fit-day-lock.is-red { background: var(--fit-accent-soft); color: var(--fit-accent); }
 
 .fit-day-label {
     width: 100%;
     color: var(--fit-subtle);
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-size: 0.64rem;
+    font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
@@ -668,7 +597,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-day-weight {
     color: var(--fit-violet);
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     font-weight: 800;
 }
 
@@ -694,14 +623,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-mark svg { width: 9px; height: 9px; }
 .fit-mark.workout-done { background: var(--fit-emerald-soft); color: var(--fit-emerald); }
 .fit-mark.workout-skipped { background: #fef2f2; color: #dc2626; }
+.dark #fit-care-plugin-root .fit-mark.workout-skipped { background: rgba(239, 68, 68, 0.14); color: #f87171; }
 .fit-mark.weight { background: var(--fit-violet-soft); color: var(--fit-violet); }
 .fit-mark.meal { background: var(--fit-amber-soft); color: var(--fit-amber); }
 .fit-mark.med { background: var(--fit-sky-soft); color: var(--fit-sky); }
 .fit-mark.note { background: var(--fit-card-2); color: var(--fit-subtle); }
 .fit-mark.cycle { background: var(--fit-accent-soft); color: var(--fit-accent); }
 .fit-mark.intimacy { background: var(--fit-card-2); color: var(--fit-subtle); }
-
-.dark #fit-care-plugin-root .fit-mark.workout-skipped, .dark .fit-care-plugin-root .fit-mark.workout-skipped { background: #3a1a1a; color: #f87171; }
 
 /* week view */
 .fit-week {
@@ -714,19 +642,22 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-height: 220px;
-    padding: 9px;
-    border: 1px solid var(--fit-border);
-    border-radius: 13px;
-    background: var(--fit-card);
+    min-height: 210px;
+    padding: 8px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--fit-card-2);
     cursor: pointer;
     text-align: left;
     color: inherit;
 }
 
-.fit-week-day:hover { border-color: var(--fit-border-strong); }
-.fit-week-day.is-today { border-color: var(--fit-accent); }
-.fit-week-day.is-selected { border-color: var(--fit-accent); background: var(--fit-accent-soft); }
+.fit-week-day.is-today:not(.is-selected) {
+    background: var(--fit-card);
+    box-shadow: inset 0 0 0 1.5px var(--fit-accent);
+}
+
+.fit-week-day.is-selected { background: var(--fit-accent-soft); }
 
 .fit-week-day-head {
     display: flex;
@@ -735,121 +666,134 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     gap: 4px;
 }
 
-.fit-week-day-head b { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.fit-week-day-head span { color: var(--fit-subtle); font-size: 0.68rem; }
+.fit-week-day-head b { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.fit-week-day-head span { color: var(--fit-subtle); font-size: 0.66rem; }
 
 .fit-week-session {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 6px 7px;
-    border-radius: 9px;
-    background: var(--fit-card-2);
-    font-size: 0.67rem;
+    padding: 5px 6px;
+    border-radius: 8px;
+    background: var(--fit-card);
+    font-size: 0.66rem;
     font-weight: 700;
     line-height: 1.25;
 }
 
 .fit-week-session small { color: var(--fit-subtle); font-weight: 600; }
-.fit-week-session.rest { background: transparent; border: 1px dashed var(--fit-border); color: var(--fit-faint); font-weight: 600; }
+.fit-week-session.rest { background: transparent; color: var(--fit-faint); font-weight: 600; }
 .fit-week-session.is-done { background: var(--fit-emerald-soft); color: var(--fit-emerald); }
 .fit-week-session.is-skipped { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-week-session.is-skipped, .dark .fit-care-plugin-root .fit-week-session.is-skipped { background: #3a1a1a; color: #f87171; }
+.dark #fit-care-plugin-root .fit-week-session.is-skipped { background: rgba(239, 68, 68, 0.14); color: #f87171; }
 
 .fit-week-meta {
     margin-top: auto;
     color: var(--fit-subtle);
-    font-size: 0.64rem;
+    font-size: 0.63rem;
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
 /* ---------- day panel ---------- */
-/* The panel stretches to the calendar column height so the Aru chat gets the same room. */
 .fit-day-panel {
-    border: 1px solid var(--fit-border);
+    border: 0;
     border-radius: var(--fit-radius);
     background: var(--fit-card);
     box-shadow: var(--fit-shadow);
     overflow: hidden;
     position: sticky;
-    top: 16px;
+    top: 14px;
     display: flex;
     flex-direction: column;
     min-height: 0;
-    max-height: calc(100dvh - 150px);
+    max-height: calc(100dvh - 140px);
 }
 
 .fit-day-head {
     flex: none;
-    padding: 15px 16px 0;
+    padding: 13px 15px 0;
 }
 
 .fit-day-head-top {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
 }
 
 .fit-day-head h3 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 800;
     text-transform: capitalize;
 }
 
 .fit-day-head p {
-    margin: 3px 0 0;
+    margin: 4px 0 0;
     color: var(--fit-subtle);
-    font-size: 0.72rem;
-    text-transform: capitalize;
+    font-size: 0.7rem;
 }
 
 .fit-day-tabs {
-    display: flex;
-    gap: 2px;
-    margin-top: 12px;
-    border-bottom: 1px solid var(--fit-border);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+    margin-top: 10px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--fit-card-2);
 }
 
 .fit-day-tab {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
-    padding: 8px 11px;
+    padding: 6px 10px;
     border: 0;
-    border-bottom: 2px solid transparent;
+    border-radius: 8px;
     background: transparent;
     color: var(--fit-subtle);
-    font-size: 0.74rem;
-    font-weight: 800;
+    font-size: 0.73rem;
+    font-weight: 700;
     cursor: pointer;
-    margin-bottom: -1px;
 }
 
-.fit-day-tab.is-active { color: var(--fit-accent); border-bottom-color: var(--fit-accent); }
+.fit-day-tab.is-active {
+    background: var(--fit-card);
+    color: var(--fit-accent);
+    box-shadow: var(--fit-shadow);
+}
+
 .fit-day-tab svg { width: 13px; height: 13px; }
 
 .fit-day-body {
     flex: 1 1 auto;
     min-height: 240px;
     overflow-y: auto;
-    padding: 14px 16px 18px;
+    padding: 12px 15px 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     scrollbar-width: thin;
 }
 
-.fit-day-body::-webkit-scrollbar { width: 7px; }
-.fit-day-body::-webkit-scrollbar-thumb { background: var(--fit-border-strong); border-radius: 99px; }
+.fit-day-body::-webkit-scrollbar,
+.fit-chat-thread::-webkit-scrollbar,
+.fit-modal-body::-webkit-scrollbar { width: 6px; }
+.fit-day-body::-webkit-scrollbar-thumb,
+.fit-chat-thread::-webkit-scrollbar-thumb,
+.fit-modal-body::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 99px; }
+.dark .fit-day-body::-webkit-scrollbar-thumb,
+.dark .fit-chat-thread::-webkit-scrollbar-thumb,
+.dark .fit-modal-body::-webkit-scrollbar-thumb { background: #45454b; }
 
 .fit-day-section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
 }
 
 .fit-day-section-head {
@@ -864,23 +808,141 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     gap: 6px;
     margin: 0;
-    font-size: 0.66rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--fit-subtle);
 }
 
 .fit-day-section-head h4 svg { width: 12px; height: 12px; color: var(--fit-accent); }
 
+/* Nutrition & macro bars inside Day panel */
+.fit-nut-card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 10px 11px;
+    border-radius: 12px;
+    background: var(--fit-card-2);
+}
+
+.fit-nut-kcal-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.fit-nut-kcal-val { font-size: 0.96rem; font-weight: 800; }
+.fit-nut-kcal-val small { font-size: 0.68rem; font-weight: 600; color: var(--fit-subtle); }
+
+.fit-nut-water {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--fit-sky);
+}
+
+.fit-nut-water svg { width: 12px; height: 12px; }
+
+.fit-nut-track {
+    height: 6px;
+    border-radius: 99px;
+    background: var(--fit-card);
+    overflow: hidden;
+}
+
+.fit-nut-track i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: var(--fit-accent);
+    transition: width 0.2s;
+}
+
+.fit-nut-track.is-over i { background: var(--fit-amber); }
+
+.fit-nut-water-track {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--fit-card);
+    overflow: hidden;
+}
+
+.fit-nut-water-track i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: var(--fit-sky);
+}
+
+.fit-macro-bars {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.fit-macro-bar { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.fit-macro-bar-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 0.65rem;
+}
+
+.fit-macro-bar-top span { color: var(--fit-subtle); font-weight: 800; }
+.fit-macro-bar-top b { font-weight: 700; white-space: nowrap; }
+.fit-macro-bar-top b small { color: var(--fit-subtle); font-weight: 500; }
+
+.fit-macro-track {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--fit-card);
+    overflow: hidden;
+}
+
+.fit-macro-track i { display: block; height: 100%; border-radius: 99px; }
+.fit-macro-bar.is-p .fit-macro-track i { background: var(--fit-emerald); }
+.fit-macro-bar.is-c .fit-macro-track i { background: var(--fit-amber); }
+.fit-macro-bar.is-f .fit-macro-track i { background: var(--fit-violet); }
+
+/* Filled-only metric pills */
+.fit-metric-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.fit-metric-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 9px;
+    background: var(--fit-card-2);
+    font-size: 0.72rem;
+}
+
+.fit-metric-pill span { color: var(--fit-subtle); font-size: 0.65rem; font-weight: 600; }
+.fit-metric-pill b { font-weight: 800; }
+
+/* Unified training card */
 .fit-plan-session {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 11px 12px;
-    border: 1px solid var(--fit-border);
+    padding: 10px 11px;
     border-radius: 12px;
     background: var(--fit-card-2);
+}
+
+.fit-plan-session.is-done {
+    background: var(--fit-emerald-soft);
 }
 
 .fit-plan-session-top {
@@ -890,8 +952,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     gap: 8px;
 }
 
-.fit-plan-session strong { font-size: 0.84rem; }
-.fit-plan-session p { margin: 2px 0 0; color: var(--fit-subtle); font-size: 0.7rem; }
+.fit-plan-session strong { font-size: 0.82rem; }
+.fit-plan-session p { margin: 2px 0 0; color: var(--fit-subtle); font-size: 0.68rem; }
 
 .fit-session-ex {
     display: flex;
@@ -903,9 +965,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     padding: 2px 7px;
     border-radius: 6px;
     background: var(--fit-card);
-    border: 1px solid var(--fit-border);
     color: var(--fit-subtle);
-    font-size: 0.64rem;
+    font-size: 0.63rem;
     font-weight: 600;
 }
 
@@ -913,85 +974,45 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    padding: 10px 11px;
-    border: 1px solid var(--fit-border);
+    padding: 9px 10px;
     border-radius: 11px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
 }
 
 .fit-actual-card .fit-actual-icon {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
     background: var(--fit-emerald-soft);
     color: var(--fit-emerald);
     flex: none;
 }
 
 .fit-actual-card.is-skipped .fit-actual-icon { background: #fef2f2; color: #dc2626; }
-.dark #fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon, .dark .fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon { background: #3a1a1a; color: #f87171; }
-
-.fit-actual-card .fit-actual-icon svg { width: 14px; height: 14px; }
-.fit-actual-card strong { display: block; font-size: 0.78rem; }
-.fit-actual-card small { color: var(--fit-subtle); font-size: 0.68rem; }
-
-.fit-metric-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-}
-
-.fit-metric {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding: 8px 9px;
-    border: 1px solid var(--fit-border);
-    border-radius: 10px;
-    background: var(--fit-card);
-    min-width: 0;
-}
-
-.fit-metric span {
-    color: var(--fit-faint);
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fit-metric b {
-    font-size: 0.86rem;
-    font-weight: 800;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fit-metric small { color: var(--fit-faint); font-size: 0.6rem; }
+.dark #fit-care-plugin-root .fit-actual-card.is-skipped .fit-actual-icon { background: rgba(239, 68, 68, 0.14); color: #f87171; }
+.fit-actual-card .fit-actual-icon svg { width: 13px; height: 13px; }
+.fit-actual-card strong { display: block; font-size: 0.77rem; }
+.fit-actual-card small { color: var(--fit-subtle); font-size: 0.66rem; }
 
 .fit-alert {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 9px 10px;
-    border: 1px solid;
+    padding: 8px 10px;
+    border: 0;
     border-radius: 10px;
-    font-size: 0.7rem;
+    font-size: 0.69rem;
     line-height: 1.4;
 }
 
 .fit-alert svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
-.fit-alert-warn { border-color: #fde68a; background: var(--fit-amber-soft); color: #92400e; }
-.dark #fit-care-plugin-root .fit-alert-warn, .dark .fit-care-plugin-root .fit-alert-warn { border-color: #5a4718; color: #fbbf24; }
-.fit-alert-danger { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
-.dark #fit-care-plugin-root .fit-alert-danger, .dark .fit-care-plugin-root .fit-alert-danger { border-color: #572a2a; background: #3a1a1a; color: #fca5a5; }
-.fit-alert-info { border-color: var(--fit-border); background: var(--fit-card-2); color: var(--fit-subtle); }
+.fit-alert-warn { background: var(--fit-amber-soft); color: #92400e; }
+.dark #fit-care-plugin-root .fit-alert-warn { color: var(--fit-amber); }
+.fit-alert-danger { background: #fef2f2; color: #991b1b; }
+.dark #fit-care-plugin-root .fit-alert-danger { background: rgba(239, 68, 68, 0.14); color: #fca5a5; }
+.fit-alert-info { background: var(--fit-card-2); color: var(--fit-subtle); }
 
 .fit-timeline {
     display: flex;
@@ -1002,19 +1023,19 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-timeline-item {
     display: flex;
-    gap: 9px;
-    padding-bottom: 9px;
+    gap: 8px;
+    padding-bottom: 8px;
     position: relative;
 }
 
 .fit-timeline-item:last-child { padding-bottom: 0; }
 
 .fit-timeline-time {
-    width: 38px;
+    width: 36px;
     flex: none;
     padding-top: 1px;
     color: var(--fit-faint);
-    font-size: 0.62rem;
+    font-size: 0.61rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
@@ -1049,153 +1070,327 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-timeline-line {
     flex: 1;
     width: 1px;
-    background: var(--fit-border);
+    background: var(--aru-border-subtle, var(--fit-border));
     margin: 3px 0;
 }
 
 .fit-timeline-content { flex: 1; min-width: 0; }
-.fit-timeline-content b { font-size: 0.73rem; font-weight: 700; }
-.fit-timeline-content small { display: block; color: var(--fit-subtle); font-size: 0.65rem; margin-top: 1px; }
-.fit-timeline-content .fit-inline { gap: 4px; }
+.fit-timeline-content b { font-size: 0.72rem; font-weight: 700; }
+.fit-timeline-content small { display: block; color: var(--fit-subtle); font-size: 0.64rem; margin-top: 1px; }
 
 .fit-meal-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 9px;
+    gap: 6px;
+    padding: 6px 8px;
     border-radius: 9px;
     background: var(--fit-card-2);
-    font-size: 0.73rem;
+    font-size: 0.72rem;
 }
 
-.fit-meal-row .fit-meal-tags { color: var(--fit-subtle); font-size: 0.64rem; }
-.fit-meal-row .fit-meal-kcal { margin-left: auto; color: var(--fit-amber); font-weight: 800; font-size: 0.68rem; white-space: nowrap; }
-.fit-meal-row .fit-btn-icon { width: 24px; height: 24px; }
+.fit-meal-row .fit-meal-tags { color: var(--fit-subtle); font-size: 0.62rem; }
+.fit-meal-row .fit-meal-kcal { margin-left: auto; color: var(--fit-amber); font-weight: 800; font-size: 0.67rem; white-space: nowrap; }
+.fit-meal-row .fit-btn-icon { width: 22px; height: 22px; }
 
 .fit-est {
     flex: none;
-    padding: 1px 6px;
+    padding: 0 5px;
     border-radius: 99px;
-    background: var(--fit-card-2);
+    background: var(--fit-card);
     color: var(--fit-subtle);
-    font-size: 0.58rem;
+    font-size: 0.6rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
     cursor: help;
 }
 
 .fit-note-box {
     width: 100%;
-    min-height: 74px;
-    padding: 9px 10px;
-    border: 1px solid var(--fit-border);
+    min-height: 60px;
+    padding: 8px 10px;
+    border: 0;
     border-radius: 10px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
     color: inherit;
     font: inherit;
-    font-size: 0.76rem;
+    font-size: 0.75rem;
     line-height: 1.45;
     resize: vertical;
     outline: none;
 }
 
-.fit-note-box:focus { border-color: var(--fit-accent); box-shadow: 0 0 0 3px var(--fit-accent-ring); }
+.fit-note-box:focus {
+    background: var(--aru-surface-hover, var(--fit-card-2));
+    box-shadow: 0 0 0 2px var(--fit-accent-ring) !important;
+}
 
-/* ---------- chat ---------- */
+/* ---------- modern day chat ---------- */
 .fit-chat {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     flex: 1 1 auto;
     min-height: 320px;
 }
 
-.fit-chat-note {
+.fit-chat-head {
     display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    flex: none;
-    padding: 7px 9px;
-    border-radius: 9px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 10px;
     background: var(--fit-card-2);
-    color: var(--fit-subtle);
-    font-size: 0.64rem;
-    line-height: 1.4;
+    flex: none;
 }
 
-.fit-chat-note svg { width: 12px; height: 12px; flex: none; margin-top: 1px; color: var(--fit-emerald); }
+.fit-chat-head-id {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.fit-chat-head-id b { display: block; font-size: 0.75rem; line-height: 1.1; }
+.fit-chat-head-id span { display: block; font-size: 0.61rem; color: var(--fit-emerald); font-weight: 600; }
+
+.fit-chat-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+}
+
+.fit-chat-avatar.sm { width: 22px; height: 22px; }
+
+.fit-chat-welcome {
+    margin: auto 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 18px 12px;
+    color: var(--fit-subtle);
+    font-size: 0.74rem;
+}
+
+.fit-chat-welcome img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.fit-chat-welcome strong { color: var(--fit-text); font-size: 0.84rem; }
 
 .fit-chat-thread {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 10px;
     flex: 1 1 auto;
-    min-height: 160px;
+    min-height: 150px;
     overflow-y: auto;
-    padding-right: 3px;
+    padding: 2px 3px 2px 0;
     scrollbar-width: thin;
 }
 
-.fit-chat-thread::-webkit-scrollbar { width: 6px; }
-.fit-chat-thread::-webkit-scrollbar-thumb { background: var(--fit-border-strong); border-radius: 99px; }
+.fit-chat-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 7px;
+    max-width: 100%;
+}
+
+.fit-chat-row.is-user { justify-content: flex-end; }
+.fit-chat-row.is-assistant { justify-content: flex-start; align-items: flex-start; }
+
+.fit-chat-msg-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-width: 88%;
+    min-width: 0;
+}
+
+.fit-chat-row.is-user .fit-chat-msg-col { align-items: flex-end; }
 
 .fit-chat-bubble {
-    max-width: 92%;
-    padding: 9px 11px;
+    padding: 8px 11px;
     border-radius: 13px;
     font-size: 0.76rem;
-    line-height: 1.45;
+    line-height: 1.48;
     word-break: break-word;
 }
 
 .fit-chat-bubble.user,
-.fit-chat-bubble.system {
-    white-space: pre-wrap;
-}
+.fit-chat-bubble.system { white-space: pre-wrap; }
 
 .fit-chat-bubble.user {
-    align-self: flex-end;
     background: var(--fit-accent);
     color: #fff;
     border-bottom-right-radius: 4px;
 }
 
 .fit-chat-bubble.assistant {
-    align-self: flex-start;
     background: var(--fit-card-2);
     color: var(--fit-text);
-    border-bottom-left-radius: 4px;
+    border-top-left-radius: 4px;
 }
 
-.fit-chat-bubble.system {
-    align-self: center;
-    max-width: 100%;
+.fit-chat-msg-foot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 2px;
+}
+
+.fit-chat-time {
+    font-size: 0.58rem;
+    color: var(--fit-faint);
+}
+
+.fit-chat-copy-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
     background: transparent;
+    color: var(--fit-faint);
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.fit-chat-copy-btn:hover { opacity: 1; color: var(--fit-accent); background: var(--fit-card-2); }
+.fit-chat-copy-btn svg { width: 11px; height: 11px; }
+
+/* Interactive saved-action cards inside assistant messages */
+.fit-chat-actions-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px solid color-mix(in srgb, var(--fit-border) 60%, transparent);
+}
+
+.fit-chat-action-card {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    background: var(--fit-card);
+    border-left: 2.5px solid var(--fit-emerald);
+}
+
+.fit-chat-action-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: var(--fit-emerald-soft);
+    color: var(--fit-emerald);
+    flex: none;
+}
+
+.fit-chat-action-icon svg { width: 12px; height: 12px; }
+
+.fit-chat-action-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.fit-chat-action-copy b {
+    display: block;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fit-chat-action-copy small {
+    display: block;
+    font-size: 0.61rem;
+    color: var(--fit-subtle);
+}
+
+.fit-chat-action-link {
+    padding: 3px 7px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--fit-card-2);
+    color: var(--fit-subtle);
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+    flex: none;
+}
+
+.fit-chat-action-link:hover { color: var(--fit-accent); }
+
+/* Typing animation */
+.fit-chat-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 13px !important;
+}
+
+.fit-chat-typing-dots i {
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--fit-subtle);
+    animation: fit-dot-bounce 1.2s infinite ease-in-out;
+}
+
+.fit-chat-typing-dots i:nth-child(2) { animation-delay: 0.16s; }
+.fit-chat-typing-dots i:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes fit-dot-bounce {
+    0%, 80%, 100% { opacity: 0.35; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.05); }
+}
+
+/* Quick prompt chips */
+.fit-chat-chips {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    flex: none;
+}
+
+.fit-chat-chip {
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 99px;
+    background: var(--fit-card-2);
     color: var(--fit-subtle);
     font-size: 0.66rem;
-    padding: 2px 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.14s, color 0.14s;
 }
+
+.fit-chat-chip:hover:not(:disabled) { background: var(--fit-accent-soft); color: var(--fit-accent); }
+.fit-chat-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Markdown inside assistant bubbles */
 .fit-chat-bubble.assistant > :first-child { margin-top: 0; }
 .fit-chat-bubble.assistant > :last-child { margin-bottom: 0; }
-.fit-chat-bubble.assistant p { margin: 0 0 7px; }
+.fit-chat-bubble.assistant p { margin: 0 0 6px; }
 .fit-chat-bubble.assistant strong { font-weight: 700; }
 .fit-chat-bubble.assistant em { font-style: italic; }
-.fit-chat-bubble.assistant :is(h1, h2, h3, h4, h5, h6) {
-    margin: 10px 0 5px;
-    font-size: 0.84rem;
-    font-weight: 700;
-    line-height: 1.3;
-}
-.fit-chat-bubble.assistant h1,
-.fit-chat-bubble.assistant h2 { font-size: 0.9rem; }
+.fit-chat-bubble.assistant :is(h1, h2, h3, h4, h5, h6) { margin: 9px 0 4px; font-size: 0.82rem; font-weight: 700; line-height: 1.3; }
 .fit-chat-bubble.assistant ul,
-.fit-chat-bubble.assistant ol {
-    margin: 4px 0 8px;
-    padding-left: 18px;
-}
+.fit-chat-bubble.assistant ol { margin: 4px 0 7px; padding-left: 17px; }
 .fit-chat-bubble.assistant ul { list-style: disc outside; }
 .fit-chat-bubble.assistant ol { list-style: decimal outside; }
 .fit-chat-bubble.assistant li { margin: 2px 0; }
@@ -1205,88 +1400,60 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     border-radius: 4px;
     background: var(--fit-card);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.92em;
+    font-size: 0.9em;
 }
 .fit-chat-bubble.assistant pre {
-    margin: 6px 0;
-    padding: 8px 10px;
-    border-radius: 9px;
+    margin: 5px 0;
+    padding: 7px 9px;
+    border-radius: 8px;
     background: var(--fit-card);
     overflow-x: auto;
     white-space: pre;
 }
 .fit-chat-bubble.assistant pre code { padding: 0; background: transparent; }
 .fit-chat-bubble.assistant blockquote {
-    margin: 6px 0;
-    padding: 6px 9px;
+    margin: 5px 0;
+    padding: 5px 8px;
     border-radius: 8px;
     background: var(--fit-card);
     color: var(--fit-subtle);
 }
-.fit-chat-bubble.assistant a {
-    color: var(--fit-accent);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
-.fit-chat-bubble.assistant hr {
-    height: 1px;
-    margin: 8px 0;
-    background: var(--fit-border);
-}
-.fit-chat-bubble.assistant table {
-    width: 100%;
-    margin: 6px 0;
-    font-size: 0.7rem;
-    border-collapse: collapse;
-}
+.fit-chat-bubble.assistant a { color: var(--fit-accent); text-decoration: underline; text-underline-offset: 2px; }
+.fit-chat-bubble.assistant hr { height: 1px; margin: 7px 0; background: var(--aru-border-subtle, var(--fit-border)); }
+.fit-chat-bubble.assistant table { width: 100%; margin: 5px 0; font-size: 0.69rem; border-collapse: collapse; }
 .fit-chat-bubble.assistant th,
-.fit-chat-bubble.assistant td {
-    padding: 4px 6px;
-    text-align: left;
-    vertical-align: top;
-}
+.fit-chat-bubble.assistant td { padding: 4px 6px; text-align: left; vertical-align: top; }
 .fit-chat-bubble.assistant th { background: var(--fit-card); font-weight: 600; }
 
-.fit-chat-bubble .fit-chat-time {
-    display: block;
-    margin-top: 3px;
-    font-size: 0.58rem;
-    opacity: 0.6;
-}
-
-/* Borders and shadows are killed app-wide by `* { border: 0 !important; box-shadow: none
-   !important }` in css/style.css, so the composer is separated by its fill instead. */
 .fit-chat-composer {
     display: flex;
     align-items: flex-end;
     gap: 8px;
     flex: none;
-    padding: 8px;
+    padding: 7px 8px;
     border-radius: 14px;
     background: var(--fit-card-2);
-    transition: background 0.16s;
 }
 
 .fit-chat-composer:focus-within {
-    background: var(--fit-card-2);
     box-shadow: inset 0 0 0 1.5px var(--fit-accent-ring);
 }
 
 .fit-chat-composer textarea {
     flex: 1;
     min-width: 0;
-    min-height: 66px;
-    max-height: 190px;
-    padding: 6px 4px;
+    min-height: 40px;
+    max-height: 160px;
+    padding: 5px 4px;
+    border: 0;
     background: transparent;
     color: inherit;
     font: inherit;
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.78rem;
+    line-height: 1.45;
     resize: none;
 }
 
-/* The app-wide focus rule paints a gray fill; the composer keeps its own background. */
 :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-composer textarea:focus,
 :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-composer textarea:focus-visible {
     background: transparent !important;
@@ -1297,10 +1464,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-chat-send {
     display: inline-grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border: 0;
-    border-radius: 11px;
+    border-radius: 50%;
     background: var(--fit-accent);
     color: #fff;
     cursor: pointer;
@@ -1309,24 +1476,22 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-chat-send:hover:not(:disabled) { background: var(--fit-accent-strong); }
 .fit-chat-send:disabled { opacity: 0.45; cursor: not-allowed; }
-.fit-chat-send svg { width: 16px; height: 16px; }
-.fit-chat-typing { color: var(--fit-subtle); font-size: 0.68rem; font-style: italic; flex: none; }
-.fit-chat .fit-btn { flex: none; }
+.fit-chat-send svg { width: 15px; height: 15px; }
 
 /* ---------- dashboard ---------- */
 .fit-kpis {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
 }
 
 .fit-kpi {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding: 13px 14px;
-    border: 1px solid var(--fit-border);
+    padding: 12px 14px;
+    border: 0;
     border-radius: 14px;
     background: var(--fit-card);
     box-shadow: var(--fit-shadow);
@@ -1344,10 +1509,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-kpi-top svg { width: 14px; height: 14px; color: var(--fit-accent); }
-.fit-kpi b { font-size: 1.28rem; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
-.fit-kpi small { color: var(--fit-subtle); font-size: 0.66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fit-kpi small.positive { color: var(--fit-emerald); }
-.fit-kpi small.negative { color: var(--fit-accent); }
+.fit-kpi b { font-size: 1.24rem; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+.fit-kpi small { color: var(--fit-subtle); font-size: 0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .fit-dash-grid {
     display: grid;
@@ -1357,28 +1520,16 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-dash-grid .fit-span-2 { grid-column: 1 / -1; }
 
-.fit-chart-wrap {
-    position: relative;
-    width: 100%;
-}
-
-.fit-chart {
-    display: block;
-    width: 100%;
-    height: auto;
-    overflow: visible;
-}
-
+.fit-chart-wrap { position: relative; width: 100%; }
+.fit-chart { display: block; width: 100%; height: auto; overflow: visible; }
 .fit-chart text { fill: var(--fit-faint); font-size: 9px; font-family: inherit; }
-.fit-chart .grid-line { stroke: var(--fit-border); stroke-width: 1; stroke-dasharray: 3 4; }
-.fit-chart .axis-line { stroke: var(--fit-border-strong); stroke-width: 1; }
-.fit-chart .line-raw { fill: none; stroke: var(--fit-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.35; }
-.fit-chart .line-avg { fill: none; stroke: var(--fit-accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.fit-chart .grid-line { stroke: var(--fit-grid-line); stroke-width: 1; stroke-dasharray: 3 4; }
+.fit-chart .line-raw { fill: none; stroke: var(--fit-accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.32; }
+.fit-chart .line-avg { fill: none; stroke: var(--fit-accent); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
 .fit-chart .line-target { stroke: var(--fit-emerald); stroke-width: 1.4; stroke-dasharray: 5 4; }
 .fit-chart .area-fill { fill: var(--fit-accent); opacity: 0.08; }
 .fit-chart .dot-raw { fill: var(--fit-accent); }
 .fit-chart .bar { fill: var(--fit-violet); rx: 3; opacity: 0.85; }
-.fit-chart .bar-avg { fill: var(--fit-violet); }
 .fit-chart .bar:hover { opacity: 1; }
 
 .fit-chart-legend {
@@ -1392,15 +1543,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-legend-item { display: inline-flex; align-items: center; gap: 5px; }
-
-.fit-pager {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 10px;
-}
-
+.fit-pager { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
 .fit-pager .fit-btn-icon { width: 24px; height: 24px; border-radius: 8px; }
 .fit-pager .fit-btn-icon:disabled { opacity: 0.35; }
 .fit-legend-swatch { width: 14px; height: 3px; border-radius: 99px; background: var(--fit-accent); }
@@ -1413,13 +1556,67 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     justify-content: center;
     gap: 5px;
-    min-height: 150px;
+    min-height: 140px;
     color: var(--fit-subtle);
     font-size: 0.74rem;
     text-align: center;
 }
 
-.fit-chart-empty svg { width: 22px; height: 22px; color: var(--fit-faint); }
+.fit-chart-empty svg { width: 20px; height: 20px; color: var(--fit-faint); }
+
+/* dashboard macro & strength rows */
+.fit-dash-macro-row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) 92px;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.7rem;
+}
+
+.fit-dash-macro-row span { color: var(--fit-subtle); font-weight: 600; }
+.fit-dash-macro-row b { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.fit-compo-row {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr) 68px;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.7rem;
+}
+
+.fit-compo-row span { color: var(--fit-subtle); font-weight: 600; }
+.fit-compo-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.fit-compo-track { height: 6px; border-radius: 99px; background: var(--fit-card-2); overflow: hidden; }
+.fit-compo-fill { height: 100%; border-radius: 99px; background: var(--fit-violet); }
+.fit-compo-fill.is-cal { background: var(--fit-accent); }
+.fit-compo-fill.is-p { background: var(--fit-emerald); }
+.fit-compo-fill.is-c { background: var(--fit-amber); }
+.fit-compo-fill.is-f { background: var(--fit-violet); }
+
+.fit-strength-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--fit-card-2);
+}
+
+.fit-strength-row b { display: block; font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fit-strength-row small { display: block; color: var(--fit-subtle); font-size: 0.65rem; }
+
+.fit-strength-delta {
+    padding: 2px 7px;
+    border-radius: 99px;
+    background: var(--fit-card);
+    color: var(--fit-subtle);
+    font-size: 0.64rem;
+    font-weight: 800;
+    flex: none;
+}
+
+.fit-strength-delta.positive { background: var(--fit-emerald-soft); color: var(--fit-emerald); }
+.fit-strength-delta.negative { background: var(--fit-amber-soft); color: var(--fit-amber); }
 
 /* heatmap */
 .fit-heatmap-wrap { overflow-x: auto; padding-bottom: 3px; }
@@ -1432,16 +1629,10 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     min-width: max-content;
 }
 
-.fit-heat-cell {
-    width: 11px;
-    height: 11px;
-    border-radius: 3px;
-    background: var(--fit-card-2);
-}
-
-.fit-heat-cell.l1 { background: color-mix(in srgb, var(--fit-emerald) 22%, var(--fit-card-2)); }
-.fit-heat-cell.l2 { background: color-mix(in srgb, var(--fit-emerald) 45%, var(--fit-card-2)); }
-.fit-heat-cell.l3 { background: color-mix(in srgb, var(--fit-emerald) 70%, var(--fit-card-2)); }
+.fit-heat-cell { width: 11px; height: 11px; border-radius: 3px; background: var(--fit-card-2); }
+.fit-heat-cell.l1 { background: color-mix(in srgb, var(--fit-emerald) 24%, var(--fit-card-2)); }
+.fit-heat-cell.l2 { background: color-mix(in srgb, var(--fit-emerald) 48%, var(--fit-card-2)); }
+.fit-heat-cell.l3 { background: color-mix(in srgb, var(--fit-emerald) 72%, var(--fit-card-2)); }
 .fit-heat-cell.l4 { background: var(--fit-emerald); }
 .fit-heat-cell.is-empty { opacity: 0; }
 
@@ -1455,43 +1646,29 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-heatmap-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; background: var(--fit-card-2); }
-.fit-heatmap-legend i.l1 { background: color-mix(in srgb, var(--fit-emerald) 22%, var(--fit-card-2)); }
-.fit-heatmap-legend i.l2 { background: color-mix(in srgb, var(--fit-emerald) 45%, var(--fit-card-2)); }
-.fit-heatmap-legend i.l3 { background: color-mix(in srgb, var(--fit-emerald) 70%, var(--fit-card-2)); }
+.fit-heatmap-legend i.l1 { background: color-mix(in srgb, var(--fit-emerald) 24%, var(--fit-card-2)); }
+.fit-heatmap-legend i.l2 { background: color-mix(in srgb, var(--fit-emerald) 48%, var(--fit-card-2)); }
+.fit-heatmap-legend i.l3 { background: color-mix(in srgb, var(--fit-emerald) 72%, var(--fit-card-2)); }
 .fit-heatmap-legend i.l4 { background: var(--fit-emerald); }
 
-/* body composition rows */
-.fit-compo-row {
-    display: grid;
-    grid-template-columns: 92px minmax(0, 1fr) 72px;
-    align-items: center;
-    gap: 9px;
-    font-size: 0.7rem;
-}
-
-.fit-compo-row span { color: var(--fit-subtle); font-weight: 600; }
-.fit-compo-row b { text-align: right; font-variant-numeric: tabular-nums; }
-.fit-compo-track { height: 6px; border-radius: 99px; background: var(--fit-card-2); overflow: hidden; }
-.fit-compo-fill { height: 100%; border-radius: 99px; background: var(--fit-violet); }
-
-.fit-insights { display: flex; flex-direction: column; gap: 8px; }
+.fit-insights { display: flex; flex-direction: column; gap: 7px; }
 
 .fit-insight {
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    padding: 10px 11px;
-    border: 1px solid var(--fit-border);
-    border-radius: 11px;
-    background: var(--fit-card);
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--fit-card-2);
 }
 
 .fit-insight-icon {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
     background: var(--fit-accent-soft);
     color: var(--fit-accent);
     flex: none;
@@ -1502,8 +1679,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-insight-icon.violet { background: var(--fit-violet-soft); color: var(--fit-violet); }
 .fit-insight-icon.amber { background: var(--fit-amber-soft); color: var(--fit-amber); }
 
-.fit-insight b { display: block; font-size: 0.74rem; }
-.fit-insight small { color: var(--fit-subtle); font-size: 0.68rem; line-height: 1.4; }
+.fit-insight b { display: block; font-size: 0.73rem; }
+.fit-insight small { color: var(--fit-subtle); font-size: 0.67rem; line-height: 1.4; }
 
 .fit-range-select {
     display: inline-flex;
@@ -1520,25 +1697,21 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     background: transparent;
     color: var(--fit-subtle);
     font-size: 0.68rem;
-    font-weight: 800;
+    font-weight: 700;
     cursor: pointer;
 }
 
 .fit-range-select button.is-active { background: var(--fit-card); color: var(--fit-text); box-shadow: var(--fit-shadow); }
 
-.fit-cycle-mini {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
+.fit-cycle-mini { display: flex; align-items: center; gap: 14px; }
 
 .fit-cycle-ring {
     --pct: 0;
     position: relative;
     display: grid;
     place-items: center;
-    width: 84px;
-    height: 84px;
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
     background: conic-gradient(var(--fit-accent) calc(var(--pct) * 1%), var(--fit-card-2) 0);
     flex: none;
@@ -1552,56 +1725,35 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     background: var(--fit-card);
 }
 
-.fit-cycle-ring-inner {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    line-height: 1.1;
-}
-
-.fit-cycle-ring-inner b { display: block; font-size: 1.02rem; }
-.fit-cycle-ring-inner span { color: var(--fit-subtle); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.fit-cycle-ring-inner { position: relative; z-index: 1; text-align: center; line-height: 1.1; }
+.fit-cycle-ring-inner b { display: block; font-size: 1rem; }
+.fit-cycle-ring-inner span { color: var(--fit-subtle); font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ---------- plan ---------- */
 .fit-plan-banner {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 16px;
     flex-wrap: wrap;
-    padding: 18px;
-    border: 1px solid var(--fit-border);
+    padding: 16px;
+    border: 0;
     border-radius: var(--fit-radius);
-    background: linear-gradient(135deg, var(--fit-accent-soft), var(--fit-card) 60%);
+    background: linear-gradient(135deg, var(--fit-accent-soft), var(--fit-card) 62%);
+    box-shadow: var(--fit-shadow);
     margin-bottom: 14px;
 }
 
-.dark #fit-care-plugin-root .fit-plan-banner, .dark .fit-care-plugin-root .fit-plan-banner {
-    background: linear-gradient(135deg, rgba(251, 113, 133, 0.09), var(--fit-card) 60%);
-}
-
-.fit-plan-banner h2 { margin: 0; font-size: 1.3rem; letter-spacing: -0.02em; }
-.fit-plan-banner p { margin: 4px 0 0; color: var(--fit-subtle); font-size: 0.78rem; }
+.fit-plan-banner h2 { margin: 0; font-size: 1.24rem; letter-spacing: -0.02em; }
+.fit-plan-banner p { margin: 4px 0 0; color: var(--fit-subtle); font-size: 0.76rem; }
 .fit-plan-banner-stats { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; }
 .fit-plan-banner-stat { display: flex; flex-direction: column; gap: 1px; }
 .fit-plan-banner-stat b { font-size: 1.05rem; }
 .fit-plan-banner-stat span { color: var(--fit-subtle); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
 
-.fit-progress {
-    height: 6px;
-    border-radius: 99px;
-    background: var(--fit-card-2);
-    overflow: hidden;
-    width: 100%;
-}
-
+.fit-progress { height: 6px; border-radius: 99px; background: var(--fit-card-2); overflow: hidden; width: 100%; }
 .fit-progress i { display: block; height: 100%; border-radius: 99px; background: var(--fit-accent); }
 
-.fit-week-tabs-wrap {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 12px;
-}
+.fit-week-tabs-wrap { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; }
 
 .fit-week-tabs {
     position: relative;
@@ -1611,7 +1763,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     gap: 4px;
     overflow-x: auto;
     padding: 3px;
-    border-radius: 11px;
+    border-radius: 10px;
     background: var(--fit-card-2);
     scrollbar-width: none;
     scroll-behavior: smooth;
@@ -1625,40 +1777,34 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     width: 28px;
     height: 30px;
     flex: none;
-    border: 1px solid var(--fit-border);
-    border-radius: 9px;
-    background: var(--fit-card);
+    border: 0;
+    border-radius: 8px;
+    background: var(--fit-card-2);
     color: var(--fit-subtle);
     cursor: pointer;
 }
 
-.fit-week-nav:hover { border-color: var(--fit-accent); color: var(--fit-text); }
+.fit-week-nav:hover { color: var(--fit-text); background: var(--aru-surface-hover, var(--fit-border)); }
 .fit-week-nav svg { width: 14px; height: 14px; }
 
 .fit-week-tab {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 12px;
+    padding: 5px 11px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 7px;
     background: transparent;
     color: var(--fit-subtle);
-    font-size: 0.72rem;
-    font-weight: 800;
+    font-size: 0.71rem;
+    font-weight: 700;
     white-space: nowrap;
     cursor: pointer;
 }
 
 .fit-week-tab.is-active { background: var(--fit-card); color: var(--fit-text); box-shadow: var(--fit-shadow); }
 .fit-week-tab.is-current:not(.is-active) { color: var(--fit-text); }
-
-.fit-week-tab-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--fit-accent);
-}
+.fit-week-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fit-accent); }
 
 .fit-plan-days {
     display: grid;
@@ -1669,46 +1815,34 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-plan-day {
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    padding: 13px;
-    border: 1px solid var(--fit-border);
-    border-radius: 13px;
+    gap: 6px;
+    padding: 12px;
+    border: 0;
+    border-radius: 12px;
     background: var(--fit-card);
+    box-shadow: var(--fit-shadow);
     cursor: pointer;
     text-align: left;
     color: inherit;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: background 0.14s;
 }
 
-.fit-plan-day:hover { border-color: var(--fit-accent); box-shadow: var(--fit-shadow); }
-.fit-plan-day.is-today { border-color: var(--fit-accent); }
-.fit-plan-day.is-rest { opacity: 0.75; }
+.fit-plan-day:hover { background: var(--fit-card-2); }
+.fit-plan-day.is-today { background: var(--fit-accent-soft); }
+.fit-plan-day.is-rest { opacity: 0.72; }
 .fit-plan-day.is-before-start { opacity: 0.5; }
 
-.fit-plan-day-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.fit-plan-day-head span {
-    color: var(--fit-faint);
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-}
-
-.fit-plan-day h4 { margin: 0; font-size: 0.86rem; }
-.fit-plan-day p { margin: 0; color: var(--fit-subtle); font-size: 0.7rem; }
+.fit-plan-day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fit-plan-day-head span { color: var(--fit-faint); font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.fit-plan-day h4 { margin: 0; font-size: 0.84rem; }
+.fit-plan-day p { margin: 0; color: var(--fit-subtle); font-size: 0.69rem; }
 .fit-plan-day .fit-session-ex span { font-size: 0.6rem; }
 
 .fit-exercise-list { display: flex; flex-direction: column; gap: 7px; }
 
 .fit-exercise-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.6fr) 58px 58px 76px 30px;
+    grid-template-columns: minmax(0, 1.7fr) 56px 62px 72px 28px;
     gap: 6px;
     align-items: center;
 }
@@ -1716,16 +1850,16 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-exercise-row input {
     width: 100%;
     padding: 7px 8px;
-    border: 1px solid var(--fit-border);
+    border: 0;
     border-radius: 8px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
     color: inherit;
     font: inherit;
     font-size: 0.74rem;
     outline: none;
 }
 
-.fit-exercise-row input:focus { border-color: var(--fit-accent); box-shadow: 0 0 0 3px var(--fit-accent-ring); }
+.fit-exercise-row input:focus { box-shadow: 0 0 0 2px var(--fit-accent-ring) !important; }
 .fit-exercise-head { color: var(--fit-faint); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ---------- health ---------- */
@@ -1740,37 +1874,28 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 13px;
-    border: 1px solid var(--fit-border);
-    border-radius: 13px;
-    background: var(--fit-card);
+    padding: 12px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--fit-card-2);
 }
 
 .fit-protocol.is-inactive { opacity: 0.62; }
-
-.fit-protocol-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.fit-protocol-head h4 { margin: 0; font-size: 0.86rem; }
-.fit-protocol-head p { margin: 2px 0 0; color: var(--fit-subtle); font-size: 0.7rem; }
+.fit-protocol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.fit-protocol-head h4 { margin: 0; font-size: 0.84rem; }
+.fit-protocol-head p { margin: 2px 0 0; color: var(--fit-subtle); font-size: 0.69rem; }
 .fit-protocol-actions { display: flex; gap: 2px; flex: none; }
 
 .fit-schedule-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-
 .fit-schedule-chips span {
     padding: 3px 7px;
     border-radius: 6px;
     background: var(--fit-sky-soft);
     color: var(--fit-sky);
-    font-size: 0.64rem;
-    font-weight: 800;
+    font-size: 0.63rem;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
-
 .fit-schedule-chips span.rule { background: var(--fit-amber-soft); color: var(--fit-amber); }
 
 .fit-dose-list { display: flex; flex-direction: column; gap: 5px; }
@@ -1778,51 +1903,36 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-dose {
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 9px 10px;
-    border: 1px solid var(--fit-border);
+    gap: 8px;
+    padding: 8px 10px;
+    border: 0;
     border-radius: 10px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
     font-size: 0.74rem;
 }
 
-.fit-dose-time {
-    width: 42px;
-    flex: none;
-    color: var(--fit-subtle);
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    font-size: 0.7rem;
-}
-
+.fit-dose-time { width: 40px; flex: none; color: var(--fit-subtle); font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.69rem; }
 .fit-dose-name { flex: 1; min-width: 0; }
-.fit-dose-name b { display: block; font-size: 0.75rem; }
-.fit-dose-name small { color: var(--fit-subtle); font-size: 0.64rem; }
+.fit-dose-name b { display: block; font-size: 0.74rem; }
+.fit-dose-name small { color: var(--fit-subtle); font-size: 0.63rem; }
 
 .fit-dose-check {
     display: inline-grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    border: 1px solid var(--fit-border);
-    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
     background: var(--fit-card);
     color: var(--fit-faint);
     cursor: pointer;
     flex: none;
 }
 
-.fit-dose-check:hover { border-color: var(--fit-emerald); color: var(--fit-emerald); }
-.fit-dose-check.is-taken { border-color: transparent; background: var(--fit-emerald-soft); color: var(--fit-emerald); }
+.fit-dose-check:hover { color: var(--fit-emerald); }
+.fit-dose-check.is-taken { background: var(--fit-emerald-soft); color: var(--fit-emerald); }
 .fit-dose-check svg { width: 13px; height: 13px; }
-.fit-dose.is-missed { border-color: #fde68a; }
-.dark #fit-care-plugin-root .fit-dose.is-missed, .dark .fit-care-plugin-root .fit-dose.is-missed { border-color: #5a4718; }
-
-.fit-cycle-card {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
+.fit-dose.is-missed { background: var(--fit-amber-soft); }
 
 .fit-cycle-phases {
     display: grid;
@@ -1831,16 +1941,16 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 .fit-cycle-phase {
-    padding: 7px 6px;
+    padding: 6px 5px;
     border-radius: 9px;
     background: var(--fit-card-2);
     text-align: center;
-    font-size: 0.62rem;
+    font-size: 0.61rem;
     font-weight: 700;
     color: var(--fit-subtle);
 }
 
-.fit-cycle-phase b { display: block; font-size: 0.64rem; line-height: 1.2; color: var(--fit-text); margin-bottom: 1px; overflow-wrap: anywhere; }
+.fit-cycle-phase b { display: block; font-size: 0.63rem; line-height: 1.2; color: var(--fit-text); margin-bottom: 1px; overflow-wrap: anywhere; }
 .fit-cycle-phase.is-current { background: var(--fit-accent-soft); color: var(--fit-accent); }
 .fit-cycle-phase.is-current b { color: var(--fit-accent); }
 
@@ -1849,7 +1959,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-cycle-history-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 6px 8px;
     border-radius: 8px;
     background: var(--fit-card-2);
@@ -1859,32 +1969,43 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-cycle-history-row b { font-weight: 700; }
 .fit-cycle-history-row span { color: var(--fit-subtle); margin-left: auto; font-size: 0.65rem; }
 
+.fit-cycle-gap {
+    font-style: normal;
+    padding: 1px 6px;
+    border-radius: 99px;
+    background: var(--fit-card);
+    color: var(--fit-faint);
+    font-size: 0.6rem;
+    font-weight: 700;
+}
+
 .fit-privacy-lock {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    padding: 24px 16px;
-    border: 1px dashed var(--fit-border-strong);
-    border-radius: 14px;
+    padding: 20px 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--fit-card-2);
     text-align: center;
     color: var(--fit-subtle);
     font-size: 0.74rem;
 }
 
-.fit-privacy-lock svg { width: 24px; height: 24px; color: var(--fit-accent); }
-.fit-privacy-lock strong { color: var(--fit-text); font-size: 0.84rem; }
+.fit-privacy-lock svg { width: 22px; height: 22px; color: var(--fit-accent); }
+.fit-privacy-lock strong { color: var(--fit-text); font-size: 0.82rem; }
 
 .fit-disclaimer-bar {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid var(--fit-border);
-    border-radius: 11px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 10px;
     background: var(--fit-card-2);
     color: var(--fit-subtle);
-    font-size: 0.7rem;
+    font-size: 0.69rem;
     line-height: 1.45;
     margin-bottom: 14px;
 }
@@ -1901,7 +2022,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-settings-grid .fit-span-2 { grid-column: 1 / -1; }
 
-.fit-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fit-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .fit-field > span { color: var(--fit-subtle); font-size: 0.68rem; font-weight: 700; }
 .fit-field > small { color: var(--fit-faint); font-size: 0.62rem; line-height: 1.4; }
 
@@ -1910,28 +2031,75 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-textarea {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--fit-border);
+    border: 0;
     border-radius: 9px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
     color: inherit;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: 0.79rem;
     outline: none;
 }
 
 .fit-input:focus,
 .fit-select:focus,
 .fit-textarea:focus {
-    border-color: var(--fit-accent);
-    box-shadow: 0 0 0 3px var(--fit-accent-ring);
+    background: var(--aru-surface-hover, var(--fit-card-2));
+    box-shadow: 0 0 0 2px var(--fit-accent-ring) !important;
 }
 
-.fit-textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
+.fit-textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
+
+.fit-calc-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--fit-card-2);
+    font-size: 0.72rem;
+}
+
+.fit-calc-breakdown-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.fit-calc-breakdown-head b { font-size: 0.74rem; color: var(--fit-accent); }
+.fit-calc-breakdown-head small { color: var(--fit-subtle); font-size: 0.65rem; }
+
+.fit-calc-breakdown-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    color: var(--fit-text);
+    font-size: 0.71rem;
+}
+
+.fit-calc-note { margin: 2px 0 0; font-size: 0.66rem; line-height: 1.4; }
+.fit-calc-note.is-safe { color: var(--fit-emerald); }
+.fit-calc-note.is-warn { color: var(--fit-amber); }
+
+.fit-macro-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: var(--fit-card-2);
+    color: var(--fit-subtle);
+    font-size: 0.69rem;
+    font-weight: 600;
+}
+
+.fit-macro-hint.is-warn { background: var(--fit-amber-soft); color: var(--fit-amber); }
 
 .fit-form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
+    gap: 10px;
 }
 
 .fit-form-grid .fit-span-2 { grid-column: 1 / -1; }
@@ -1941,13 +2109,11 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--fit-border);
+    padding: 8px 0;
 }
 
-.fit-switch-row:last-child { border-bottom: 0; }
-.fit-switch-row b { display: block; font-size: 0.78rem; }
-.fit-switch-row small { color: var(--fit-subtle); font-size: 0.66rem; }
+.fit-switch-row b { display: block; font-size: 0.77rem; }
+.fit-switch-row small { color: var(--fit-subtle); font-size: 0.65rem; }
 
 .fit-switch {
     position: relative;
@@ -1956,11 +2122,13 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     flex: none;
     border: 0;
     border-radius: 99px;
-    background: var(--fit-border-strong);
+    background: #d8d8dd;
     cursor: pointer;
     transition: background 0.16s;
     padding: 0;
 }
+
+.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch { background: #3a3a3f; }
 
 .fit-switch::after {
     content: '';
@@ -1980,22 +2148,15 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-data-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 
-.fit-danger-zone {
-    border-color: #fecaca;
-    background: linear-gradient(180deg, #fff5f5, var(--fit-card));
-}
-
-.dark #fit-care-plugin-root .fit-danger-zone, .dark .fit-care-plugin-root .fit-danger-zone { border-color: #572a2a; background: var(--fit-card); }
-
 .fit-privacy-note {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 10px 12px;
+    padding: 9px 11px;
     border-radius: 10px;
     background: var(--fit-emerald-soft);
     color: var(--fit-emerald);
-    font-size: 0.7rem;
+    font-size: 0.69rem;
     line-height: 1.45;
 }
 
@@ -2016,8 +2177,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 .fit-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(24, 24, 27, 0.46);
-    backdrop-filter: blur(2px);
+    background: var(--aru-overlay, rgba(24, 24, 27, 0.46));
 }
 
 .fit-modal-card {
@@ -2027,8 +2187,8 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     max-height: calc(100% - 24px);
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--fit-border);
-    border-radius: 20px;
+    border: 0;
+    border-radius: var(--aru-radius-lg, 20px);
     background: var(--fit-card);
     box-shadow: var(--fit-shadow-lg);
     overflow: hidden;
@@ -2043,25 +2203,22 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px 18px 12px;
-    border-bottom: 1px solid var(--fit-border);
+    padding: 15px 18px 11px;
+    background: var(--fit-card);
     flex: none;
 }
 
-.fit-modal-head h2 { margin: 0; font-size: 1.02rem; font-weight: 800; }
+.fit-modal-head h2 { margin: 0; font-size: 1rem; font-weight: 800; }
 .fit-modal-head p { margin: 2px 0 0; color: var(--fit-subtle); font-size: 0.7rem; }
 
 .fit-modal-body {
-    padding: 16px 18px;
+    padding: 12px 18px 16px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
     scrollbar-width: thin;
 }
-
-.fit-modal-body::-webkit-scrollbar { width: 7px; }
-.fit-modal-body::-webkit-scrollbar-thumb { background: var(--fit-border-strong); border-radius: 99px; }
 
 .fit-modal-foot {
     display: flex;
@@ -2069,7 +2226,6 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     justify-content: flex-end;
     gap: 7px;
     padding: 12px 18px;
-    border-top: 1px solid var(--fit-border);
     background: var(--fit-card);
     flex: none;
 }
@@ -2084,20 +2240,20 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px;
-    border: 1px solid var(--fit-border);
+    padding: 11px;
+    border: 0;
     border-radius: 12px;
-    background: var(--fit-card);
+    background: var(--fit-card-2);
     cursor: pointer;
     text-align: left;
     color: inherit;
 }
 
-.fit-quick-tile:hover { border-color: var(--fit-accent); }
-.fit-quick-tile-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--fit-accent-soft); color: var(--fit-accent); flex: none; }
-.fit-quick-tile-icon svg { width: 16px; height: 16px; }
-.fit-quick-tile b { display: block; font-size: 0.8rem; }
-.fit-quick-tile small { color: var(--fit-subtle); font-size: 0.66rem; }
+.fit-quick-tile:hover { background: var(--aru-surface-hover, var(--fit-border)); }
+.fit-quick-tile-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--fit-accent-soft); color: var(--fit-accent); flex: none; }
+.fit-quick-tile-icon svg { width: 15px; height: 15px; }
+.fit-quick-tile b { display: block; font-size: 0.79rem; }
+.fit-quick-tile small { color: var(--fit-subtle); font-size: 0.65rem; }
 
 /* toast */
 .fit-toast-wrap {
@@ -2120,7 +2276,7 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     align-items: center;
     gap: 7px;
     padding: 9px 13px;
-    border: 1px solid var(--fit-border);
+    border: 0;
     border-radius: 10px;
     background: var(--fit-text);
     color: var(--fit-card);
@@ -2154,54 +2310,46 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 
 .fit-loading svg { color: var(--fit-accent); }
 
-/* ---------- responsive ----------
-   Layout breakpoints are container queries on #fit-view ("fitview") and on the modal
-   card ("fitmodal") so the plugin adapts to its own width — the app sidebar can eat
-   280px without the viewport changing. Only chrome that lives outside those
-   containers (top bar, modal frame) still uses media queries. */
+/* ---------- responsive container & media queries ---------- */
 @container fitview (max-width: 1080px) {
-    .fit-cal-layout { grid-template-columns: 1fr; }
+    .fit-cal-layout,
+    .fit-cal-layout.is-chat-wide { grid-template-columns: 1fr; }
     .fit-day-panel { position: static; max-height: none; }
     .fit-day-body { min-height: 0; }
-    .fit-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .fit-health-layout { grid-template-columns: 1fr; }
 }
 
 @container fitview (max-width: 900px) {
+    .fit-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .fit-dash-grid { grid-template-columns: 1fr; }
     .fit-settings-grid { grid-template-columns: 1fr; }
     .fit-settings-grid .fit-span-2 { grid-column: auto; }
-    .fit-week { grid-template-columns: repeat(7, minmax(76px, 1fr)); }
+    .fit-week { grid-template-columns: repeat(7, minmax(74px, 1fr)); }
     .fit-calendar-card:has(.fit-week) { overflow-x: auto; }
 }
 
-@container fitview (max-width: 760px) {
-    .fit-page { padding: 14px 12px 30px; }
-    .fit-page-head { margin-bottom: 12px; }
-    .fit-page-head h2 { font-size: 1.2rem; }
-    .fit-cal-title { min-width: 0; font-size: 1rem; }
+@container fitview (max-width: 720px) {
+    .fit-page { padding: 12px 12px 28px; }
+    .fit-cal-title { min-width: 0; font-size: 0.96rem; }
     .fit-calendar-card { padding: 10px; }
-    .fit-day { min-height: 58px; padding: 5px; }
+    .fit-day { min-height: 56px; padding: 5px; }
     .fit-day-label { display: none; }
     .fit-day-marks { gap: 2px; }
     .fit-mark { width: 12px; height: 12px; }
     .fit-mark svg { width: 8px; height: 8px; }
-    .fit-weekdays { font-size: 0.58rem; }
-    .fit-day-body { padding: 12px; }
+    .fit-weekdays { font-size: 0.57rem; }
+    .fit-day-body { padding: 11px; }
     .fit-kpis { gap: 7px; }
     .fit-kpi { padding: 10px 11px; }
     .fit-kpi b { font-size: 1.05rem; }
     .fit-plan-days { grid-template-columns: 1fr; }
-    .fit-plan-banner { padding: 14px; }
+    .fit-plan-banner { padding: 13px; }
     .fit-plan-banner-stats { margin-left: 0; gap: 14px; }
     .fit-form-grid { grid-template-columns: 1fr; }
     .fit-form-grid .fit-span-2 { grid-column: auto; }
     .fit-quick-grid { grid-template-columns: 1fr; }
-    .fit-exercise-row { grid-template-columns: minmax(0, 1fr) 48px 48px 30px; }
-    .fit-exercise-row .fit-ex-weight { display: none; }
     .fit-chart text { font-size: 10px; }
     .fit-cycle-mini { gap: 10px; }
-    .fit-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @container fitview (max-width: 520px) {
@@ -2209,51 +2357,45 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
 }
 
 @container fitview (max-width: 420px) {
-    .fit-day { min-height: 52px; }
+    .fit-day { min-height: 50px; }
     .fit-day-num { width: 20px; height: 20px; font-size: 0.7rem; }
     .fit-cycle-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fit-macro-bars { gap: 5px; }
 }
 
-/* Modal cards are 520px/720px wide even on desktop, so they need their own,
-   much lower breakpoint than the page. */
-@container fitmodal (max-width: 420px) {
+/* On narrow modals, move Exercise Name to full-width row 1 and keep Sets/Reps/Weight/Delete cleanly visible on row 2 */
+@container fitmodal (max-width: 500px) {
     .fit-form-grid { grid-template-columns: 1fr; }
     .fit-form-grid .fit-span-2 { grid-column: auto; }
     .fit-quick-grid { grid-template-columns: 1fr; }
-    .fit-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .fit-exercise-row { grid-template-columns: minmax(0, 1fr) 48px 48px 30px; }
-    .fit-exercise-row .fit-ex-weight { display: none; }
+    .fit-exercise-head { display: none; }
+    .fit-exercise-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) 28px;
+        gap: 5px;
+    }
+    .fit-exercise-row input[name="ex_name"],
+    .fit-exercise-row input[name="wx_name"] {
+        grid-column: 1 / -1;
+    }
 }
 
-@container fitroot (max-width: 760px) {
-    .fit-topbar { gap: 8px 12px; padding: 9px 12px 8px; }
-    .fit-brand-mark { width: 34px; height: 34px; }
-    .fit-quick-btn { padding: 7px 10px; font-size: 0.7rem; }
+@container fitroot (max-width: 720px) {
+    .fit-topbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "brand actions"
+            "nav nav";
+        gap: 7px 10px;
+        padding: 8px 12px;
+    }
+    .fit-nav { max-width: none; }
+    .fit-quick-btn { padding: 6px 10px; font-size: 0.71rem; }
 }
 
-@container fitroot (max-width: 620px) {
-    .fit-brand-copy p { display: none; }
-}
-
-@container fitroot (max-width: 420px) {
-    .fit-brand-copy h1 { font-size: 0.9rem; }
-}
-
-@media (max-width: 760px) {
-    .fit-topbar { gap: 8px 12px; padding: 9px 12px 8px; }
-    .fit-brand-mark { width: 34px; height: 34px; }
-    .fit-quick-btn { padding: 7px 10px; font-size: 0.7rem; }
+@media (max-width: 720px) {
     .fit-modal { padding: 8px; }
     .fit-modal-card { max-height: calc(100% - 16px); border-radius: 16px; }
     .fit-modal-head, .fit-modal-body, .fit-modal-foot { padding-left: 13px; padding-right: 13px; }
-}
-
-@media (max-width: 620px) {
-    .fit-brand-copy p { display: none; }
-}
-
-@media (max-width: 420px) {
-    .fit-brand-copy h1 { font-size: 0.9rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2261,267 +2403,6 @@ Aru Fit & Care — plugin UI styles, scoped to #fit-care-plugin-root / .fit-care
     .fit-care-plugin-root * { animation: none !important; transition: none !important; }
 }
 
-/* ---------- main app skin (specificity-safe via :where) ---------- */
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-topbar {
-    border-bottom: 0;
-    box-shadow: 0 8px 24px -22px rgba(15, 23, 42, 0.45);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-card, .fit-calendar-card, .fit-day-panel, .fit-actual-card,
-    .fit-metric, .fit-kpi, .fit-protocol, .fit-quick-tile
-) {
-    border: 0;
-    background: var(--fit-card);
-    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-banner {
-    border: 0;
-    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-plan-session, .fit-insight, .fit-dose, .fit-disclaimer-bar,
-    .fit-week-day, .fit-week-nav, .fit-icon-btn, .fit-btn-ghost, .fit-chip
-) {
-    border: 0;
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-week-nav, .fit-icon-btn, .fit-btn-ghost, .fit-chip
-):hover {
-    background: var(--aru-surface-hover, #e4e4e7);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-day {
-    border: 0;
-    background: var(--fit-card);
-    box-shadow: var(--aru-shadow-xs, 0 1px 2px rgba(24, 24, 27, 0.05));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-plan-day:hover {
-    box-shadow: var(--aru-shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.06));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day {
-    border: 0;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day:hover:not(.is-selected) {
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-week-day.is-today:not(.is-selected) {
-    border: 0;
-    background: var(--fit-card);
-    box-shadow: inset 0 0 0 1.5px var(--fit-accent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-plan-day.is-today, .fit-week-day.is-selected, .fit-day.is-selected, .fit-day.is-selected:hover
-) {
-    border: 0;
-    background: var(--fit-accent-soft);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.period.is-forecast {
-    border: 0;
-    background: color-mix(in srgb, var(--fit-accent) 45%, transparent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.fertile.is-forecast {
-    border: 0;
-    background: color-mix(in srgb, var(--fit-sky) 45%, transparent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.ovulation.is-forecast {
-    border: 0;
-    background: color-mix(in srgb, var(--fit-violet) 45%, transparent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-phase.luteal.is-forecast {
-    border: 0;
-    background: color-mix(in srgb, var(--fit-amber) 45%, transparent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-week-session.rest {
-    border: 0;
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(.fit-empty, .fit-privacy-lock) {
-    border: 0;
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tabs {
-    border-bottom: 0;
-    gap: 3px;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tab {
-    border-bottom: 0;
-    border-radius: 8px;
-    margin-bottom: 0;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-day-tab.is-active {
-    border-bottom-color: transparent;
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-alert {
-    border: 0;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose-check {
-    border: 0;
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose-check.is-taken {
-    border: 0;
-    background: var(--fit-emerald-soft);
-    color: var(--fit-emerald);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-dose.is-missed {
-    border: 0;
-    background: var(--fit-amber-soft);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch-row {
-    border-bottom: 0;
-    padding: 10px 0;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch {
-    background: #d8d8dd;
-}
-
-.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch {
-    background: #3a3a3f;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-switch.is-on {
-    background: var(--fit-emerald);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn:not(.fit-btn-primary):not(.fit-btn-soft):not(.fit-btn-danger):not(.fit-btn-ghost) {
-    background: var(--fit-card-2);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn:not(.fit-btn-primary):not(.fit-btn-soft):not(.fit-btn-danger):not(.fit-btn-ghost):hover {
-    background: var(--aru-surface-hover, #e4e4e7);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-primary,
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-quick-btn {
-    border: 0;
-    background: var(--fit-accent);
-    color: #fff;
-    box-shadow: none;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-primary:hover,
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-quick-btn:hover {
-    background: var(--fit-accent-strong);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-soft {
-    border: 0;
-    background: var(--fit-accent-soft);
-    color: var(--fit-accent);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-soft:hover {
-    background: var(--fit-accent-soft);
-    color: var(--fit-accent-strong);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-danger {
-    border: 0;
-    background: #fef2f2;
-    color: #dc2626;
-}
-
-.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-btn-danger {
-    background: #3a1a1a;
-    color: #f87171;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-input, .fit-select, .fit-textarea, .fit-note-box, .fit-exercise-row input
-) {
-    border: 0;
-    background: var(--fit-card-2);
-    box-shadow: none;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-input, .fit-select, .fit-textarea, .fit-note-box, .fit-exercise-row input
-):focus {
-    border: 0;
-    background: var(--aru-surface-hover, var(--fit-card-2));
-    box-shadow: var(--aru-shadow-sm, 0 0 0 2px var(--fit-accent-ring)) !important;
-    outline: none;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-timeline-line,
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chat-bubble.assistant hr {
-    background: var(--aru-border-subtle, var(--fit-border));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chart .axis-line {
-    stroke: var(--aru-border, var(--fit-border-strong));
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-chart .grid-line {
-    stroke: var(--fit-grid-line);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-modal-backdrop {
-    background: var(--aru-overlay, rgba(24, 24, 27, 0.46));
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-modal-card {
-    border: 0;
-    border-radius: var(--aru-radius-lg, 20px);
-    background: var(--fit-card);
-    box-shadow: var(--fit-shadow-lg);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(.fit-modal-head, .fit-modal-foot) {
-    border: 0;
-    background: var(--fit-card);
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-view {
-    scrollbar-color: #c7c7cc transparent;
-}
-
-.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) .fit-view {
-    scrollbar-color: #45454b transparent;
-}
-
-:where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-view, .fit-modal-body, .fit-day-body, .fit-chat-thread
-)::-webkit-scrollbar-thumb {
-    background: #c7c7cc;
-    border: 0;
-}
-
-.dark :where(#fit-care-plugin-root, .fit-care-plugin-root) :is(
-    .fit-view, .fit-modal-body, .fit-day-body, .fit-chat-thread
-)::-webkit-scrollbar-thumb {
-    background: #45454b;
-}
-
 #aru-desktop .fit-day-panel {
-    max-height: calc(100% - 16px);
+    max-height: calc(100% - 14px);
 }

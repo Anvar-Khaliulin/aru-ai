@@ -21,19 +21,26 @@ Object.assign(window.FitCarePlugin, {
         const currentYear = new Date().getFullYear();
         const latestWeightRow = (window.DB && typeof window.DB.getFitLatestWeight === 'function') ? window.DB.getFitLatestWeight() : null;
         const latestWeight = latestWeightRow ? latestWeightRow.weight : null;
+        const isTeen = (this.getUserMode && this.getUserMode() === 'teen');
+        const selectedGoal = (isTeen && profile.goal === 'lose') ? 'maintain' : (profile.goal || 'maintain');
         const option = (value, label, selected) => `
             <option value="${this.esc(value)}" ${String(selected) === String(value) ? 'selected' : ''}>${this.esc(label)}</option>
         `;
         const num = (value) => (value === null || value === undefined ? '' : String(value));
 
+        const initialCalc = (window.FitCareEngine && latestWeight && profile.height_cm && profile.birth_year)
+            ? window.FitCareEngine.computeTargets(profile, {
+                latestWeight,
+                latestBodyFat: this.getLatestBodyFatPct ? this.getLatestBodyFatPct() : null,
+                ageMode: this.getUserMode ? this.getUserMode() : 'adult',
+                todayKey: this.todayKey()
+            })
+            : null;
+
         container.innerHTML = `
             <div class="fit-page">
-                <div class="fit-page-head">
-                    <div>
-                        <p class="fit-kicker">Aru Fit &amp; Care</p>
-                        <h2>${this.esc(this.t('settings_title'))}</h2>
-                        <p>${this.esc(this.t('settings_sub'))}</p>
-                    </div>
+                <div class="fit-page-head is-compact">
+                    <h2>${this.esc(this.t('settings_title'))}</h2>
                 </div>
                 <div class="fit-settings-grid">
                     <section class="fit-card fit-span-2">
@@ -82,16 +89,17 @@ Object.assign(window.FitCarePlugin, {
                                     ${option('light', this.t('activity_light'), profile.activity_level)}
                                     ${option('moderate', this.t('activity_moderate'), profile.activity_level)}
                                     ${option('high', this.t('activity_high'), profile.activity_level)}
+                                    ${option('very_high', this.t('activity_very_high'), profile.activity_level)}
                                 </select>
                             </label>
                             <label class="fit-field">
                                 <span>${this.esc(this.t('goal'))}</span>
                                 <select class="fit-select" name="goal">
-                                    ${option('lose', this.t('goal_lose'), profile.goal)}
-                                    ${option('maintain', this.t('goal_maintain'), profile.goal)}
-                                    ${option('gain', this.t('goal_gain'), profile.goal)}
-                                    ${option('health', this.t('goal_health'), profile.goal)}
-                                    ${option('performance', this.t('goal_performance'), profile.goal)}
+                                    ${!isTeen ? option('lose', this.t('goal_lose'), selectedGoal) : ''}
+                                    ${option('maintain', this.t('goal_maintain'), selectedGoal)}
+                                    ${option('gain', this.t('goal_gain'), selectedGoal)}
+                                    ${option('health', this.t('goal_health'), selectedGoal)}
+                                    ${option('performance', this.t('goal_performance'), selectedGoal)}
                                 </select>
                             </label>
                             <label class="fit-field">
@@ -113,12 +121,38 @@ Object.assign(window.FitCarePlugin, {
                                 <input class="fit-input" type="number" inputmode="numeric" name="calorie_max"
                                     min="500" max="10000" step="10" value="${this.esc(num(profile.calorie_max))}">
                             </label>
-                            <div class="fit-field">
-                                <span>${this.esc(this.t('calc_calories'))}</span>
-                                <button type="button" class="fit-btn fit-btn-soft" data-fit-action="calc-calories">
-                                    <i data-lucide="calculator"></i>${this.esc(this.t('calc_calories_btn'))}
-                                </button>
+                            <label class="fit-field">
+                                <span>${this.esc(this.t('protein_target'))}</span>
+                                <input class="fit-input" type="number" inputmode="numeric" name="protein_target"
+                                    min="20" max="400" step="1" placeholder="${this.esc(this.t('auto_hint'))}" value="${this.esc(num(profile.protein_target))}">
+                            </label>
+                            <label class="fit-field">
+                                <span>${this.esc(this.t('carbs_target'))}</span>
+                                <input class="fit-input" type="number" inputmode="numeric" name="carbs_target"
+                                    min="20" max="1000" step="1" placeholder="${this.esc(this.t('auto_hint'))}" value="${this.esc(num(profile.carbs_target))}">
+                            </label>
+                            <label class="fit-field">
+                                <span>${this.esc(this.t('fat_target'))}</span>
+                                <input class="fit-input" type="number" inputmode="numeric" name="fat_target"
+                                    min="15" max="300" step="1" placeholder="${this.esc(this.t('auto_hint'))}" value="${this.esc(num(profile.fat_target))}">
+                            </label>
+                            <label class="fit-field">
+                                <span>${this.esc(this.t('water_target'))}</span>
+                                <input class="fit-input" type="number" inputmode="numeric" name="water_target_ml"
+                                    min="500" max="8000" step="50" placeholder="${this.esc(this.t('auto_hint'))}" value="${this.esc(num(profile.water_target_ml))}">
+                            </label>
+                            <div class="fit-field fit-span-2">
+                                <div class="fit-row" style="justify-content:space-between">
+                                    <span>${this.esc(this.t('calc_calories'))} · ${this.esc(this.t('macros'))}</span>
+                                    <button type="button" class="fit-btn fit-btn-soft fit-btn-xs" data-fit-action="calc-calories">
+                                        <i data-lucide="calculator"></i>${this.esc(this.t('calc_calories_btn'))}
+                                    </button>
+                                </div>
                                 <small>${this.esc(this.t('calc_calories_hint'))}</small>
+                                ${isTeen ? `<p class="fit-calc-note is-safe">${this.esc(this.t('teen_calc_note'))}</p>` : ''}
+                            </div>
+                            <div id="fit-calc-breakdown" class="fit-calc-breakdown fit-span-2 ${initialCalc && initialCalc.bmr ? '' : 'fit-hidden'}">
+                                ${initialCalc && initialCalc.bmr ? this.renderCalcBreakdownHtml(initialCalc) : ''}
                             </div>
                             <div class="fit-span-2 fit-row" style="justify-content:flex-end">
                                 <button type="submit" class="fit-btn fit-btn-primary">
@@ -323,6 +357,7 @@ Object.assign(window.FitCarePlugin, {
         switch (action) {
             case 'settings-switch': {
                 const name = el.dataset.target;
+                if (name === 'intimacy_tracking' && !this.isAdult()) return true;
                 const input = el.closest('form') ? el.closest('form').elements.namedItem(name) : null;
                 const next = input ? input.value !== '1' : !el.classList.contains('is-on');
                 if (input) input.value = next ? '1' : '0';
@@ -396,17 +431,23 @@ Object.assign(window.FitCarePlugin, {
             if (maxInput) maxInput.value = String(calorieMax);
         }
         const displayName = this.fieldValue(form, 'display_name');
+        let goal = this.fieldValue(form, 'goal') || 'maintain';
+        if (this.getUserMode && this.getUserMode() === 'teen' && goal === 'lose') goal = 'maintain';
         window.DB.saveFitProfile({
             display_name: displayName,
             sex: this.fieldValue(form, 'sex'),
             birth_year: this.fieldNumber(form, 'birth_year'),
             height_cm: this.fieldNumber(form, 'height_cm'),
             activity_level: this.fieldValue(form, 'activity_level') || 'moderate',
-            goal: this.fieldValue(form, 'goal') || 'maintain',
+            goal,
             target_weight: this.fieldNumber(form, 'target_weight'),
             target_date: this.fieldValue(form, 'target_date'),
             calorie_min: calorieMin,
-            calorie_max: calorieMax
+            calorie_max: calorieMax,
+            protein_target: this.fieldNumber(form, 'protein_target'),
+            carbs_target: this.fieldNumber(form, 'carbs_target'),
+            fat_target: this.fieldNumber(form, 'fat_target'),
+            water_target_ml: this.fieldNumber(form, 'water_target_ml')
         });
         // The field is pre-filled with the latest weight, so saving an unrelated
         // profile change must not write that old value into today's journal.
@@ -433,43 +474,71 @@ Object.assign(window.FitCarePlugin, {
         this.toast(this.t('settings_saved'), 'success');
     },
 
+    renderCalcBreakdownHtml(calc) {
+        if (!calc || !calc.bmr) return '';
+        const formulaLabel = calc.formula === 'katch' ? this.t('formula_katch') : this.t('formula_mifflin');
+        const bits = [
+            `<span><b>${this.esc(this.t('bmr_label'))}:</b> ${this.esc(this.fmt(calc.bmr, 0))} ${this.esc(this.t('kcal'))}</span>`,
+            `<span><b>${this.esc(this.t('tdee_label'))}:</b> ${this.esc(this.fmt(calc.tdee, 0))} ${this.esc(this.t('kcal'))}</span>`
+        ];
+        if (calc.weeklyRateKg !== null && calc.weeklyRateKg !== 0) {
+            const sign = calc.weeklyRateKg > 0 ? '+' : '';
+            bits.push(`<span><b>${this.esc(this.t('pace_label'))}:</b> ${this.esc(this.t('pace_week_kg', { val: `${sign}${this.fmt(calc.weeklyRateKg, 2)}` }))}</span>`);
+        }
+        return `
+            <div class="fit-calc-breakdown-head">
+                <b>${this.esc(formulaLabel)}</b>
+                ${calc.lbm ? `<small>${this.esc(this.t('metric_muscle'))} / LBM ~${this.esc(this.fmt(calc.lbm, 1))} ${this.esc(this.t('kg'))}</small>` : ''}
+            </div>
+            <div class="fit-calc-breakdown-row">${bits.join('')}</div>
+            ${calc.teenSafe ? `<p class="fit-calc-note is-safe">${this.esc(this.t('teen_calc_note'))}</p>` : ''}
+            ${calc.paceWarning ? `<p class="fit-calc-note is-warn">${this.esc(this.t('pace_warn'))}</p>` : ''}
+        `;
+    },
+
     calcCalories(button) {
         const form = button.closest('form');
-        if (!form) return;
-        const sex = this.fieldValue(form, 'sex');
-        const birthYear = this.fieldNumber(form, 'birth_year');
-        const height = this.fieldNumber(form, 'height_cm');
+        if (!form || !window.FitCareEngine) return;
         let weight = this.fieldNumber(form, 'current_weight');
-        if (weight === null && window.DB && typeof window.DB.getFitLatestWeight === 'function') {
-            const latest = window.DB.getFitLatestWeight();
-            weight = latest ? Number(latest.weight) : null;
+        if (weight === null && typeof this.getLatestWeightKg === 'function') {
+            weight = this.getLatestWeightKg();
         }
-        const age = birthYear ? new Date().getFullYear() - birthYear : null;
-        if (!weight || !height || !age || age < 10 || age > 100) {
+        const draftProfile = {
+            sex: this.fieldValue(form, 'sex'),
+            birth_year: this.fieldNumber(form, 'birth_year'),
+            height_cm: this.fieldNumber(form, 'height_cm'),
+            activity_level: this.fieldValue(form, 'activity_level') || 'moderate',
+            goal: this.fieldValue(form, 'goal') || 'maintain',
+            target_weight: this.fieldNumber(form, 'target_weight'),
+            target_date: this.fieldValue(form, 'target_date')
+        };
+        const calc = window.FitCareEngine.computeTargets(draftProfile, {
+            latestWeight: weight,
+            latestBodyFat: this.getLatestBodyFatPct ? this.getLatestBodyFatPct() : null,
+            ageMode: this.getUserMode ? this.getUserMode() : 'adult',
+            todayKey: this.todayKey()
+        });
+        if (!calc.bmr || !calc.auto.calorieMin || !calc.auto.calorieMax) {
             this.toast(this.t('calc_need_data'), 'error');
             return;
         }
-        // Mifflin-St Jeor with activity and goal adjustments — an estimate to
-        // pre-fill the range, never a medical recommendation.
-        let bmr = 10 * weight + 6.25 * height - 5 * age;
-        if (sex === 'male') bmr += 5;
-        else if (sex === 'female') bmr -= 161;
-        else bmr -= 78;
-        const factors = { sedentary: 1.2, light: 1.375, moderate: 1.55, high: 1.725 };
-        const tdee = bmr * (factors[this.fieldValue(form, 'activity_level')] || 1.55);
-        const goal = this.fieldValue(form, 'goal') || 'maintain';
-        const goalFactor = goal === 'lose' ? 0.85 : goal === 'gain' ? 1.12 : 1;
-        const floor = sex === 'male' ? 1500 : 1200;
-        const target = Math.max(tdee * goalFactor, floor);
-        const round10 = (value) => Math.round(value / 10) * 10;
-        const clamp = (value) => Math.min(10000, Math.max(500, value));
-        const min = clamp(round10(target - 150));
-        const max = clamp(round10(target + 150));
-        const minInput = form.elements.namedItem('calorie_min');
-        const maxInput = form.elements.namedItem('calorie_max');
-        if (minInput) minInput.value = String(min);
-        if (maxInput) maxInput.value = String(max);
-        this.toast(this.t('calc_done', { min, max }), 'success');
+        const setField = (name, val) => {
+            const inp = form.elements.namedItem(name);
+            if (inp && val !== null && val !== undefined) inp.value = String(val);
+        };
+        setField('calorie_min', calc.auto.calorieMin);
+        setField('calorie_max', calc.auto.calorieMax);
+        setField('protein_target', calc.auto.protein);
+        setField('carbs_target', calc.auto.carbs);
+        setField('fat_target', calc.auto.fat);
+        setField('water_target_ml', calc.auto.waterMl);
+
+        const box = document.getElementById('fit-calc-breakdown');
+        if (box) {
+            box.classList.remove('fit-hidden');
+            box.innerHTML = this.renderCalcBreakdownHtml(calc);
+        }
+        this.toast(this.t('calc_done', { min: calc.auto.calorieMin, max: calc.auto.calorieMax }), 'success');
     },
 
     saveAruSettings(form) {
@@ -503,6 +572,7 @@ Object.assign(window.FitCarePlugin, {
     },
 
     saveIntimacySettings(form) {
+        if (!this.isAdult()) return;
         window.DB.saveFitProfile({
             intimacy_tracking: this.fieldValue(form, 'intimacy_tracking') === '1' ? 1 : 0
         });
@@ -540,7 +610,13 @@ Object.assign(window.FitCarePlugin, {
 
     exportSettingsJson() {
         try {
-            const data = window.DB.getFitAllData();
+            const raw = window.DB.getFitAllData();
+            const data = this.isAdult()
+                ? raw
+                : Object.assign({}, raw, {
+                    profile: Object.assign({}, raw.profile || {}, { intimacy_tracking: 0 }),
+                    intimacy_logs: []
+                });
             this.downloadFile(
                 `aru-fit-care-backup-${this.todayKey()}.json`,
                 JSON.stringify(data, null, 2),
@@ -646,7 +722,13 @@ Object.assign(window.FitCarePlugin, {
 
     applySettingsJson(data) {
         try {
-            window.DB.replaceFitData(data, true);
+            const safeData = this.isAdult()
+                ? data
+                : Object.assign({}, data || {}, {
+                    profile: Object.assign({}, (data && data.profile) || {}, { intimacy_tracking: 0 }),
+                    intimacy_logs: []
+                });
+            window.DB.replaceFitData(safeData, true);
             this.state.view = 'settings';
             this.loadAll();
             this.render();

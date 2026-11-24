@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ---ARU-LAB.SPACE---ALMATY---2026---
-End User License Agreement (EULA) and usage rules for the application.
+Usage information, privacy/safety notice, and GNU GPL v3 license viewer for Aru AI.
 ---chat.aru-lab.space---PWA---
 -->
 <html lang="ru" class="light">
@@ -9,7 +9,7 @@ End User License Agreement (EULA) and usage rules for the application.
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EULA - Aru Ai</title>
+    <title>Usage Information &amp; GNU GPL v3 - Aru AI</title>
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -75,312 +75,668 @@ End User License Agreement (EULA) and usage rules for the application.
     class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300">
 
     <div class="max-w-4xl mx-auto px-4 py-8 md:py-12">
-        <!-- Content Area -->
+        <!-- Content Area (also injected into onboarding modal #eula-content-frame) -->
         <main
             class="glass rounded-3xl p-6 md:p-10 shadow-xl shadow-slate-200/50 dark:shadow-none custom-scrollbar overflow-y-auto max-h-[70vh] md:max-h-none">
 
-            <!-- Shared Header for Modal Injection -->
+            <!-- Shared Header -->
             <div
-                class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 border-b border-slate-100 dark:border-slate-800 pb-6">
+                class="flex flex-col md:flex-row justify-between items-center mb-6 gap-6 border-b border-slate-100 dark:border-slate-800 pb-6">
                 <div class="flex items-center gap-3">
                     <div
-                        class="w-10 h-10 bg-aru-500 rounded-xl flex items-center justify-center shadow-lg shadow-aru-500/20">
+                        class="w-10 h-10 bg-aru-500 rounded-xl flex items-center justify-center shadow-lg shadow-aru-500/20 shrink-0">
                         <i data-lucide="shield-check" class="text-white w-6 h-6"></i>
                     </div>
                     <div>
                         <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white"
-                            data-i18n="eula_title">License Agreement</h1>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Aru Ai Policy</p>
+                            data-i18n="eula_title">Информация об использовании</h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Aru AI - Open Source (GNU GPL v3)</p>
                     </div>
                 </div>
 
                 <!-- Language Switcher -->
-                <div class="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
+                <div class="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl shrink-0">
                     <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'kz') : setLanguage('kz')" id="btn-kz-inner"
                         class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">KZ</button>
                     <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'en') : setLanguage('en')" id="btn-en-inner"
-                        class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">EN</button>
+                        class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">EN</button>
                     <button type="button" onclick="window.app && window.app.updateEULALang ? window.app.updateEULALang(this.closest('#eula-content-frame'), 'ru') : setLanguage('ru')" id="btn-ru-inner"
                         class="eula-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all">RU</button>
                 </div>
             </div>
 
-            <!-- RUSSIAN VERSION -->
-            <div id="lang-ru" class="lang-node lang-active space-y-8">
-                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
-                    <h2 class="text-xl font-bold mb-2">ЛИЦЕНЗИОННОЕ СОГЛАШЕНИЕ С КОНЕЧНЫМ ПОЛЬЗОВАТЕЛЕМ (EULA)</h2>
-                    <p class="text-sm text-slate-500">Редакция от 31 января 2026 г.</p>
-                </div>
-
-                <div
-                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
-                    <p>Настоящее Лицензионное соглашение (далее — «Соглашение») является юридически значимым документом,
-                        заключаемым между Вами (далее — «Пользователь») и разработчиком программного обеспечения
-                        <strong>Aru-Lab</strong> (далее — «Разработчик»). Установка, запуск или любое использование ПО
-                        Aru Ai означает Ваше полное и безоговорочное согласие с условиями данного Соглашения.
-                    </p>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. ПРЕДМЕТ СОГЛАШЕНИЯ</h3>
-                        <p>1.1. Разработчик предоставляет Пользователю неисключительную, безвозмездную лицензию на
-                            использование ПО Aru Ai в личных, образовательных или коммерческих целях.</p>
-                        <p>1.2. ПО Aru Ai является интерфейсным решением (оболочкой) для взаимодействия с моделями
-                            искусственного интеллекта и управления локальными данными.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. АРХИТЕКТУРА ДАННЫХ И
-                            КОНФИДЕНЦИАЛЬНОСТЬ</h3>
-                        <p>2.1. <strong>Локальное хранение:</strong> Все данные Пользователя (история чатов, артефакты,
-                            персональные факты) сохраняются исключительно на устройстве Пользователя в формате базы
-                            данных SQLite.</p>
-                        <p>2.2. <strong>Отсутствие шифрования:</strong> Пользователь уведомлен и согласен с тем, что
-                            база данных SQLite не зашифрована в целях обеспечения производительности и доступности
-                            данных для Пользователя вне ПО Aru Ai.</p>
-                        <p>2.3. <strong>Ответственность за доступ:</strong> Пользователь несет единоличную
-                            ответственность за сохранность файла базы данных. Разработчик не имеет технической
-                            возможности восстановить данные в случае их удаления или утери пароля.</p>
-                        <p>2.4. <strong>Передача данных:</strong> ПО Aru Ai передает данные только выбранному
-                            Пользователем стороннему провайдеру (Google Gemini, OpenRouter и др.) в момент совершения
-                            запроса.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. СТОРОННИЕ ПРОВАЙДЕРЫ И API
-                        </h3>
-                        <p>3.1. ПО Aru Ai не является самостоятельной языковой моделью. Для функционирования требуется
-                            подключение к сторонним API.</p>
-                        <p>3.2. Пользователь самостоятельно несет ответственность за соблюдение условий использования
-                            (Terms of Service) сторонних провайдеров.</p>
-                        <p>3.3. Риски обучения: При использовании бесплатных тарифов сторонних провайдеров данные могут
-                            быть использованы ими для обучения моделей.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ВОЗРАСТНЫЕ ПРОФИЛИ И
-                            БЕЗОПАСНОСТЬ</h3>
-                        <p>4.1. ПО предоставляет функционал «Детского» и «Подросткового» профилей с фильтрацией
-                            контента.</p>
-                        <p>4.2. Фильтрация осуществляется на базе семантического анализа сторонних LLM, что не исключает
-                            вероятность ошибок.</p>
-                        <p>4.3. Использование ПО детьми должно осуществляться под контролем взрослых.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. ОГРАНИЧЕНИЕ ОТВЕТСТВЕННОСТИ
-                        </h3>
-                        <p>5.1. <strong>«КАК ЕСТЬ»:</strong> ПО предоставляется на условиях «AS IS». Разработчик не
-                            гарантирует отсутствие ошибок или бесперебойную работу сторонних API.</p>
-                        <p>5.2. Разработчик не несет ответственности за любой ущерб, возникший в результате
-                            использования ПО, включая утечку данных по вине Пользователя.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ИНТЕЛЛЕКТУАЛЬНАЯ
-                            СОБСТВЕННОСТЬ</h3>
-                        <p>6.1. Исходный код является открытым (Open Source) согласно условиям в репозитории.</p>
-                        <p>6.2. Визуальные активы, включая персонажа <strong>«Лисичка Ару» (маскот)</strong>, являются
-                            объектами авторского права Aru-Lab.</p>
-                    </section>
-                </div>
+            <!-- Section Tabs: Usage Info / GNU GPL v3 License -->
+            <div role="tablist" class="flex flex-wrap gap-1.5 p-1.5 mb-8 bg-slate-100 dark:bg-slate-800/70 rounded-2xl w-fit max-w-full">
+                <button type="button" role="tab" aria-selected="true" data-rules-tab="usage" id="btn-rules-tab-usage"
+                    onclick="window.app && window.app.switchEULATab ? window.app.switchEULATab(this.closest('#eula-content-frame'), 'usage') : setRulesTab('usage')"
+                    class="px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all flex items-center gap-2 bg-white dark:bg-aru-600 shadow-sm text-aru-600 dark:text-white">
+                    <i data-lucide="file-text" class="w-4 h-4 shrink-0"></i>
+                    <span data-i18n="eula_tab_usage">Информация об использовании</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-rules-tab="license" id="btn-rules-tab-license"
+                    onclick="window.app && window.app.switchEULATab ? window.app.switchEULATab(this.closest('#eula-content-frame'), 'license') : setRulesTab('license')"
+                    class="px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <i data-lucide="scale" class="w-4 h-4 shrink-0"></i>
+                    <span data-i18n="eula_tab_license">Лицензия GNU GPL v3</span>
+                </button>
             </div>
 
-            <!-- ENGLISH VERSION -->
-            <div id="lang-en" class="lang-node space-y-8">
-                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
-                    <h2 class="text-xl font-bold mb-2">END-USER LICENSE AGREEMENT (EULA)</h2>
-                    <p class="text-sm text-slate-500">Revised on January 31, 2026</p>
-                </div>
+            <!-- TAB 1: USAGE INFORMATION (RU / EN / KZ) -->
+            <div id="rules-panel-usage">
 
-                <div
-                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
-                    <p>This License Agreement (hereinafter the "Agreement") is a legally binding document between you
-                        (hereinafter the "User") and the software developer <strong>Aru-Lab</strong> (hereinafter the
-                        "Developer"). Installing or using Aru Ai software constitutes your full and unconditional
-                        acceptance of this Agreement.</p>
+                <!-- RUSSIAN VERSION -->
+                <div id="lang-ru" class="lang-node lang-active space-y-8">
+                    <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                        <h2 class="text-xl font-bold mb-2">ИНФОРМАЦИЯ ОБ ИСПОЛЬЗОВАНИИ И БЕЗОПАСНОСТИ ARU AI</h2>
+                        <p class="text-sm text-slate-500">Редакция от 24 ноября 2026 г.</p>
+                    </div>
 
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. SUBJECT OF THE AGREEMENT
-                        </h3>
-                        <p>1.1. The Developer grants the User a non-exclusive, royalty-free license to use Aru Ai for
-                            personal, educational, or commercial purposes.</p>
-                        <p>1.2. Aru Ai is an interface solution (wrapper) for interacting with AI models and managing
-                            local data.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. DATA ARCHITECTURE & PRIVACY
-                        </h3>
-                        <p>2.1. <strong>Local Storage:</strong> All User data (chat history, artifacts, embeddings) is
-                            stored exclusively on the User's device in SQLite database format.</p>
-                        <p>2.2. <strong>No Encryption:</strong> The User is notified that the SQLite database is not
-                            encrypted to ensure performance and data accessibility.</p>
-                        <p>2.3. <strong>Access Responsibility:</strong> The User is solely responsible for securing the
-                            database file. The Developer cannot restore data in case of loss or forgotten passwords.</p>
-                        <p>2.4. <strong>Data Transfer:</strong> Aru Ai transmits data only to the User-selected
-                            third-party provider (Google Gemini, OpenRouter, etc.) at the moment of a request.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. THIRD-PARTY PROVIDERS & API
-                        </h3>
-                        <p>3.1. Aru Ai is not a standalone language model and requires connection to third-party APIs.
+                    <div
+                        class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                        <p>Aru AI - это бесплатное приложение с открытым исходным кодом, которое разрабатывается
+                            <strong>Aru-Lab</strong> и распространяется под свободной лицензией <strong>GNU General Public
+                            License v3.0 (GNU GPL v3)</strong>. Согласно разделу 9 лицензии GNU GPL v3 вам не нужно
+                            принимать какие-либо соглашения для запуска и использования программы: лицензия действует
+                            в случаях, когда вы изменяете или распространяете ее код. Ниже собрана честная памятка о том,
+                            как работают данные, внешние сервисы и ограничения безопасности в приложении и публичном
+                            PWA-клиенте <strong>chat.aru-lab.space</strong>.
                         </p>
-                        <p>3.2. The User is responsible for complying with the Terms of Service of third-party
-                            providers.</p>
-                        <p>3.3. Training Risks: Data used on free tiers of third-party providers might be used for model
-                            training.</p>
-                    </section>
 
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. AGE PROFILES & SAFETY</h3>
-                        <p>4.1. Aru Ai provides "Child" and "Teen" profiles with content filtering features.</p>
-                        <p>4.2. Filtering is based on semantic analysis of third-party LLMs and may not be 100%
-                            error-proof.</p>
-                        <p>4.3. Use of the software by children must be supervised by adults.</p>
-                    </section>
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. О ПРОЕКТЕ И ЛИЦЕНЗИИ
+                                GNU GPL V3</h3>
+                            <p>1.1. Aru AI не является самостоятельной языковой моделью. Это локальная оболочка для
+                                общения с выбранным вами ИИ и организации ваших заметок, задач, документов и журналов.</p>
+                            <p>1.2. Весь исходный код приложения открыт и предоставляется безвозмездно на условиях
+                                <strong>GNU GPL v3</strong> (подробный текст смотрите на вкладке «Лицензия GNU GPL v3»
+                                или в файле <a href="LICENSE" target="_blank" rel="noopener">LICENSE</a>). В приложении
+                                нет рекламы, подписок и платных ограничений.
+                            </p>
+                            <p>1.3. Публичная веб-версия (PWA) на <code>chat.aru-lab.space</code> предоставляется как
+                                удобный способ запустить клиент прямо в браузере без ручной настройки локального сервера.
+                            </p>
+                        </section>
 
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. LIMITATION OF LIABILITY
-                        </h3>
-                        <p>5.1. <strong>AS IS:</strong> The software is provided "AS IS". The Developer does not
-                            guarantee error-free performance.</p>
-                        <p>5.2. The Developer is not liable for any direct or indirect damage resulting from the use or
-                            inability to use the software.</p>
-                    </section>
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. ХРАНЕНИЕ ДАННЫХ,
+                                ШИФРОВАНИЕ И ПРИВАТНОСТЬ</h3>
+                            <p>2.1. <strong>Локальная база данных:</strong> По умолчанию ваши чаты, история, факты
+                                памяти, артефакты Canvas, задачи, навыки (Aru Skills) и записи Fit &amp; Care хранятся
+                                локально на вашем устройстве в базе SQLite (плюс кеш браузера для интерфейса и настроек).
+                            </p>
+                            <p>2.2. <strong>Шифрование и доступ к устройству:</strong> Сам локальный файл SQLite не
+                                шифруется для высокой скорости работы и удобного экспорта. Вы можете защитить вход в
+                                интерфейс мастер-паролем (хранится хеш PBKDF2) и системной биометрией WebAuthn (Touch ID,
+                                Face ID, Windows Hello) - это защита доступа на уровне интерфейса на вашем устройстве, а
+                                не шифрование самого файла базы.
+                            </p>
+                            <p>2.3. <strong>Опциональная облачная синхронизация и P2P:</strong> Если вы сами подключите
+                                синхронизацию через свой аккаунт <strong>Google Drive</strong> или сервер
+                                <strong>WebDAV</strong>, снимки базы перед отправкой шифруются на вашем устройстве по
+                                схеме <strong>end-to-end AES-GCM</strong>, а локально сохраненные ключи подключения
+                                защищаются мастер-паролем (PBKDF2 + AES-GCM). Также доступна прямая передача данных
+                                между устройствами через WebRTC P2P.
+                            </p>
+                            <p>2.4. <strong>Приватные (эфемерные) чаты:</strong> Сообщения в приватном чате живут
+                                только в оперативной памяти и безвозвратно удаляются сразу после закрытия вкладки (однако
+                                отправляемые запросы по-прежнему обрабатываются выбранным вами ИИ-провайдером).</p>
+                            <p>2.5. <strong>Ответственность за сохранность:</strong> Разработчик не хранит ваши базы
+                                данных и пароли на своих серверах и технически не может восстановить потерянный пароль
+                                или удаленный файл базы. Позаботьтесь о резервных копиях.</p>
+                        </section>
 
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. INTELLECTUAL PROPERTY</h3>
-                        <p>6.1. The source code is Open Source as specified in the project repository.</p>
-                        <p>6.2. Visual assets, including the <strong>"Aru Fox" mascot</strong>, are copyrighted
-                            properties of Aru-Lab.</p>
-                    </section>
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. ИИ-МОДЕЛИ, ЛОКАЛЬНЫЙ
+                                ЗАПУСК И ВНЕШНИЕ СЕРВИСЫ</h3>
+                            <p>3.1. <strong>Локальные модели:</strong> При подключении локальных серверов (Ollama, LM
+                                Studio или других OpenAI-совместимых API в вашей сети) тексты чатов не покидают ваше
+                                устройство или локальную сеть.</p>
+                            <p>3.2. <strong>Сторонние ИИ-провайдеры:</strong> При использовании облачных API (Google
+                                Gemini, OpenRouter и др.) данные каждого запроса отправляются напрямую выбранному вами
+                                провайдеру. Вы самостоятельно соблюдаете его условия использования; на бесплатных тарифах
+                                провайдеры могут использовать отправленные данные для обучения моделей.</p>
+                            <p>3.3. <strong>Опциональные сетевые функции:</strong> Когда вы включаете или вызываете
+                                дополнительные инструменты, приложение может обращаться к внешним ресурсам:</p>
+                            <ul>
+                                <li><strong>Open-Meteo</strong> - прогноз погоды для виджета дашборда и инструмента
+                                    погоды;</li>
+                                <li><strong>Tavily API</strong> или указанный вами сервер <strong>SearXNG</strong> - при
+                                    включенном веб-поиске;</li>
+                                <li><strong>rss2json</strong> и публичные CORS-прокси (<code>allorigins.win</code>,
+                                    <code>codetabs.com</code>, <code>cors.lol</code>) или ваш собственный прокси - для
+                                    RSS-новостей и чтения веб-ссылок в Aru Skills (API-ключи через публичные прокси не
+                                    передаются);
+                                </li>
+                                <li><strong>Google Drive API / WebDAV</strong> - только если вы настроили облачную
+                                    синхронизацию;</li>
+                                <li><strong>PeerJS</strong> (публичный или ваш собственный сигнальный сервер) - только
+                                    для установки прямого WebRTC P2P-соединения;</li>
+                                <li><strong>CDN-ресурсы</strong> - загрузка интерфейсных библиотек, шрифтов, SQL.js
+                                    WASM, KaTeX и локальной модели эмбеддингов <code>@xenova/transformers</code>.</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ВОЗРАСТНЫЕ РЕЖИМЫ И
+                                БЕЗОПАСНОСТЬ</h3>
+                            <p>4.1. В приложении предусмотрены профили <strong>«Ребенок»</strong>,
+                                <strong>«Подросток»</strong> и <strong>«Взрослый»</strong>.</p>
+                            <p>4.2. В профиле «Ребенок» действует двухуровневая защита: локальный детерминированный
+                                фильтр (<code>safety.js</code>) проверяет ввод и ответы модели на взрослую лексику,
+                                запросы готовых домашних заданий и кризисные сигналы, а также применяются строгие
+                                системные инструкции для LLM. Плагины <strong>Fit &amp; Care</strong> и <strong>Aru
+                                Skills</strong> в детском режиме отключены; в режиме «Подросток» скрыт интимный дневник.
+                            </p>
+                            <p>4.3. Ни одна автоматическая фильтрация и ни одна LLM не дают 100% гарантии точности.
+                                Использование приложения детьми должно проходить под присмотром взрослых.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. FIT &amp; CARE -
+                                ПРЕДУПРЕЖДЕНИЕ О ЗДОРОВЬЕ</h3>
+                            <p>5.1. Плагин <strong>Fit &amp; Care</strong> предназначен исключительно для личных
+                                заметок и самонаблюдения (вес, питание, тренировки, прием лекарств, самочувствие и
+                                календарь цикла).</p>
+                            <p>5.2. Приложение <strong>не является медицинским изделием</strong> и не заменяет врача,
+                                диетолога или тренера. Расчеты калорий, БЖУ, нагрузок и фаз цикла носят справочный и
+                                приблизительный характер. Прогнозы цикла и овуляции <strong>нельзя использовать для
+                                контрацепции, планирования беременности или постановки диагнозов</strong>. По вопросам
+                                здоровья обращайтесь к квалифицированным специалистам.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ОТВЕТЫ ИИ, CANVAS И
+                                СГЕНЕРИРОВАННЫЙ КОД</h3>
+                            <p>6.1. Языковые модели могут ошибаться, выдумывать факты и генерировать неточный или
+                                небезопасный код.</p>
+                            <p>6.2. Приложения в <strong>Canvas</strong> и результаты цепочек <strong>Aru Skills</strong>
+                                запускаются в изолированной песочнице браузера, однако ответственность за проверку
+                                сгенерированного кода, расчетов, документов и внешних ссылок перед их использованием несет
+                                пользователь.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">7. ОТКАЗ ОТ ГАРАНТИЙ И
+                                ОГРАНИЧЕНИЕ ОТВЕТСТВЕННОСТИ</h3>
+                            <p>7.1. В соответствии с разделами 15 и 16 лицензии GNU GPL v3 программа предоставляется
+                                «КАК ЕСТЬ» (<strong>AS IS</strong>), без каких-либо явных или подразумеваемых гарантий,
+                                включая пригодность для конкретной цели или бесперебойную работу сторонних сервисов.</p>
+                            <p>7.2. Разработчик (Aru-Lab) и контрибьюторы не несут ответственности за любой прямой или
+                                косвенный ущерб, утрату данных, забытый пароль, сбои сторонних API или последствия
+                                решений, принятых на основе ответов ИИ.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">8. ИНТЕЛЛЕКТУАЛЬНАЯ
+                                СОБСТВЕННОСТЬ И БРЕНД</h3>
+                            <p>8.1. Исходный код приложения является свободным ПО под лицензией <strong>GNU GPL
+                                v3</strong>.</p>
+                            <p>8.2. Названия <strong>«Aru AI»</strong>, <strong>«Aru-Lab»</strong> и оригинальные
+                                иллюстрации персонажа <strong>«Лисичка Ару»</strong> в каталоге <code>media/</code>
+                                принадлежат Aru-Lab и не передаются под действие GNU GPL v3 (в соответствии с пунктом
+                                7(e) GNU GPL v3 и отдельными условиями для визуальных материалов).</p>
+                        </section>
+                    </div>
                 </div>
+
+                <!-- ENGLISH VERSION -->
+                <div id="lang-en" class="lang-node space-y-8">
+                    <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                        <h2 class="text-xl font-bold mb-2">ARU AI USAGE, PRIVACY &amp; SAFETY INFORMATION</h2>
+                        <p class="text-sm text-slate-500">Updated November 24, 2026</p>
+                    </div>
+
+                    <div
+                        class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                        <p>Aru AI is free and open-source software created by <strong>Aru-Lab</strong> and licensed
+                            under the <strong>GNU General Public License v3.0 (GNU GPL v3)</strong>. Under Section 9 of
+                            GNU GPL v3, you are not required to accept any license agreement simply to run or use the
+                            program - the license governs modification and redistribution of the code. This page summarizes
+                            how local storage, optional external services, and safety tools operate in the app and the
+                            public PWA at <strong>chat.aru-lab.space</strong>.
+                        </p>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. ABOUT THE PROJECT &amp;
+                                GNU GPL V3</h3>
+                            <p>1.1. Aru AI is not a standalone language model. It is a client workspace for interacting
+                                with AI models of your choice and organizing your chats, tasks, documents, and personal logs.
+                            </p>
+                            <p>1.2. The application source code is open and free under the <strong>GNU GPL v3</strong>
+                                license (see the "GNU GPL v3 License" tab or the <a href="LICENSE" target="_blank"
+                                rel="noopener">LICENSE</a> file). There are no ads, subscriptions, or paywalls.</p>
+                            <p>1.3. The public PWA hosted at <code>chat.aru-lab.space</code> is provided solely as a
+                                convenient way to run the application in your browser without setting up a local server.
+                            </p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. DATA STORAGE,
+                                ENCRYPTION &amp; PRIVACY</h3>
+                            <p>2.1. <strong>Local database:</strong> By default, your chats, memory facts, embeddings,
+                                Canvas artifacts, tasks, Aru Skills, and Fit &amp; Care entries are stored locally on your
+                                device in SQLite format (along with browser storage for UI cache and preferences).</p>
+                            <p>2.2. <strong>Encryption and device access:</strong> The local SQLite database file itself
+                                is unencrypted for performance and portability. You can protect app sign-in with a master
+                                password (stored as a PBKDF2 hash) and WebAuthn biometrics (Touch ID, Face ID, Windows
+                                Hello) - this guards UI access on your device rather than encrypting the SQLite file
+                                itself.</p>
+                            <p>2.3. <strong>Optional cloud sync and P2P:</strong> If you enable synchronization with your
+                                own <strong>Google Drive</strong> account or <strong>WebDAV</strong> server, database
+                                snapshots are encrypted on your device using <strong>end-to-end AES-GCM</strong> before
+                                upload, and saved sync credentials are encrypted locally with your master password (PBKDF2
+                                + AES-GCM). Direct device-to-device transfer via WebRTC P2P is also available.</p>
+                            <p>2.4. <strong>Private (ephemeral) chats:</strong> Messages in Private Chat stay in RAM
+                                only and are wiped immediately when the tab is closed (though active prompts are still sent
+                                to whichever AI model provider you selected).</p>
+                            <p>2.5. <strong>Your responsibility:</strong> Aru-Lab operates no central server storing user
+                                databases or passwords and cannot recover lost files or forgotten passwords. Keep regular
+                                backups.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. AI MODELS, LOCAL
+                                EXECUTION &amp; EXTERNAL SERVICES</h3>
+                            <p>3.1. <strong>Local LLMs:</strong> When connected to local endpoints (Ollama, LM Studio, or
+                                LAN OpenAI-compatible servers), your conversations never leave your device or local network.
+                            </p>
+                            <p>3.2. <strong>Third-party LLM APIs:</strong> When using cloud providers (Google Gemini,
+                                OpenRouter, etc.), request payloads are sent directly to your chosen provider. You are
+                                responsible for following their Terms of Service; free tiers of third-party providers may
+                                use submitted data to train models.</p>
+                            <p>3.3. <strong>Optional network features:</strong> When you enable or invoke specific tools,
+                                requests may be sent to external services:</p>
+                            <ul>
+                                <li><strong>Open-Meteo</strong> - weather data for the Dashboard widget and Weather tool;
+                                </li>
+                                <li><strong>Tavily API</strong> or your chosen <strong>SearXNG</strong> instance - when
+                                    web search is enabled;</li>
+                                <li><strong>rss2json</strong> and public CORS proxies (<code>allorigins.win</code>,
+                                    <code>codetabs.com</code>, <code>cors.lol</code>) or your custom proxy - for RSS news
+                                    feeds and web URL fetching in Aru Skills (API keys are never sent through public
+                                    proxies);</li>
+                                <li><strong>Google Drive API / WebDAV</strong> - only when cloud sync is configured by
+                                    you;</li>
+                                <li><strong>PeerJS</strong> (default signaling server or your custom server) - only when
+                                    initiating a WebRTC P2P transfer;</li>
+                                <li><strong>Public CDNs</strong> - runtime libraries, fonts, SQL.js WASM, KaTeX, and local
+                                    semantic embedding model files (<code>@xenova/transformers</code>).</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. AGE PROFILES &amp;
+                                SAFETY</h3>
+                            <p>4.1. Aru AI offers <strong>Child</strong>, <strong>Teen</strong>, and <strong>Adult</strong>
+                                age modes.</p>
+                            <p>4.2. Child mode applies two layers: a local deterministic filter (<code>safety.js</code>)
+                                that screens inputs and model outputs for adult content, homework-solving requests, and
+                                crisis signals, plus strict LLM system instructions. <strong>Fit &amp; Care</strong> and
+                                <strong>Aru Skills</strong> are disabled in Child mode, and the intimacy journal is disabled
+                                in Teen mode.</p>
+                            <p>4.3. No automated filter or language model is 100% error-proof. Use by children must remain
+                                under adult supervision.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. FIT &amp; CARE - HEALTH
+                                &amp; CYCLE DISCLAIMER</h3>
+                            <p>5.1. The <strong>Fit &amp; Care</strong> plugin is intended solely as a personal wellness
+                                journal (weight, nutrition, workouts, medication schedule, symptoms, and cycle notes).</p>
+                            <p>5.2. The software <strong>is not a medical device</strong> and does not provide medical,
+                                nutritional, or clinical advice, diagnosis, or treatment. Calorie, macro, workload, and cycle
+                                calculations are approximate estimates. Cycle and ovulation predictions <strong>must never
+                                be used for contraception, fertility planning, or medical diagnosis</strong>. Consult a
+                                qualified healthcare professional.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. AI OUTPUTS, CANVAS &amp;
+                                GENERATED CODE</h3>
+                            <p>6.1. Language models can make mistakes, fabricate facts, or generate flawed or insecure
+                                code.</p>
+                            <p>6.2. While <strong>Canvas</strong> and <strong>Aru Skills</strong> execute generated HTML/JS
+                                inside a browser sandbox, the User remains solely responsible for reviewing generated code,
+                                calculations, documents, and external links before relying on them.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">7. DISCLAIMER OF WARRANTY
+                                &amp; LIMITATION OF LIABILITY</h3>
+                            <p>7.1. In accordance with Sections 15 and 16 of GNU GPL v3, the program is provided "AS IS"
+                                without warranty of any kind, express or implied, including fitness for a particular purpose
+                                or uninterrupted third-party API availability.</p>
+                            <p>7.2. Aru-Lab and contributors are not liable for any direct or indirect damages, data loss,
+                                forgotten passwords, third-party outages, or decisions made from AI outputs.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">8. INTELLECTUAL PROPERTY
+                                &amp; BRANDING</h3>
+                            <p>8.1. The application source code is licensed under <strong>GNU GPL v3</strong>.</p>
+                            <p>8.2. The names <strong>"Aru AI"</strong>, <strong>"Aru-Lab"</strong>, and original
+                                artwork of the <strong>"Aru Fox" mascot</strong> in <code>media/</code> remain copyrighted
+                                branding and visual assets of Aru-Lab, excluded from the code license under GNU GPL v3
+                                Section 7(e) and separate asset rights.</p>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- KAZAKH VERSION -->
+                <div id="lang-kz" class="lang-node space-y-8">
+                    <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
+                        <h2 class="text-xl font-bold mb-2">ARU AI ПАЙДАЛАНУ, ҚҰПИЯЛЫЛЫҚ ЖӘНЕ ҚАУІПСІЗДІК АҚПАРАТЫ</h2>
+                        <p class="text-sm text-slate-500">2026 жылғы 24 қарашадағы редакция</p>
+                    </div>
+
+                    <div
+                        class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
+                        <p>Aru AI - бұл <strong>Aru-Lab</strong> әзірлейтін және <strong>GNU General Public License v3.0
+                            (GNU GPL v3)</strong> еркін лицензиясы бойынша таратылатын ашық бастапқы коды бар тегін
+                            қосымша. GNU GPL v3 лицензиясының 9-бөліміне сәйкес бағдарламаны іске қосу және пайдалану
+                            үшін ешқандай келісімді қабылдау міндетті емес: лицензия кодты өзгерту және тарату кезінде
+                            қолданылады. Төменде қосымшада және <strong>chat.aru-lab.space</strong> ашық PWA-нұсқасында
+                            деректердің қалай сақталатыны, қандай сыртқы сервистер пайдаланылуы мүмкін екені және
+                            қауіпсіздік шектеулері көрсетілген.
+                        </p>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. ЖОБА ЖӘНЕ GNU GPL V3
+                                ЛИЦЕНЗИЯСЫ ТУРАЛЫ</h3>
+                            <p>1.1. Aru AI дербес тілдік модель емес. Бұл өзіңіз таңдаған ИИ модельдерімен сөйлесуге,
+                                жазбаларды, тапсырмаларды, құжаттарды және жеке күнделіктерді басқаруға арналған
+                                жергілікті қабықша.</p>
+                            <p>1.2. Қосымшаның бастапқы коды ашық және <strong>GNU GPL v3</strong> шарттарымен тегін
+                                беріледі (толық мәтінді «GNU GPL v3 лицензиясы» қойындысынан немесе <a href="LICENSE"
+                                target="_blank" rel="noopener">LICENSE</a> файлынан қараңыз). Қосымшада жарнама,
+                                жазылым және ақылы шектеулер жоқ.</p>
+                            <p>1.3. <code>chat.aru-lab.space</code> мекенжайындағы ашық веб-нұсқа (PWA) жергілікті
+                                серверді қолмен баптамай-ақ браузерде іске қосуға арналған ыңғайлы тәсіл ретінде
+                                ұсынылады.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. ДЕРЕКТЕРДІ САҚТАУ,
+                                ШИФРЛАУ ЖӘНЕ ҚҰПИЯЛЫЛЫҚ</h3>
+                            <p>2.1. <strong>Жергілікті дерекқор:</strong> Әдепкі бойынша чаттар, тарих, жад фактілері,
+                                эмбеддингтер, Canvas артефактілері, тапсырмалар, Aru Skills және Fit &amp; Care
+                                жазбалары құрылғыңызда SQLite форматында сақталады (интерфейс кэші мен баптаулар
+                                браузер жадында сақталады).</p>
+                            <p>2.2. <strong>Шифрлау және құрылғыға кіру:</strong> Жергілікті SQLite файлының өзі
+                                жылдамдық пен деректердің қолжетімділігі үшін шифрланбайды. Интерфейске кіруді
+                                мастер-құпия сөзбен (PBKDF2 хэші сақталады) және WebAuthn биометриясымен (Touch ID,
+                                Face ID, Windows Hello) қорғауға болады - бұл дерекқор файлын шифрлау емес, құрылғыдағы
+                                интерфейс деңгейіндегі кіру қорғанысы.</p>
+                            <p>2.3. <strong>Таңдаулы бұлттық синхрондау және P2P:</strong> Егер өзіңіз
+                                <strong>Google Drive</strong> немесе <strong>WebDAV</strong> серверімен синхрондауды
+                                қоссаңыз, дерекқор көшірмелері жіберілер алдында құрылғыңызда <strong>end-to-end
+                                AES-GCM</strong> әдісімен шифрланады, ал сақталған қосылу деректері мастер-құпия
+                                сөзбен (PBKDF2 + AES-GCM) қорғалады. Сондай-ақ WebRTC P2P арқылы құрылғылар арасында
+                                тікелей тасымалдау қолжетімді.</p>
+                            <p>2.4. <strong>Құпия (уақытша) чаттар:</strong> Құпия чаттағы хабарламалар тек жедел
+                                жадта (RAM) сақталады және қойынды жабылған соң бірден жойылады (бірақ сұраныстар
+                                таңдалған ИИ-провайдеріне жіберіледі).</p>
+                            <p>2.5. <strong>Сақталуына жауапкершілік:</strong> Әзірлеуші серверлерінде пайдаланушы
+                                базалары мен құпия сөздер сақталмайды, сондықтан жоғалған файлды немесе ұмытылған құпия
+                                сөзді қалпына келтіру техникалық тұрғыда мүмкін емес. Резервтік көшірмелерді өзіңіз
+                                сақтаңыз.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. ИИ-МОДЕЛЬДЕР,
+                                ЖЕРГІЛІКТІ ІСКЕ ҚОСУ ЖӘНЕ СЫРТҚЫ СЕРВИСТЕР</h3>
+                            <p>3.1. <strong>Жергілікті модельдер:</strong> Жергілікті серверлерді (Ollama, LM Studio
+                                немесе жергілікті желідегі OpenAI-үйлесімді API) қосқан кезде хат алмасу құрылғыдан
+                                немесе жергілікті желіден сыртқа шықпайды.</p>
+                            <p>3.2. <strong>Сыртқы ИИ-провайдерлер:</strong> Бұлттық API (Google Gemini, OpenRouter
+                                т.б.) пайдаланғанда деректер сұраныс кезінде таңдалған провайдерге тікелей жіберіледі.
+                                Олардың пайдалану шарттарын сақтауға пайдаланушы жауапты; тегін тарифтерде деректер
+                                модельдерді оқытуға қолданылуы мүмкін.</p>
+                            <p>3.3. <strong>Қосымша желілік функциялар:</strong> Тиісті құралдарды қосқан кезде
+                                қосымша келесі сыртқы сервистерге сұраныс жіберуі мүмкін:</p>
+                            <ul>
+                                <li><strong>Open-Meteo</strong> - дашбордтағы және құралдағы ауа райы деректері;</li>
+                                <li><strong>Tavily API</strong> немесе өзіңіз көрсеткен <strong>SearXNG</strong>
+                                    сервері - веб-іздеу қосылғанда;</li>
+                                <li><strong>rss2json</strong> және ашық CORS-проксилер (<code>allorigins.win</code>,
+                                    <code>codetabs.com</code>, <code>cors.lol</code>) немесе жеке проксиіңіз - RSS
+                                    жаңалықтары мен Aru Skills сілтемелерін оқу үшін (API-кілттер ашық проксилер арқылы
+                                    ешқашан жіберілмейді);</li>
+                                <li><strong>Google Drive API / WebDAV</strong> - тек бұлттық синхрондауды өзіңіз
+                                    қосқанда;</li>
+                                <li><strong>PeerJS</strong> (әдепкі немесе өзіңіздің сигналдық серверіңіз) - тек WebRTC
+                                    P2P тасымалдауын бастағанда;</li>
+                                <li><strong>CDN ресурстары</strong> - интерфейс кітапханалары, қаріптер, SQL.js WASM,
+                                    KaTeX және жергілікті семантикалық ядро (<code>@xenova/transformers</code>)
+                                    файлдары.</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ЖАС ЕРЕКШЕЛІК ПРОФИЛЬДЕРІ
+                                ЖӘНЕ ҚАУІПСІЗДІК</h3>
+                            <p>4.1. Қосымшада <strong>«Бала»</strong>, <strong>«Жасөспірім»</strong> және
+                                <strong>«Ересек»</strong> профильдері бар.</p>
+                            <p>4.2. «Бала» режимінде екі деңгейлі қорғаныс жұмыс істейді: жергілікті детерминирленген
+                                сүзгі (<code>safety.js</code>) енгізілген мәтін мен модель жауабын ересек мазмұнға, дайын
+                                үй тапсырмаларын сұрауға және дағдарыс белгілеріне тексереді, сондай-ақ LLM үшін қатаң
+                                жүйелік нұсқаулар қолданылады. Бала режимінде <strong>Fit &amp; Care</strong> пен
+                                <strong>Aru Skills</strong> өшіріледі, ал «Жасөспірім» режимінде интимдік күнделік
+                                жабық болады.</p>
+                            <p>4.3. Автоматты сүзгілер де, ИИ модельдері де 100% қатесіз жұмысқа кепілдік бермейді.
+                                Балалардың қосымшаны пайдалануы ересектердің бақылауымен жүруі тиіс.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. FIT &amp; CARE -
+                                ДЕНСАУЛЫҚ ТУРАЛЫ ЕСКЕРТУ</h3>
+                            <p>5.1. <strong>Fit &amp; Care</strong> плагині тек жеке жазбалар мен өзін-өзі бақылауға
+                                арналған (салмақ, тамақтану, жаттығулар, дәрі қабылдау кестесі, көңіл-күй және цикл
+                                күнтізбесі).</p>
+                            <p>5.2. Қосымша <strong>медициналық бұйым болып табылмайды</strong> және дәрігердің,
+                                диетологтың немесе жаттықтырушының кеңесін алмастырмайды. Калория, БЖУ, жүктеме және цикл
+                                есептері шамамен алынған бағдар ретінде беріледі. Цикл мен овуляция болжамдарын
+                                <strong>контрацепция, жүктілікті жоспарлау немесе диагноз қою үшін пайдалануға
+                                болмайды</strong>. Денсаулық мәселелері бойынша білікті маманға жүгініңіз.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ИИ ЖАУАПТАРЫ, CANVAS
+                                ЖӘНЕ ЖАСАЛҒАН КОД</h3>
+                            <p>6.1. Тілдік модельдер қателесуі, фактілерді ойдан шығаруы және қауіпсіздігі төмен код
+                                жазуы мүмкін.</p>
+                            <p>6.2. <strong>Canvas</strong> пен <strong>Aru Skills</strong> нәтижелері браузердің
+                                оқшауланған ортасында (sandbox) орындалғанымен, жасалған кодты, есептеулерді,
+                                құжаттарды және сыртқы сілтемелерді тексеру жауапкершілігі пайдаланушыда қалады.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">7. КЕПІЛДІКТЕН БАС ТАРТУ
+                                ЖӘНЕ ЖАУАПКЕРШІЛІКТІ ШЕКТЕУ</h3>
+                            <p>7.1. GNU GPL v3 лицензиясының 15 және 16-бөлімдеріне сәйкес бағдарлама «СОЛАЙ БОЛҒАН
+                                КҮЙІНДЕ» (<strong>AS IS</strong>), ешқандай кепілдіксіз беріледі.</p>
+                            <p>7.2. Әзірлеуші (Aru-Lab) және қатысушылар бағдарламаны пайдаланудан, деректердің немесе
+                                құпия сөздің жоғалуынан, сыртқы API іркілістерінен не ИИ жауаптарынан туындаған
+                                кез келген залал үшін жауап бермейді.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">8. ЗИЯТКЕРЛІК МЕНШІК ЖӘНЕ
+                                БРЕНД</h3>
+                            <p>8.1. Қосымшаның бастапқы коды <strong>GNU GPL v3</strong> лицензиясымен таратылатын еркін
+                                БҚ болып табылады.</p>
+                            <p>8.2. <strong>«Aru AI»</strong>, <strong>«Aru-Lab»</strong> атаулары және
+                                <code>media/</code> қалтасындағы <strong>«Ару түлкісі»</strong> маскотының түпнұсқа
+                                бейнелері Aru-Lab меншігі болып қалады және код лицензиясына (GNU GPL v3 7(e) тармағы
+                                мен жеке актив құқықтары) кірмейді.</p>
+                        </section>
+                    </div>
+                </div>
+
             </div>
 
-            <!-- KAZAKH VERSION -->
-            <div id="lang-kz" class="lang-node space-y-8">
-                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center md:text-left">
-                    <h2 class="text-xl font-bold mb-2">СОҢҒЫ ПАЙДАЛАНУШЫНЫҢ ЛИЦЕНЗИЯЛЫҚ КЕЛІСІМІ (EULA)</h2>
-                    <p class="text-sm text-slate-500">2026 жылғы 31 қаңтардағы редакция</p>
+            <!-- TAB 2: VERBATIM GNU GPL v3 LICENSE -->
+            <div id="rules-panel-license" class="hidden space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                    <p class="text-xs md:text-sm text-slate-600 dark:text-slate-300 m-0" data-i18n="eula_gpl_note">
+                        Исходный код Aru AI распространяется под лицензией GNU General Public License v3.0 (GPLv3). Ниже приведен оригинальный юридически значимый текст лицензии на английском языке.
+                    </p>
+                    <a href="LICENSE" target="_blank" rel="noopener"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-aru-600 dark:text-aru-400 hover:border-aru-400 transition shrink-0">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span data-i18n="eula_gpl_open">Открыть файл LICENSE</span>
+                    </a>
                 </div>
 
-                <div
-                    class="prose dark:prose-invert max-w-none space-y-6 text-slate-700 dark:text-slate-300 leading-relaxed">
-                    <p>Осы Лицензиялық келісім (бұдан әрі — «Келісім») Сіз (бұдан әрі — «Пайдаланушы») және
-                        <strong>Aru-Lab</strong> бағдарламалық қамтамасыз етуді әзірлеуші (бұдан әрі — «Әзірлеуші»)
-                        арасында жасалатын заңды құжат болып табылады. Aru Ai БҚ орнату немесе кез келген түрде
-                        пайдалану осы Келісім шарттарымен толық келісуді білдіреді.
-                    </p>
+                <pre id="rules-gpl-text"
+                    class="overflow-x-auto max-h-[55vh] text-xs font-mono leading-relaxed whitespace-pre-wrap bg-slate-100/70 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-6 text-slate-700 dark:text-slate-300 custom-scrollbar"
+                    data-i18n="eula_gpl_loading">Загрузка текста лицензии GNU GPL v3...</pre>
 
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. КЕЛІСІМ ПӘНІ</h3>
-                        <p>1.1. Әзірлеуші Пайдаланушыға Aru Ai БҚ-ны жеке, білім беру немесе коммерциялық мақсатта
-                            пайдалануға айрықша емес, өтеусіз лицензия береді.</p>
-                        <p>1.2. Aru Ai жасанды интеллект модельдерімен өзара әрекеттесуге арналған интерфейстік шешім
-                            (қабықша) болып табылады.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. ДЕРЕКТЕР АРХИТЕКТУРАСЫ ЖӘНЕ
-                            ҚҰПИЯЛЫЛЫҚ</h3>
-                        <p>2.1. <strong>Жергілікті сақтау:</strong> Пайдаланушының барлық деректері (чат тарихы,
-                            артефактілер) тек Пайдаланушының құрылғысында SQLite форматында сақталады.</p>
-                        <p>2.2. <strong>Шифрлаудың болмауы:</strong> SQLite дерекқоры деректердің қолжетімділігі мен
-                            жылдамдығын қамтамасыз ету мақсатында шифрланбаған.</p>
-                        <p>2.3. <strong>Қолжетімділік үшін жауапкершілік:</strong> Дерекқор файлының сақталуына
-                            Пайдаланушы ғана жауапты. Әзірлеушіде деректерді қалпына келтіру мүмкіндігі жоқ.</p>
-                        <p>2.4. <strong>Деректерді беру:</strong> БҚ деректерді тек Пайдаланушы таңдаған сыртқы
-                            провайдерге (Google Gemini және т.б.) сұраныс кезінде ғана жібереді.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. СЫРТҚЫ ПРОВАЙДЕРЛЕР ЖӘНЕ
-                            API</h3>
-                        <p>3.1. Aru Ai дербес тілдік модель емес. Жұмыс істеу үшін сыртқы API-ге қосылу қажет.</p>
-                        <p>3.2. Пайдаланушы сыртқы провайдерлердің пайдалану шарттарын (Terms of Service) сақтауға
-                            міндетті.</p>
-                        <p>3.3. Оқыту тәуекелдері: Сыртқы провайдерлердің тегін тарифтерін пайдаланған кезде деректер олардың модельдерін оқыту үшін қолданылуы мүмкін.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">4. ЖАС ЕРЕКШЕЛІК ПРОФИЛЬДЕРІ
-                        </h3>
-                        <p>4.1. БҚ мазмұнды сүзгілеу мүмкіндігі бар «Балалар» және «Жасөспірімдер» профильдерін ұсынады.
-                        </p>
-                        <p>4.2. Сүзгілеу сыртқы LLM-дердің семантикалық талдауы негізінде жүзеге асады, қателердің болуы
-                            мүмкін.</p>
-                        <p>4.3. Балалардың БҚ-ны пайдалануы ересектердің бақылауымен жүзеге асырылуы тиіс.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. ЖАУАПКЕРШІЛІКТІ ШЕКТЕУ</h3>
-                        <p>5.1. <strong>«СОЛАЙ БОЛҒАН КҮЙІНДЕ»:</strong> БҚ «AS IS» шартымен беріледі. Әзірлеуші
-                            үздіксіз жұмысқа кепілдік бермейді.</p>
-                        <p>5.2. Әзірлеуші БҚ-ны пайдалану нәтижесінде болған кез келген тікелей немесе жанама залал үшін
-                            жауап бермейді.</p>
-                    </section>
-
-                    <section>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. ЗИЯТКЕРЛІК МЕНШІК</h3>
-                        <p>6.1. Бастапқы код жоба репозиторийіндегі шарттарға сәйкес ашық (Open Source) болып табылады.
-                        </p>
-                        <p>6.2. Визуалды активтер, соның ішінде <strong>«Ару Түлкісі» (маскот)</strong>, Aru-Lab
-                            авторлық құқық объектілері болып табылады.</p>
-                    </section>
+                <div id="rules-gpl-fallback"
+                    class="hidden p-5 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-900/20 text-xs md:text-sm text-amber-900 dark:text-amber-200 space-y-2">
+                    <p class="m-0" data-i18n="eula_gpl_error">Не удалось загрузить файл LICENSE локально. Полный текст лицензии доступен по ссылке ниже.</p>
+                    <a href="https://www.gnu.org/licenses/gpl-3.0.txt" target="_blank" rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1.5 font-semibold underline">
+                        https://www.gnu.org/licenses/gpl-3.0.txt
+                    </a>
                 </div>
             </div>
 
         </main>
+    </div>
 
-        <script>
-            // Initialize Lucide icons
-            lucide.createIcons();
+    <script>
+        // Initialize Lucide icons in standalone mode
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
 
-            function setLanguage(lang) {
-                // Hide all nodes
-                document.querySelectorAll('.lang-node').forEach(node => {
-                    node.classList.remove('lang-active');
-                });
+        const STANDALONE_I18N = {
+            ru: {
+                eula_title: 'Информация об использовании',
+                eula_tab_usage: 'Информация об использовании',
+                eula_tab_license: 'Лицензия GNU GPL v3',
+                eula_gpl_note: 'Исходный код Aru AI распространяется под лицензией GNU General Public License v3.0 (GPLv3). Ниже приведен оригинальный юридически значимый текст лицензии на английском языке.',
+                eula_gpl_open: 'Открыть файл LICENSE',
+                eula_gpl_loading: 'Загрузка текста лицензии GNU GPL v3...',
+                eula_gpl_error: 'Не удалось загрузить файл LICENSE локально. Полный текст лицензии доступен по ссылке ниже.'
+            },
+            en: {
+                eula_title: 'Usage Information',
+                eula_tab_usage: 'Usage Information',
+                eula_tab_license: 'GNU GPL v3 License',
+                eula_gpl_note: 'Aru AI source code is distributed under the GNU General Public License v3.0 (GPLv3). Below is the verbatim, legally binding text of the license.',
+                eula_gpl_open: 'Open LICENSE file',
+                eula_gpl_loading: 'Loading GNU GPL v3 license text...',
+                eula_gpl_error: 'Could not load the local LICENSE file. You can read the full license text using the link below.'
+            },
+            kz: {
+                eula_title: 'Пайдалану туралы ақпарат',
+                eula_tab_usage: 'Пайдалану ақпараты',
+                eula_tab_license: 'GNU GPL v3 лицензиясы',
+                eula_gpl_note: 'Aru AI бастапқы коды GNU General Public License v3.0 (GPLv3) лицензиясы бойынша таратылады. Төменде заңды күші бар түпнұсқа мәтін ағылшын тілінде берілген.',
+                eula_gpl_open: 'LICENSE файлын ашу',
+                eula_gpl_loading: 'GNU GPL v3 лицензия мәтіні жүктелуде...',
+                eula_gpl_error: 'Жергілікті LICENSE файлын жүктеу мүмкін болмады. Толық мәтінді төмендегі сілтемеден оқи аласыз.'
+            }
+        };
 
-                // Show selected language
-                const targetLang = lang === 'kk' ? 'kz' : lang;
-                const targetNode = document.getElementById('lang-' + targetLang);
-                if (targetNode) targetNode.classList.add('lang-active');
+        let standaloneGplLoaded = false;
 
-                // Update buttons styling
-                const buttons = {
-                    kz: document.getElementById('btn-kz-inner'),
-                    en: document.getElementById('btn-en-inner'),
-                    ru: document.getElementById('btn-ru-inner')
-                };
+        function setLanguage(lang) {
+            document.querySelectorAll('.lang-node').forEach(node => {
+                node.classList.remove('lang-active');
+            });
 
-                Object.keys(buttons).forEach(key => {
-                    const btn = buttons[key];
-                    if (!btn) return;
-                    if (key === targetLang) {
-                        btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
-                        btn.classList.remove('text-slate-500');
-                    } else {
-                        btn.classList.remove('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
-                        btn.classList.add('text-slate-500');
+            const targetLang = lang === 'kk' ? 'kz' : (STANDALONE_I18N[lang] ? lang : 'ru');
+            const targetNode = document.getElementById('lang-' + targetLang);
+            if (targetNode) targetNode.classList.add('lang-active');
+
+            const dict = STANDALONE_I18N[targetLang] || STANDALONE_I18N.ru;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (el.id === 'rules-gpl-text' && standaloneGplLoaded) return;
+                if (dict[key]) el.textContent = dict[key];
+            });
+
+            const buttons = {
+                kz: document.getElementById('btn-kz-inner'),
+                en: document.getElementById('btn-en-inner'),
+                ru: document.getElementById('btn-ru-inner')
+            };
+
+            Object.keys(buttons).forEach(key => {
+                const btn = buttons[key];
+                if (!btn) return;
+                if (key === targetLang) {
+                    btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                    btn.classList.remove('text-slate-500');
+                } else {
+                    btn.classList.remove('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                    btn.classList.add('text-slate-500');
+                }
+            });
+        }
+
+        async function setRulesTab(tab) {
+            const isLicense = tab === 'license';
+            const usagePanel = document.getElementById('rules-panel-usage');
+            const licensePanel = document.getElementById('rules-panel-license');
+            const usageBtn = document.getElementById('btn-rules-tab-usage');
+            const licenseBtn = document.getElementById('btn-rules-tab-license');
+
+            if (usagePanel) usagePanel.classList.toggle('hidden', isLicense);
+            if (licensePanel) licensePanel.classList.toggle('hidden', !isLicense);
+
+            const applyTabStyle = (btn, active) => {
+                if (!btn) return;
+                btn.setAttribute('aria-selected', active ? 'true' : 'false');
+                if (active) {
+                    btn.classList.add('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                    btn.classList.remove('text-slate-500', 'dark:text-slate-400');
+                } else {
+                    btn.classList.remove('bg-white', 'dark:bg-aru-600', 'shadow-sm', 'text-aru-600', 'dark:text-white');
+                    btn.classList.add('text-slate-500', 'dark:text-slate-400');
+                }
+            };
+            applyTabStyle(usageBtn, !isLicense);
+            applyTabStyle(licenseBtn, isLicense);
+
+            if (isLicense && !standaloneGplLoaded) {
+                const preEl = document.getElementById('rules-gpl-text');
+                const fbEl = document.getElementById('rules-gpl-fallback');
+                try {
+                    const res = await fetch('LICENSE');
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const text = await res.text();
+                    if (!text || !text.trim()) throw new Error('Empty LICENSE');
+                    standaloneGplLoaded = true;
+                    if (preEl) {
+                        preEl.removeAttribute('data-i18n');
+                        preEl.textContent = text;
+                        preEl.classList.remove('hidden');
                     }
-                });
+                    if (fbEl) fbEl.classList.add('hidden');
+                } catch (_) {
+                    if (preEl) preEl.classList.add('hidden');
+                    if (fbEl) fbEl.classList.remove('hidden');
+                }
             }
+        }
 
-            // Initialize language from localStorage (maps 'kk' -> 'kz')
-            try {
-                setLanguage(localStorage.getItem('aru_lang') || 'ru');
-            } catch (_) {
-                setLanguage('ru');
-            }
+        // Initialize language from localStorage (maps 'kk' -> 'kz')
+        try {
+            setLanguage(localStorage.getItem('aru_lang') || 'ru');
+        } catch (_) {
+            setLanguage('ru');
+        }
 
-            // Dark mode detection (respects aru_theme or OS preference)
-            const savedTheme = (() => { try { return localStorage.getItem('aru_theme'); } catch (_) { return null; } })();
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        </script>
+        // Dark mode detection (respects aru_theme or OS preference)
+        const savedTheme = (() => { try { return localStorage.getItem('aru_theme'); } catch (_) { return null; } })();
+        if (savedTheme === 'dark' || (!savedTheme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
 </body>
 
 </html>

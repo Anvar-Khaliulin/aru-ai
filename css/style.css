@@ -158,6 +158,48 @@ body {
     scrollbar-width: none;
 }
 
+/* Hover-only scrollbar: invisible at rest, subtle pill on hover without layout shift */
+.hover-scrollbar::-webkit-scrollbar-thumb,
+.dark .hover-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgba(113, 113, 122, 0.34);
+    background-clip: padding-box;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background: rgba(113, 113, 122, 0.56);
+    background-clip: padding-box;
+}
+
+.dark .hover-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgba(161, 161, 170, 0.30);
+    background-clip: padding-box;
+}
+
+.dark .hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background: rgba(161, 161, 170, 0.50);
+    background-clip: padding-box;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+    .hover-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+    }
+    .hover-scrollbar:hover {
+        scrollbar-color: rgba(113, 113, 122, 0.40) transparent;
+    }
+    .dark .hover-scrollbar:hover {
+        scrollbar-color: rgba(161, 161, 170, 0.34) transparent;
+    }
+}
+
 button,
 a,
 input,

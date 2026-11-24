@@ -92,9 +92,6 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 
-    <!-- Google Identity Services (Google Drive OAuth) -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-
     <!-- Markdown Parser (Marked.js) & Highlight.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
@@ -111,6 +108,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/desktop.css">
     <link rel="stylesheet" href="css/desktop-notes.css">
+    <link rel="stylesheet" href="css/dashboard.css">
     <script type="application/ld+json">
         {
             "@context": "https://schema.org",
@@ -204,6 +202,12 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                 </span>
             </div>
             <div class="flex items-center gap-1 md:gap-2">
+                <!-- Dashboard (optional, enabled in Settings -> Dashboard) -->
+                <button type="button" id="btn-header-dashboard" onclick="app.toggleDashboard()"
+                    class="hidden p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition text-aru-600 group relative"
+                    title="Дашборд" data-i18n-title="dashboard_title">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                </button>
                 <!-- Library -->
                 <button onclick="app.openLibrary()"
                     class="p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition text-aru-600 group relative"
@@ -324,10 +328,16 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         <span data-i18n="btn_open_db"></span>
                     </button>
                     <button type="button" onclick="app.openModal('remote')"
-                        class="group w-full py-3.5 px-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                        class="group w-full py-3.5 px-4 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
                         <i data-lucide="hard-drive"
                             class="w-5 h-5 text-blue-500 dark:text-blue-400 group-hover:scale-110 transition-transform"></i>
                         <span data-i18n="btn_remote_db">Google Drive / WebDAV</span>
+                    </button>
+                    <button type="button" onclick="app.quickStartSession()"
+                        class="group w-full py-3.5 px-4 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                        <i data-lucide="sparkles"
+                            class="w-5 h-5 text-emerald-500 dark:text-emerald-400 group-hover:scale-110 transition-transform"></i>
+                        <span data-i18n="btn_quick_start"></span>
                     </button>
                 </div>
 
@@ -407,7 +417,7 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto px-3 custom-scrollbar" id="chats-scroll">
+                <div class="flex-1 overflow-y-auto px-3 custom-scrollbar hover-scrollbar" id="chats-scroll">
                     <div id="folders-list" class="space-y-1"></div>
                     <div id="chat-list" class="space-y-1">
                         <!-- Chat List Items will be injected here via JS -->
@@ -494,6 +504,9 @@ Main entry point and UI structure for the Aru AI Progressive Web App.
                         data-i18n="no_chat_selected_hint">
                     </p>
                 </div>
+
+                <!-- Aru Dashboard (Overlay inside workspace) -->
+                <div id="dashboard-view" class="dashboard-view hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar hover-scrollbar relative z-10"></div>
 
                 <!-- Input Area -->
                 <div id="chat-input-area" class="composer-area p-4 bg-white dark:bg-gray-900 z-20">

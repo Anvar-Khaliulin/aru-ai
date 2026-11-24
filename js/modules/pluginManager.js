@@ -259,6 +259,7 @@ export const PluginManager = {
     },
 
     async mountPlugin(plugin, viewport, tab) {
+        if (!plugin || this.isPluginLocked(plugin)) return { ok: false };
         const request = Symbol();
         viewport.pluginLoadRequest = request;
         const isCurrent = () => viewport.pluginLoadRequest === request && state.tabs[state.activeTabIndex] === tab;

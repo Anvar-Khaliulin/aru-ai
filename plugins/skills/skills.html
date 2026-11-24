@@ -23,6 +23,11 @@ ARU SKILLS PLUGIN - UI FRAGMENT
                     </div>
                 </div>
                 <div class="skills-header-actions">
+                    <button type="button" class="btn-skills btn-skills-outline skills-presets-btn" data-skills-i18n-title="skills_nav_presets"
+                        title="Studio Presets" onclick="SkillsPlugin.openPresetsModal()">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span class="skills-presets-btn-lbl" data-skills-i18n="skills_presets_btn">Templates</span>
+                    </button>
                     <button type="button" class="btn-skills btn-skills-icon" data-skills-i18n-title="skills_nav_library"
                         title="Skill Library" onclick="SkillsPlugin.openLibraryModal()">
                         <i data-lucide="library" class="w-4 h-4"></i>
@@ -33,6 +38,8 @@ ARU SKILLS PLUGIN - UI FRAGMENT
                     </button>
                 </div>
             </header>
+
+            <div id="skills-pipeline-strip" class="skills-pipeline-strip hidden"></div>
 
             <main id="skills-thread" class="skills-thread">
                 <!-- Messages injected by SkillsPlugin.renderThread() -->
@@ -100,3 +107,5 @@ ARU SKILLS PLUGIN - UI FRAGMENT
 
 <!-- Skills Plugin Logic -->
 <script src="plugins/skills/skills.js"></script>
+<script src="plugins/skills/skills-presets.js"></script>
+<script src="plugins/skills/skills-engine.js"></script>

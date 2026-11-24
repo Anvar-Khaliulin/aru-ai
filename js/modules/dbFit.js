@@ -28,11 +28,20 @@ export const DBFitMethods = {
         return Math.round((b - a) / 86400000);
     },
 
+    _emitFitUpdate() {
+        try {
+            if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+                window.dispatchEvent(new CustomEvent('fit-care-update'));
+            }
+        } catch (_) {}
+    },
+
     _fitProfileDefaults() {
         return {
             id: 1, display_name: '', target_weight: null, sex: '', birth_year: null,
             height_cm: null, activity_level: 'moderate', goal: 'maintain', target_date: '',
-            calorie_min: null, calorie_max: null, aru_tone: 'supportive', aru_notes: '',
+            calorie_min: null, calorie_max: null, protein_target: null, carbs_target: null,
+            fat_target: null, water_target_ml: null, aru_tone: 'supportive', aru_notes: '',
             cycle_tracking: 0, cycle_length: 28, period_length: 5, luteal_length: 14,
             disclaimer_accepted: 0, intimacy_tracking: 0
         };
@@ -71,15 +80,18 @@ export const DBFitMethods = {
         const d = Object.assign(this.getFitProfile(), data || {});
         try {
             this.run(`INSERT INTO fit_profiles (id, display_name, target_weight, sex, birth_year, height_cm,
-                activity_level, goal, target_date, calorie_min, calorie_max, aru_tone, aru_notes,
+                activity_level, goal, target_date, calorie_min, calorie_max, protein_target, carbs_target,
+                fat_target, water_target_ml, aru_tone, aru_notes,
                 cycle_tracking, cycle_length, period_length, luteal_length, disclaimer_accepted,
                 intimacy_tracking, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET
                     display_name = excluded.display_name, target_weight = excluded.target_weight,
                     sex = excluded.sex, birth_year = excluded.birth_year, height_cm = excluded.height_cm,
                     activity_level = excluded.activity_level, goal = excluded.goal, target_date = excluded.target_date,
                     calorie_min = excluded.calorie_min, calorie_max = excluded.calorie_max,
+                    protein_target = excluded.protein_target, carbs_target = excluded.carbs_target,
+                    fat_target = excluded.fat_target, water_target_ml = excluded.water_target_ml,
                     aru_tone = excluded.aru_tone, aru_notes = excluded.aru_notes,
                     cycle_tracking = excluded.cycle_tracking, cycle_length = excluded.cycle_length,
                     period_length = excluded.period_length, luteal_length = excluded.luteal_length,
@@ -87,17 +99,23 @@ export const DBFitMethods = {
                     intimacy_tracking = excluded.intimacy_tracking, updated_at = CURRENT_TIMESTAMP`,
             [d.display_name || '', d.target_weight ?? null, d.sex || '', d.birth_year ?? null, d.height_cm ?? null,
                 d.activity_level || 'moderate', d.goal || 'maintain', d.target_date || '',
-                d.calorie_min ?? null, d.calorie_max ?? null, d.aru_tone || 'supportive', d.aru_notes || '',
+                d.calorie_min ?? null, d.calorie_max ?? null, d.protein_target ?? null,
+                d.carbs_target ?? null, d.fat_target ?? null, d.water_target_ml ?? null,
+                d.aru_tone || 'supportive', d.aru_notes || '',
                 Number(d.cycle_tracking) || 0, Number(d.cycle_length) || 28, Number(d.period_length) || 5,
                 Number(d.luteal_length) || 14, Number(d.disclaimer_accepted) || 0,
                 Number(d.intimacy_tracking) || 0], false);
-            if (autoSave) this.save();
+            if (autoSave) {
+                this.save();
+                this._emitFitUpdate();
+            }
         } catch (e) {
             // Extremely old schema without the 2.0 columns: keep the legacy write working.
             console.warn('DB.saveFitProfile: extended write failed, using legacy columns', e);
             this.run(`INSERT INTO fit_profiles (id, display_name, target_weight, updated_at) VALUES (1, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, target_weight = excluded.target_weight, updated_at = CURRENT_TIMESTAMP`,
             [d.display_name || '', d.target_weight ?? null], autoSave);
+            if (autoSave) this._emitFitUpdate();
         }
     },
 
@@ -145,7 +163,10 @@ export const DBFitMethods = {
             merged.calories ?? null, merged.protein ?? null, merged.carbs ?? null, merged.fat ?? null,
             merged.mood ?? null, merged.stress ?? null, symptoms, merged.water_ml ?? null,
             merged.measurement_note || ''], false);
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return merged;
     },
 
@@ -183,7 +204,10 @@ export const DBFitMethods = {
             [d.title || '', d.goal || '', d.start_date || '', Number(d.weeks) || 4, status, d.notes || ''], false);
             id = this._lastInsertId('fit_plans');
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
@@ -192,6 +216,7 @@ export const DBFitMethods = {
         this.run("DELETE FROM fit_plan_days WHERE plan_id = ?", [Number(id)], false);
         this.run("DELETE FROM fit_plans WHERE id = ?", [Number(id)], false);
         this.save();
+        this._emitFitUpdate();
     },
 
     getFitPlanDays(planId) {
@@ -232,13 +257,17 @@ export const DBFitMethods = {
             [planId, weekIndex, Number(d.weekday), d.title || '', d.focus || '', exercises, d.notes || ''], false);
             id = this._lastInsertId('fit_plan_days');
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
     deleteFitPlanDay(id) {
         this.run("UPDATE fit_workouts SET plan_day_id = NULL WHERE plan_day_id = ?", [Number(id)], false);
         this.run("DELETE FROM fit_plan_days WHERE id = ?", [Number(id)]);
+        this._emitFitUpdate();
     },
 
     // --- Fit & Care: workouts, meals, protocols and health events ---
@@ -250,6 +279,19 @@ export const DBFitMethods = {
     getFitWorkout(id) {
         const rows = this.query("SELECT * FROM fit_workouts WHERE id = ? LIMIT 1", [Number(id)]);
         return rows.length ? rows[0] : null;
+    },
+
+    _fitSyncWorkoutStatus(logDate, autoSave = false) {
+        if (!logDate) return;
+        const rows = this.getFitWorkouts(logDate, logDate) || [];
+        let status = '';
+        if (rows.some(w => w.status === 'done')) status = 'done';
+        else if (rows.some(w => w.status === 'planned')) status = 'planned';
+        else if (rows.some(w => w.status === 'skipped')) status = 'skipped';
+        const existing = this.getFitDailyLog(logDate);
+        if (existing || status) {
+            this.saveFitDailyLog({ log_date: logDate, workout_status: status }, autoSave);
+        }
     },
 
     saveFitWorkout(data, autoSave = true) {
@@ -269,12 +311,99 @@ export const DBFitMethods = {
                 d.duration_min ?? null, d.volume_kg ?? null, d.rpe ?? null, d.status || 'done', d.note || ''], false);
             id = this._lastInsertId('fit_workouts');
         }
-        if (autoSave) this.save();
+        this._fitSyncWorkoutStatus(d.log_date, false);
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
     deleteFitWorkout(id) {
-        this.run("DELETE FROM fit_workouts WHERE id = ?", [Number(id)]);
+        const existing = this.getFitWorkout(id);
+        this.run("DELETE FROM fit_workouts WHERE id = ?", [Number(id)], false);
+        if (existing && existing.log_date) this._fitSyncWorkoutStatus(existing.log_date, false);
+        this.save();
+        this._emitFitUpdate();
+    },
+
+    getFitDayNutrition(date, preloadedDaily = null, preloadedMeals = null) {
+        const key = date || this._fitDateKey(new Date());
+        const daily = preloadedDaily !== null ? preloadedDaily : this.getFitDailyLog(key);
+        const meals = Array.isArray(preloadedMeals) ? preloadedMeals : (this.getFitMeals(key, key) || []);
+        const fields = ['calories', 'protein', 'carbs', 'fat'];
+        const sums = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+        const hasMealField = { calories: false, protein: false, carbs: false, fat: false };
+        let hasEstimated = false;
+        for (const meal of meals) {
+            if (!meal) continue;
+            if (Number(meal.estimated) === 1) hasEstimated = true;
+            for (const f of fields) {
+                const v = meal[f];
+                if (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))) {
+                    sums[f] += Number(v);
+                    hasMealField[f] = true;
+                }
+            }
+        }
+        const out = {
+            date: key,
+            calories: null,
+            protein: null,
+            carbs: null,
+            fat: null,
+            mealCount: meals.length,
+            hasEstimated,
+            source: 'none'
+        };
+        let usedMeals = false;
+        let usedDaily = false;
+        for (const f of fields) {
+            if (hasMealField[f]) {
+                out[f] = f === 'calories' ? Math.round(sums[f]) : Math.round(sums[f] * 10) / 10;
+                usedMeals = true;
+            } else if (daily && daily[f] !== null && daily[f] !== undefined && daily[f] !== '' && Number.isFinite(Number(daily[f]))) {
+                out[f] = f === 'calories' ? Math.round(Number(daily[f])) : Math.round(Number(daily[f]) * 10) / 10;
+                usedDaily = true;
+            }
+        }
+        out.source = usedMeals && usedDaily ? 'mixed' : usedMeals ? 'meals' : usedDaily ? 'daily' : 'none';
+        return out;
+    },
+
+    getFitNutritionRange(fromDate, toDate) {
+        const logs = this.getFitDailyLogs(fromDate, toDate) || [];
+        const meals = this.getFitMeals(fromDate, toDate) || [];
+        const dailyByDate = new Map(logs.map(l => [l.log_date, l]));
+        const mealsByDate = new Map();
+        for (const m of meals) {
+            if (!m || !m.log_date) continue;
+            if (!mealsByDate.has(m.log_date)) mealsByDate.set(m.log_date, []);
+            mealsByDate.get(m.log_date).push(m);
+        }
+        const dates = Array.from(new Set([...dailyByDate.keys(), ...mealsByDate.keys()])).sort();
+        const byDate = new Map();
+        const buckets = { calories: [], protein: [], carbs: [], fat: [] };
+        for (const d of dates) {
+            const n = this.getFitDayNutrition(d, dailyByDate.get(d) || null, mealsByDate.get(d) || []);
+            byDate.set(d, n);
+            for (const f of ['calories', 'protein', 'carbs', 'fat']) {
+                if (n[f] !== null && n[f] !== undefined) buckets[f].push(n[f]);
+            }
+        }
+        const avg = (arr) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+        return {
+            byDate,
+            days: dates,
+            avgCalories: avg(buckets.calories),
+            avgProtein: avg(buckets.protein),
+            avgCarbs: avg(buckets.carbs),
+            avgFat: avg(buckets.fat),
+            calorieDays: buckets.calories.length,
+            proteinDays: buckets.protein.length,
+            carbsDays: buckets.carbs.length,
+            fatDays: buckets.fat.length
+        };
     },
 
     getFitMeals(fromDate, toDate) {
@@ -298,12 +427,16 @@ export const DBFitMethods = {
                 d.carbs ?? null, d.fat ?? null, d.note || '', estimated], false);
             id = this._lastInsertId('fit_meals');
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
     deleteFitMeal(id) {
         this.run("DELETE FROM fit_meals WHERE id = ?", [Number(id)]);
+        this._emitFitUpdate();
     },
 
     getFitProtocols(activeOnly = false) {
@@ -338,7 +471,10 @@ export const DBFitMethods = {
             [d.name || '', d.kind || 'medication', d.dosage || '', schedule, rules, d.notes || '', Number(d.active ?? 1) ? 1 : 0], false);
             id = this._lastInsertId('fit_protocols');
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
@@ -346,6 +482,7 @@ export const DBFitMethods = {
         this.run("UPDATE fit_health_logs SET protocol_id = NULL WHERE protocol_id = ?", [Number(id)], false);
         this.run("DELETE FROM fit_protocols WHERE id = ?", [Number(id)], false);
         this.save();
+        this._emitFitUpdate();
     },
 
     getFitHealthLogs(fromDate, toDate) {
@@ -368,12 +505,16 @@ export const DBFitMethods = {
                 d.value ?? null, d.value2 ?? null, d.unit || '', d.status || 'logged', tags, d.note || ''], false);
             id = this._lastInsertId('fit_health_logs');
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
     deleteFitHealthLog(id) {
         this.run("DELETE FROM fit_health_logs WHERE id = ?", [Number(id)]);
+        this._emitFitUpdate();
     },
 
     // --- Fit & Care: menstrual cycle and private logs ---
@@ -388,9 +529,10 @@ export const DBFitMethods = {
     },
 
     // Cycle maths lives here alone so the Aru snapshot and the plugin UI cannot
-    // drift apart. Confidence tells how far the forecast is from real data:
-    // recorded = inside the last logged cycle, estimated = first missed cycle,
-    // stale = two or more expected starts were never logged.
+    // drift apart. Confidence reflects real data honestly:
+    // recorded = inside the current cycle (or a valid 15..60d historical cycle),
+    // late = slightly past average (waiting up to pauseThreshold),
+    // paused = tracking went quiet for months (no phantom ovulations/periods).
     getFitCycleStats() {
         const profile = this.getFitProfile();
         const cycles = this.getFitCycles().filter((cycle) => cycle.start_date);
@@ -398,26 +540,50 @@ export const DBFitMethods = {
             .map((cycle) => Number(cycle.cycle_length))
             .filter((length) => Number.isFinite(length) && length >= 15 && length <= 60)
             .slice(-6);
+        const periodLengths = cycles
+            .map((cycle) => Number(cycle.period_length))
+            .filter((length) => Number.isFinite(length) && length >= 1 && length <= 15)
+            .slice(-6);
         const profileLength = Math.min(Math.max(Number(profile.cycle_length) || 28, 15), 60);
+        const profilePeriod = Math.min(Math.max(Number(profile.period_length) || 5, 1), 15);
         const avg = lengths.length >= 2
             ? Math.round(lengths.reduce((sum, length) => sum + length, 0) / lengths.length)
             : profileLength;
+        const avgPeriod = periodLengths.length
+            ? Math.round(periodLengths.reduce((sum, length) => sum + length, 0) / periodLengths.length)
+            : profilePeriod;
+        const pauseThreshold = Math.max(avg + 18, 45);
         const today = this._fitDateKey(new Date());
         const past = cycles.filter((cycle) => cycle.start_date <= today);
         const last = past.length ? past[past.length - 1] : null;
         const daysSince = last ? this._fitDiffDays(last.start_date, today) : null;
         const predictedCycles = last ? Math.max(0, Math.floor(daysSince / avg)) : 0;
+        let confidence = 'none';
+        if (last) {
+            if (daysSince < avg) confidence = 'recorded';
+            else if (daysSince < pauseThreshold) confidence = 'late';
+            else confidence = 'paused';
+        }
         return {
             tracking: Number(profile.cycle_tracking) === 1,
             cycles,
             lengths,
+            periodLengths,
             avg,
+            avgPeriod,
+            pauseThreshold,
             profileLength,
+            profilePeriod,
             last,
             daysSince,
             predictedCycles,
-            confidence: !last ? 'none' : predictedCycles === 0 ? 'recorded' : predictedCycles === 1 ? 'estimated' : 'stale',
-            irregular: lengths.length >= 2 && (Math.max(...lengths) - Math.min(...lengths)) > 4
+            confidence,
+            paused: confidence === 'paused',
+            stale: confidence === 'paused',
+            irregular: lengths.length >= 2 && (
+                (Math.max(...lengths) - Math.min(...lengths)) >= 8
+                || lengths.some((len) => len < 21 || len > 38)
+            )
         };
     },
 
@@ -426,46 +592,291 @@ export const DBFitMethods = {
         const info = stats || this.getFitCycleStats();
         if (!info.tracking) return { tracking: false, hasData: false, phase: '', day: null };
         if (!info.cycles.length) {
-            return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
+            return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none', paused: false, stale: false };
         }
-        const reference = info.cycles.filter((cycle) => cycle.start_date <= key).pop();
-        if (!reference) return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none' };
+        let idxBefore = -1;
+        for (let i = 0; i < info.cycles.length; i++) {
+            if (info.cycles[i].start_date <= key) idxBefore = i;
+            else break;
+        }
+        if (idxBefore < 0) {
+            return { tracking: true, hasData: false, phase: '', day: null, avg: info.avg, confidence: 'none', paused: false, stale: false };
+        }
+        const reference = info.cycles[idxBefore];
+        const nextCycle = idxBefore + 1 < info.cycles.length ? info.cycles[idxBefore + 1] : null;
         const profile = this.getFitProfile();
         const avg = info.avg;
-        const luteal = Math.min(Math.max(Number(profile.luteal_length) || 14, 7), Math.max(avg - 7, 7));
-        const periodLength = Math.min(Math.max(Number(reference.period_length) || Number(profile.period_length) || 5, 1), avg);
+        const today = this._fitDateKey(new Date());
         const offset = this._fitDiffDays(reference.start_date, key);
-        const predictedCycles = Math.max(0, Math.floor(offset / avg));
+
+        const buildPhase = (cycleDay, cycleLen, periodLen) => {
+            if (periodLen >= cycleLen) {
+                return { phase: 'menstrual', ovulationDay: null, fertileStart: null, fertileEnd: null };
+            }
+            const luteal = Math.min(Math.max(Number(profile.luteal_length) || 14, 7), Math.max(cycleLen - 7, 7));
+            const ovulationDay = Math.min(cycleLen, Math.max(periodLen + 1, cycleLen - luteal));
+            const fertileStart = Math.max(periodLen + 1, ovulationDay - 5);
+            const fertileEnd = Math.min(cycleLen, ovulationDay + 1);
+            let phase = 'luteal';
+            if (cycleDay <= periodLen) phase = 'menstrual';
+            else if (cycleDay === ovulationDay) phase = 'ovulation';
+            else if (cycleDay >= fertileStart && cycleDay <= fertileEnd) phase = 'fertile';
+            else if (cycleDay < fertileStart) phase = 'follicular';
+            return { phase, ovulationDay, fertileStart, fertileEnd };
+        };
+
+        // Case A: Historical cycle closed by a subsequent recorded start date
+        if (nextCycle) {
+            const actualSpan = this._fitDiffDays(reference.start_date, nextCycle.start_date);
+            if (actualSpan >= 15 && actualSpan <= 60) {
+                const cycleDay = offset + 1;
+                const periodLength = Math.min(Math.max(Number(reference.period_length) || info.avgPeriod || 5, 1), actualSpan);
+                const pInfo = buildPhase(cycleDay, actualSpan, periodLength);
+                return {
+                    tracking: true,
+                    hasData: true,
+                    phase: pInfo.phase,
+                    day: cycleDay,
+                    avg: actualSpan,
+                    typicalAvg: avg,
+                    periodLength,
+                    cycleStart: reference.start_date,
+                    ovulationDay: pInfo.ovulationDay,
+                    fertileStart: pInfo.fertileStart,
+                    fertileEnd: pInfo.fertileEnd,
+                    nextPeriod: nextCycle.start_date,
+                    predicted: false,
+                    confidence: 'recorded',
+                    paused: false,
+                    stale: false,
+                    predictedCycles: 0,
+                    lastStart: reference.start_date,
+                    daysSinceLastStart: offset,
+                    daysSinceLastStartToday: info.daysSince,
+                    periodEndRecorded: !!reference.end_date,
+                    periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+                };
+            }
+            if (offset < avg) {
+                const cycleDay = offset + 1;
+                const periodLength = Math.min(Math.max(Number(reference.period_length) || info.avgPeriod || 5, 1), avg);
+                const pInfo = buildPhase(cycleDay, avg, periodLength);
+                return {
+                    tracking: true,
+                    hasData: true,
+                    phase: pInfo.phase,
+                    day: cycleDay,
+                    avg,
+                    periodLength,
+                    cycleStart: reference.start_date,
+                    ovulationDay: pInfo.ovulationDay,
+                    fertileStart: pInfo.fertileStart,
+                    fertileEnd: pInfo.fertileEnd,
+                    nextPeriod: '',
+                    predicted: false,
+                    confidence: 'recorded',
+                    paused: false,
+                    stale: false,
+                    predictedCycles: 0,
+                    lastStart: reference.start_date,
+                    daysSinceLastStart: offset,
+                    daysSinceLastStartToday: info.daysSince,
+                    periodEndRecorded: !!reference.end_date,
+                    periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+                };
+            }
+            return {
+                tracking: true,
+                hasData: true,
+                phase: 'paused',
+                day: null,
+                avg,
+                periodLength: info.avgPeriod || 5,
+                cycleStart: reference.start_date,
+                ovulationDay: null,
+                fertileStart: null,
+                fertileEnd: null,
+                nextPeriod: '',
+                predicted: false,
+                confidence: 'paused',
+                paused: true,
+                stale: true,
+                predictedCycles: Math.floor(offset / avg),
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: info.daysSince,
+                periodEndRecorded: !!reference.end_date,
+                periodEnd: reference.end_date || ''
+            };
+        }
+
+        // Case B: Latest open cycle
+        if (offset < avg) {
+            const cycleDay = offset + 1;
+            const periodLength = Math.min(Math.max(Number(reference.period_length) || info.avgPeriod || 5, 1), avg);
+            const pInfo = buildPhase(cycleDay, avg, periodLength);
+            return {
+                tracking: true,
+                hasData: true,
+                phase: pInfo.phase,
+                day: cycleDay,
+                avg,
+                periodLength,
+                cycleStart: reference.start_date,
+                ovulationDay: pInfo.ovulationDay,
+                fertileStart: pInfo.fertileStart,
+                fertileEnd: pInfo.fertileEnd,
+                nextPeriod: this._fitAddDays(reference.start_date, avg),
+                predicted: false,
+                confidence: 'recorded',
+                paused: false,
+                stale: false,
+                predictedCycles: 0,
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: info.daysSince,
+                periodEndRecorded: !!reference.end_date,
+                periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+            };
+        }
+
+        if (info.confidence === 'paused') {
+            const totalSinceToday = info.daysSince != null ? info.daysSince : offset;
+            return {
+                tracking: true,
+                hasData: true,
+                phase: 'paused',
+                day: null,
+                avg,
+                periodLength: info.avgPeriod || 5,
+                cycleStart: reference.start_date,
+                ovulationDay: null,
+                fertileStart: null,
+                fertileEnd: null,
+                nextPeriod: '',
+                predicted: false,
+                confidence: 'paused',
+                paused: true,
+                stale: true,
+                predictedCycles: Math.floor(offset / avg),
+                missedCycles: Math.floor(totalSinceToday / avg),
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: totalSinceToday,
+                periodEndRecorded: !!reference.end_date,
+                periodEnd: reference.end_date || ''
+            };
+        }
+
+        if (key <= today) {
+            const periodLength = Math.min(Math.max(Number(reference.period_length) || info.avgPeriod || 5, 1), avg);
+            return {
+                tracking: true,
+                hasData: true,
+                phase: 'late',
+                day: offset + 1,
+                lateDays: offset - avg + 1,
+                avg,
+                periodLength,
+                cycleStart: reference.start_date,
+                ovulationDay: null,
+                fertileStart: null,
+                fertileEnd: null,
+                nextPeriod: this._fitAddDays(reference.start_date, avg),
+                predicted: true,
+                confidence: 'late',
+                paused: false,
+                stale: false,
+                predictedCycles: 1,
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: info.daysSince,
+                periodEndRecorded: !!reference.end_date,
+                periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+            };
+        }
+
+        if (info.confidence === 'late') {
+            const periodLength = Math.min(Math.max(Number(reference.period_length) || info.avgPeriod || 5, 1), avg);
+            return {
+                tracking: true,
+                hasData: true,
+                phase: '',
+                day: null,
+                lateDays: info.daysSince != null ? Math.max(1, info.daysSince - avg + 1) : 1,
+                avg,
+                periodLength,
+                cycleStart: reference.start_date,
+                ovulationDay: null,
+                fertileStart: null,
+                fertileEnd: null,
+                nextPeriod: '',
+                predicted: false,
+                confidence: 'late',
+                paused: false,
+                stale: false,
+                predictedCycles: 1,
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: info.daysSince,
+                periodEndRecorded: !!reference.end_date,
+                periodEnd: reference.end_date || ''
+            };
+        }
+
+        const predictedCycles = Math.floor(offset / avg);
+        if (predictedCycles > 2) {
+            return {
+                tracking: true,
+                hasData: true,
+                phase: '',
+                day: null,
+                avg,
+                periodLength: info.avgPeriod || 5,
+                cycleStart: reference.start_date,
+                ovulationDay: null,
+                fertileStart: null,
+                fertileEnd: null,
+                nextPeriod: '',
+                predicted: false,
+                confidence: 'too_far',
+                paused: false,
+                stale: false,
+                predictedCycles,
+                lastStart: reference.start_date,
+                daysSinceLastStart: offset,
+                daysSinceLastStartToday: info.daysSince,
+                periodEndRecorded: false,
+                periodEnd: ''
+            };
+        }
+
         const cycleStart = this._fitAddDays(reference.start_date, predictedCycles * avg);
         const cycleDay = this._fitDiffDays(cycleStart, key) + 1;
-        const ovulationDay = Math.max(periodLength + 1, avg - luteal + 1);
-        const fertileStart = Math.max(periodLength + 1, ovulationDay - 5);
-        const fertileEnd = Math.min(avg, ovulationDay + 1);
-        let phase = 'luteal';
-        if (cycleDay <= periodLength) phase = 'menstrual';
-        else if (cycleDay === ovulationDay) phase = 'ovulation';
-        else if (cycleDay >= fertileStart && cycleDay <= fertileEnd) phase = 'fertile';
-        else if (cycleDay < fertileStart) phase = 'follicular';
+        const periodLength = Math.min(Math.max(info.avgPeriod || 5, 1), avg);
+        const pInfo = buildPhase(cycleDay, avg, periodLength);
         return {
             tracking: true,
             hasData: true,
-            phase,
+            phase: pInfo.phase,
             day: cycleDay,
             avg,
             periodLength,
             cycleStart,
-            ovulationDay,
-            fertileStart,
-            fertileEnd,
+            ovulationDay: pInfo.ovulationDay,
+            fertileStart: pInfo.fertileStart,
+            fertileEnd: pInfo.fertileEnd,
             nextPeriod: this._fitAddDays(cycleStart, avg),
-            predicted: predictedCycles > 0,
-            confidence: predictedCycles === 0 ? 'recorded' : (predictedCycles === 1 || key > this._fitDateKey(new Date())) ? 'estimated' : 'stale',
-            stale: info.confidence === 'stale',
+            predicted: true,
+            confidence: 'estimated',
+            paused: false,
+            stale: false,
             predictedCycles,
             lastStart: reference.start_date,
-            daysSinceLastStart: info.daysSince,
-            periodEndRecorded: !!reference.end_date,
-            periodEnd: reference.end_date || this._fitAddDays(reference.start_date, periodLength - 1)
+            daysSinceLastStart: offset,
+            daysSinceLastStartToday: info.daysSince,
+            periodEndRecorded: false,
+            periodEnd: this._fitAddDays(cycleStart, periodLength - 1)
         };
     },
 
@@ -475,15 +886,16 @@ export const DBFitMethods = {
         return this._fitDateKey(date);
     },
 
-    // A cycle_length is the distance to the next recorded start, so any change to
-    // the list of starts has to recompute the neighbouring rows instead of only
-    // the one that was edited.
+    // A cycle_length is only valid inside 15..60 days; multi-month gaps leave
+    // cycle_length as NULL so history never displays bogus 120-day "cycles".
     _fitRecalcCycleLengths() {
         const rows = this.query("SELECT id, start_date, cycle_length FROM fit_cycles ORDER BY start_date ASC, id ASC");
         for (let index = 0; index < rows.length - 1; index++) {
-            const length = this._fitDiffDays(rows[index].start_date, rows[index + 1].start_date);
-            if (length > 0 && Number(rows[index].cycle_length) !== length) {
-                this.run("UPDATE fit_cycles SET cycle_length = ? WHERE id = ?", [length, rows[index].id], false);
+            const raw = this._fitDiffDays(rows[index].start_date, rows[index + 1].start_date);
+            const validLength = (raw >= 15 && raw <= 60) ? raw : null;
+            const current = (rows[index].cycle_length === undefined || rows[index].cycle_length === '') ? null : Number(rows[index].cycle_length);
+            if (current !== validLength) {
+                this.run("UPDATE fit_cycles SET cycle_length = ? WHERE id = ?", [validLength, rows[index].id], false);
             }
         }
         if (rows.length > 0) {
@@ -492,6 +904,31 @@ export const DBFitMethods = {
                 this.run("UPDATE fit_cycles SET cycle_length = NULL WHERE id = ?", [last.id], false);
             }
         }
+    },
+
+    updateFitCycle(id, data = {}) {
+        const cycle = this.getFitCycle(id);
+        if (!cycle) return null;
+        const today = this._fitDateKey(new Date());
+        const start = String(data.start_date || cycle.start_date || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || start > today) return null;
+        const collision = this.query("SELECT id FROM fit_cycles WHERE start_date = ? AND id != ? LIMIT 1", [start, cycle.id]);
+        if (collision.length) return null;
+        let end = data.end_date !== undefined ? String(data.end_date || '').trim() : String(cycle.end_date || '').trim();
+        if (end) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end > today) return null;
+            if (end < start) end = start;
+        }
+        const periodLength = end
+            ? (this._fitDiffDays(start, end) + 1)
+            : (data.end_date === '' ? null : (cycle.period_length ?? null));
+        const notes = data.notes !== undefined ? String(data.notes || '') : (cycle.notes || '');
+        this.run("UPDATE fit_cycles SET start_date = ?, end_date = ?, period_length = ?, notes = ? WHERE id = ?",
+            [start, end, periodLength, notes, cycle.id], false);
+        this._fitRecalcCycleLengths();
+        this.save();
+        this._emitFitUpdate();
+        return cycle.id;
     },
 
     saveFitCycle(data, autoSave = true) {
@@ -507,7 +944,10 @@ export const DBFitMethods = {
             id = this._lastInsertId('fit_cycles');
         }
         this._fitRecalcCycleLengths();
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
         return id;
     },
 
@@ -533,6 +973,7 @@ export const DBFitMethods = {
         const id = this._lastInsertId('fit_cycles');
         this._fitRecalcCycleLengths();
         this.save();
+        this._emitFitUpdate();
         return { id, created: true, reason: 'inserted', start_date: key };
     },
 
@@ -550,6 +991,7 @@ export const DBFitMethods = {
             [key, end, periodLength, cycle.id], false);
         this._fitRecalcCycleLengths();
         this.save();
+        this._emitFitUpdate();
         return cycle.id;
     },
 
@@ -568,6 +1010,7 @@ export const DBFitMethods = {
         this.run("UPDATE fit_cycles SET end_date = ?, period_length = ? WHERE id = ?",
             [end, periodLength, cycle.id], false);
         this.save();
+        this._emitFitUpdate();
         return cycle.id;
     },
 
@@ -575,6 +1018,7 @@ export const DBFitMethods = {
         this.run("DELETE FROM fit_cycles WHERE id = ?", [Number(id)], false);
         this._fitRecalcCycleLengths();
         this.save();
+        this._emitFitUpdate();
     },
 
     getFitCycleLogs(fromDate, toDate) {
@@ -592,11 +1036,15 @@ export const DBFitMethods = {
         this.run(`INSERT INTO fit_cycle_logs (log_date, flow, note) VALUES (?, ?, ?)
             ON CONFLICT(log_date) DO UPDATE SET flow = excluded.flow, note = excluded.note`,
         [d.log_date, d.flow || '', d.note || ''], false);
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
     },
 
     deleteFitCycleLog(date) {
         this.run("DELETE FROM fit_cycle_logs WHERE log_date = ?", [date]);
+        this._emitFitUpdate();
     },
 
     getFitIntimacyLogs(fromDate, toDate) {
@@ -637,8 +1085,15 @@ export const DBFitMethods = {
         );
     },
 
-    saveFitChatMessage(date, role, content) {
-        this.run("INSERT INTO fit_chat_messages (log_date, role, content) VALUES (?, ?, ?)", [date, role || 'user', content || '']);
+    saveFitChatMessage(date, role, content, meta = '') {
+        const metaText = typeof meta === 'string' ? meta : JSON.stringify(meta || '');
+        try {
+            this.run("INSERT INTO fit_chat_messages (log_date, role, content, meta) VALUES (?, ?, ?, ?)",
+                [date, role || 'user', content || '', metaText]);
+        } catch (e) {
+            this.run("INSERT INTO fit_chat_messages (log_date, role, content) VALUES (?, ?, ?)",
+                [date, role || 'user', content || '']);
+        }
         return this._lastInsertId('fit_chat_messages');
     },
 
@@ -741,7 +1196,10 @@ export const DBFitMethods = {
             'fit_health_logs', 'fit_protocols', 'fit_meals', 'fit_workouts', 'fit_plan_days',
             'fit_plans', 'fit_daily_logs', 'fit_profiles'];
         for (const table of tables) this.run(`DELETE FROM ${table}`, [], false);
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
     },
 
     replaceFitData(data, autoSave = true) {
@@ -822,8 +1280,9 @@ export const DBFitMethods = {
             }
             for (const row of Array.isArray(d.chat_messages) ? d.chat_messages : []) {
                 if (!row || !isYmd(row.log_date)) continue;
-                insert(`INSERT OR REPLACE INTO fit_chat_messages (id, log_date, role, content, created_at) VALUES (?, ?, ?, ?, ?)`,
-                    [row.id ?? null, row.log_date, row.role || 'user', row.content || '', row.created_at || null]);
+                const metaVal = typeof row.meta === 'string' ? row.meta : (row.meta ? JSON.stringify(row.meta) : '');
+                insert(`INSERT OR REPLACE INTO fit_chat_messages (id, log_date, role, content, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [row.id ?? null, row.log_date, row.role || 'user', row.content || '', metaVal, row.created_at || null]);
             }
             if (typeof this._fitRecalcCycleLengths === 'function') this._fitRecalcCycleLengths();
             this.db.run('COMMIT');
@@ -831,7 +1290,10 @@ export const DBFitMethods = {
             try { this.db.run('ROLLBACK'); } catch (_) {}
             throw e;
         }
-        if (autoSave) this.save();
+        if (autoSave) {
+            this.save();
+            this._emitFitUpdate();
+        }
     },
 
     // Compact, privacy-conscious snapshot used by the main chat system prompt.
@@ -844,17 +1306,25 @@ export const DBFitMethods = {
             const logs = this.getFitDailyLogs(from, today);
             const workouts = this.getFitWorkouts(from, today);
             const meals = this.getFitMeals(today, today);
+            const nutRange = this.getFitNutritionRange(from, today);
             const plans = this.getFitPlans('active');
             const protocols = this.getFitProtocols(true);
             const cycles = this.getFitCycles();
-            const hasData = p.display_name || p.target_weight != null || p.goal !== 'maintain' || logs.length || workouts.length || plans.length || protocols.length || cycles.length;
+            const hasData = p.display_name || p.target_weight != null || p.goal !== 'maintain' || logs.length || nutRange.days.length || workouts.length || plans.length || protocols.length || cycles.length;
             if (!hasData) return '';
 
             const lines = [];
+            const userMode = (typeof window !== 'undefined' && window.aruState && window.aruState.userSettings && window.aruState.userSettings.user_mode) || 'adult';
+            const profileAge = p.birth_year ? (new Date().getFullYear() - Number(p.birth_year)) : null;
+            const teenSafe = userMode === 'teen' || (profileAge !== null && profileAge < 18);
             const goalLabels = { lose: 'lose weight', maintain: 'maintain weight', gain: 'gain weight', health: 'general health', performance: 'performance' };
             const profileBits = [];
-            if (p.goal) profileBits.push(`goal: ${goalLabels[p.goal] || p.goal}`);
-            if (p.target_weight != null) profileBits.push(`target weight: ${p.target_weight} kg${p.target_date ? ` by ${p.target_date}` : ''}`);
+            if (p.goal) {
+                profileBits.push(`goal: ${teenSafe && p.goal === 'lose' ? 'healthy growth & maintenance (teen mode)' : (goalLabels[p.goal] || p.goal)}`);
+            }
+            if (p.target_weight != null && !(teenSafe && p.goal === 'lose')) {
+                profileBits.push(`target weight: ${p.target_weight} kg${p.target_date ? ` by ${p.target_date}` : ''}`);
+            }
             if (p.height_cm) profileBits.push(`height: ${p.height_cm} cm`);
             if (p.sex) profileBits.push(`sex: ${p.sex}`);
             if (p.birth_year) profileBits.push(`born ${p.birth_year}`);
@@ -864,6 +1334,12 @@ export const DBFitMethods = {
             if (p.calorie_min != null || p.calorie_max != null) {
                 profileBits.push(`calorie corridor: ${p.calorie_min != null ? p.calorie_min : '—'}–${p.calorie_max != null ? p.calorie_max : '—'} kcal`);
             }
+            const macroTargets = [];
+            if (p.protein_target != null) macroTargets.push(`P ${p.protein_target}g`);
+            if (p.carbs_target != null) macroTargets.push(`C ${p.carbs_target}g`);
+            if (p.fat_target != null) macroTargets.push(`F ${p.fat_target}g`);
+            if (p.water_target_ml != null) macroTargets.push(`water ${p.water_target_ml}ml`);
+            if (macroTargets.length) profileBits.push(`macro targets: ${macroTargets.join(', ')}`);
             if (profileBits.length) lines.push(`Profile: ${profileBits.join(', ')}.`);
 
             const span = detailed ? 14 : 7;
@@ -903,14 +1379,14 @@ export const DBFitMethods = {
             }
 
             const nutritionBits = [];
-            const calorieAvg = avgOf(logs, 'calories');
-            if (calorieAvg != null) nutritionBits.push(`avg ${Math.round(calorieAvg)} kcal`);
-            const proteinAvg = avgOf(logs, 'protein');
-            if (proteinAvg != null) nutritionBits.push(`protein ${Math.round(proteinAvg)} g`);
+            if (nutRange.avgCalories != null) nutritionBits.push(`avg ${Math.round(nutRange.avgCalories)} kcal (${nutRange.calorieDays}d)`);
+            if (nutRange.avgProtein != null) nutritionBits.push(`protein ${Math.round(nutRange.avgProtein)} g`);
+            if (nutRange.avgCarbs != null) nutritionBits.push(`carbs ${Math.round(nutRange.avgCarbs)} g`);
+            if (nutRange.avgFat != null) nutritionBits.push(`fat ${Math.round(nutRange.avgFat)} g`);
             const waterAvg = avgOf(logs, 'water_ml');
             if (waterAvg != null) nutritionBits.push(`water ${Math.round(waterAvg)} ml`);
-            const todayKcal = meals.reduce((s, m) => s + (Number(m.calories) || 0), 0);
-            if (meals.length) nutritionBits.push(`today ${meals.length} meal(s)${todayKcal ? ` ~${Math.round(todayKcal)} kcal` : ''}`);
+            const todayNut = this.getFitDayNutrition(today, logs.find(l => l.log_date === today) || null, meals);
+            if (meals.length) nutritionBits.push(`today ${meals.length} meal(s)${todayNut.calories ? ` ${todayNut.hasEstimated ? '~' : ''}${Math.round(todayNut.calories)} kcal` : ''}`);
             if (nutritionBits.length) lines.push(`Nutrition (last ${span} days): ${nutritionBits.join(', ')}.`);
 
             const recoveryBits = [];
@@ -959,14 +1435,32 @@ export const DBFitMethods = {
             const todayBits = [];
             if (todayLog) {
                 if (todayLog.weight != null) todayBits.push(`weight ${todayLog.weight} kg`);
+                if (todayLog.body_fat != null) todayBits.push(`body fat ${todayLog.body_fat}%`);
+                if (todayLog.muscle_mass != null) todayBits.push(`muscle ${todayLog.muscle_mass} kg`);
                 if (todayLog.workout_status) todayBits.push(`workout ${todayLog.workout_status}`);
+                if (todayLog.water_ml != null) todayBits.push(`water ${todayLog.water_ml} ml`);
+                if (todayLog.steps != null) todayBits.push(`steps ${todayLog.steps}`);
                 if (todayLog.sleep_hours != null) todayBits.push(`sleep ${todayLog.sleep_hours} h`);
                 if (todayLog.energy != null) todayBits.push(`energy ${todayLog.energy}/5`);
                 if (detailed && todayLog.mood != null) todayBits.push(`mood ${todayLog.mood}/5`);
                 if (detailed && todayLog.stress != null) todayBits.push(`stress ${todayLog.stress}/5`);
             }
             if (detailed && meals.length) todayBits.push(`meals: ${meals.map(m => m.title).filter(Boolean).slice(0, 6).join('; ')}`);
+            const todayWorkouts = workouts.filter(w => w && w.log_date === today);
+            if (todayWorkouts.length) todayBits.push(`workouts: ${todayWorkouts.map(w => `"${w.title}" [${w.status}]`).slice(0, 4).join(', ')}`);
             if (todayBits.length) lines.push(`Today: ${todayBits.join('; ')}.`);
+
+            const todayEvents = (typeof this.getFitHealthLogs === 'function' ? (this.getFitHealthLogs(today, today) || []) : [])
+                .filter(h => h && h.type !== 'medication');
+            if (todayEvents.length) {
+                const measBits = todayEvents.slice(-5).map(h => {
+                    const label = h.name || h.type;
+                    const val = h.value != null ? ` ${h.value}${h.value2 != null ? `/${h.value2}` : ''}` : '';
+                    const unit = h.unit ? ` ${h.unit}` : '';
+                    return `${label}${val}${unit}`.trim();
+                });
+                lines.push(`Measurements today: ${measBits.join('; ')}.`);
+            }
 
             const scheduled = [];
             const todayHealth = this.query("SELECT * FROM fit_health_logs WHERE log_date = ? AND type = 'medication'", [today]);
@@ -985,19 +1479,23 @@ export const DBFitMethods = {
             if (Number(p.cycle_tracking)) {
                 const cycle = this.getFitCycleInfo(today);
                 if (cycle.hasData) {
-                    const bits = [
-                        `last logged period start ${cycle.lastStart}`,
-                        `typical cycle ${cycle.avg} days${cycle.confidence === 'recorded' ? '' : ' (estimate)'}`
-                    ];
-                    if (cycle.periodEndRecorded) bits.push(`bleeding ended ${cycle.periodEnd}`);
-                    else bits.push(`bleeding end not logged (phase estimates assume ${cycle.periodLength} days)`);
-                    bits.push(`${cycle.confidence === 'recorded' ? 'cycle' : 'estimated cycle'} day ${cycle.day} (${cycle.phase})`);
-                    bits.push(`next period expected around ${cycle.nextPeriod} (forecast, not contraception)`);
-                    lines.push(`Cycle tracking: ${bits.join(', ')}.`);
-                    if (cycle.stale) {
-                        lines.push(`Cycle warning: no period start has been logged for ${cycle.daysSinceLastStart} days, which is at least two expected cycles. Forecast dates are stale and must not be treated as reliable. If the user mentions a period, ask for the exact first day and record CYCLE_START; never invent a start date.`);
-                    } else if (cycle.confidence === 'estimated') {
-                        lines.push(`Cycle note: the current phase is forecast from the average because this period start is not logged yet. Ask the user to confirm or record the first day when it happens.`);
+                    if (cycle.paused) {
+                        lines.push(`Cycle tracking: paused (last logged period start ${cycle.lastStart}, ${cycle.daysSinceLastStartToday ?? cycle.daysSinceLastStart} days ago, typical ${cycle.avg} days). Predictions are paused until a real start is logged; do NOT guess a phase or invent a start date. If the user mentions a period, ask for the exact first day and record CYCLE_START.`);
+                    } else if (cycle.confidence === 'late') {
+                        lines.push(`Cycle tracking: day ${cycle.day} since last start ${cycle.lastStart} (${cycle.lateDays} days past typical ${cycle.avg}-day average, status: waiting/late). Gently ask if a period started if relevant; never diagnose or treat forecasts as contraception.`);
+                    } else {
+                        const bits = [
+                            `last logged period start ${cycle.lastStart}`,
+                            `typical cycle ${cycle.avg} days${cycle.confidence === 'recorded' ? '' : ' (estimate)'}`
+                        ];
+                        if (cycle.periodEndRecorded) bits.push(`bleeding ended ${cycle.periodEnd}`);
+                        else bits.push(`bleeding end not logged (phase estimates assume ${cycle.periodLength} days)`);
+                        bits.push(`${cycle.confidence === 'recorded' ? 'cycle' : 'estimated cycle'} day ${cycle.day} (${cycle.phase})`);
+                        if (cycle.nextPeriod) bits.push(`next period expected around ${cycle.nextPeriod} (forecast, not contraception)`);
+                        lines.push(`Cycle tracking: ${bits.join(', ')}.`);
+                        if (cycle.confidence === 'estimated') {
+                            lines.push(`Cycle note: the current phase is forecast from the average because this period start is not logged yet. Ask the user to confirm or record the first day when it happens.`);
+                        }
                     }
                 } else {
                     lines.push('Cycle tracking is on, but no period start has been recorded yet, so no cycle facts or forecasts exist. If the user says her period started, record CYCLE_START with the real date.');

@@ -221,6 +221,34 @@ export function mergeTaskBoardJson(baseContent, localContent, remoteContent, win
             SyncCore.stableStringify(entry.task) !== SyncCore.stableStringify(baseEntry.task)
         );
 
+        const mergeTagArrays = (btArr, ltArr, rtArr, hb) => {
+            const normList = (arr) => Array.isArray(arr) ? arr.map(s => String(s || '').trim()).filter(Boolean) : [];
+            const bTags = new Set(normList(btArr));
+            const lTags = normList(ltArr);
+            const rTags = normList(rtArr);
+            const lSet = new Set(lTags);
+            const rSet = new Set(rTags);
+            const out = [];
+            const seen = new Set();
+            const addIf = (t) => {
+                if (seen.has(t)) return;
+                seen.add(t);
+                out.push(t);
+            };
+            for (const t of lTags) {
+                if (rSet.has(t) || !hb || !bTags.has(t)) {
+                    addIf(t);
+                }
+            }
+            for (const t of rTags) {
+                if (lSet.has(t)) continue;
+                if (!hb || !bTags.has(t)) {
+                    addIf(t);
+                }
+            }
+            return out;
+        };
+
         for (const tid of allTaskIds) {
             const bt = bi.map.get(tid);
             const lt = li.map.get(tid);
@@ -237,6 +265,33 @@ export function mergeTaskBoardJson(baseContent, localContent, remoteContent, win
                     desc: mergeScalar(bt?.task?.desc, lt.task.desc, rt.task.desc, hb, winnerIsRemote),
                     deadline: mergeScalar(bt?.task?.deadline, lt.task.deadline, rt.task.deadline, hb, winnerIsRemote)
                 };
+                if ('priority' in lt.task || 'priority' in rt.task || (bt?.task && 'priority' in bt.task)) {
+                    chosen.priority = mergeScalar(bt?.task?.priority, lt.task.priority, rt.task.priority, hb, winnerIsRemote);
+                }
+                if ('done' in lt.task || 'done' in rt.task || (bt?.task && 'done' in bt.task)) {
+                    chosen.done = mergeScalar(bt?.task?.done, lt.task.done, rt.task.done, hb, winnerIsRemote);
+                }
+                if ('completedAt' in lt.task || 'completedAt' in rt.task || (bt?.task && 'completedAt' in bt.task)) {
+                    chosen.completedAt = mergeScalar(bt?.task?.completedAt, lt.task.completedAt, rt.task.completedAt, hb, winnerIsRemote);
+                }
+                if (Array.isArray(lt.task.tags) || Array.isArray(rt.task.tags) || Array.isArray(bt?.task?.tags)) {
+                    chosen.tags = mergeTagArrays(bt?.task?.tags, lt.task.tags, rt.task.tags, hb);
+                }
+                if (Array.isArray(lt.task.subtasks) || Array.isArray(rt.task.subtasks) || Array.isArray(bt?.task?.subtasks)) {
+                    chosen.subtasks = mergeListById(
+                        bt?.task?.subtasks || [],
+                        lt.task.subtasks || [],
+                        rt.task.subtasks || [],
+                        hb,
+                        winnerIsRemote,
+                        (bs, ls, rs) => ({
+                            ...ls,
+                            id: ls.id,
+                            title: mergeScalar(bs?.title, ls.title, rs.title, !!(hb && bs), winnerIsRemote),
+                            done: mergeScalar(bs?.done, ls.done, rs.done, !!(hb && bs), winnerIsRemote)
+                        })
+                    );
+                }
                 destColId = mergeScalar(bt?.colId, lt.colId, rt.colId, hb, winnerIsRemote);
                 if (!colIds.has(destColId)) {
                     destColId = colIds.has(lt.colId) ? lt.colId : (colIds.has(rt.colId) ? rt.colId : mergedCols[0]?.id);
@@ -257,12 +312,15 @@ export function mergeTaskBoardJson(baseContent, localContent, remoteContent, win
             }
         }
 
-        return {
+        const mergedProj = {
             ...lp,
             id: lp.id,
             name: mergeScalar(bp?.name, lp.name, rp.name, hasBase, winnerIsRemote),
             columns: mergedCols
         };
+        const mergedColor = mergeScalar(bp?.color, lp.color, rp.color, hasBase, winnerIsRemote);
+        if (mergedColor !== undefined) mergedProj.color = mergedColor;
+        return mergedProj;
     };
 
     const mergedProjects = mergeListById(b?.projects || [], l.projects || [], r.projects || [], !!b, winnerIsRemote, mergeProject);
